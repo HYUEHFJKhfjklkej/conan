@@ -1,0 +1,25 @@
+version: '3.8'
+
+# Conan Server — хранилище собранных C++ пакетов
+# Запуск: docker-compose up -d
+# URL:    http://conan.elara.local:9300
+
+services:
+  conan-server:
+    image: conanio/conan_server:latest
+    container_name: conan-server
+    ports:
+      - "9300:9300"
+    volumes:
+      - conan-data:/root/.conan_server/data
+      - ./server.conf:/root/.conan_server/server.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9300/v1/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  conan-data:
+    driver: local
