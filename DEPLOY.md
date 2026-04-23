@@ -1,105 +1,41 @@
-# Развёртывание инфраструктуры: Bitbucket + TeamCity + Conan
+# Развёртывание на TeamCity
 
 ## Общая схема
 
 ```
-┌──────────────┐     push      ┌───────────────────┐   trigger   ┌──────────────────┐
-│  Разработчик  │ ──────────► │    Bitbucket        │ ─────────► │    TeamCity       │
-│              │              │ bitbucket.inc.      │             │ teamcity.inc.    │
-│              │              │ elara.local         │             │ elara.local      │
-└──────────────┘              │ repo: conan-recipes │             │                  │
-                              └───────────────────┘             └────────┬─────────┘
-                                                                         │
-                                                                conan create
-                                                                conan upload
-                                                                         │
-                                                                         ▼
-                                                                ┌──────────────┐
-                                                                │ Conan Server │
-                                                                │ conan.elara  │
-                                                                │ .local:9300  │
-                                                                └──────┬───────┘
-                                                                       │
-                                                              conan install
-                                                                       │
-                                                                       ▼
-                                                                ┌──────────────┐
-                                                                │ SURA1/SURA2  │
-                                                                │ COMPONENTS   │
-                                                                │ (потребители)│
-                                                                └──────────────┘
+┌──────────────┐     push      ┌───────────────────┐   trigger    ┌──────────────────────┐
+│  Разработчик  │ ──────────► │    Bitbucket        │ ──────────► │      TeamCity         │
+│              │              │ bitbucket.inc.      │              │  teamcity.inc.       │
+│              │              │ elara.local         │              │  elara.local         │
+└──────────────┘              │ repo: conan-recipes │              │                      │
+                              └───────────────────┘              │  1. conan create      │
+                                                                  │  2. package-legacy.py │
+                                                                  │  3. zip → Artifacts   │
+                                                                  └──────────┬───────────┘
+                                                                             │
+                                                                    Тот же zip-артефакт
+                                                                    (CMakeLists.var,
+                                                                     .targets, .nuspec)
+                                                                             │
+                                                                             ▼
+                                                                  ┌──────────────────┐
+                                                                  │ SURA1/SURA2      │
+                                                                  │ (потребители)    │
+                                                                  │ Ничего не меняют │
+                                                                  └──────────────────┘
 ```
 
-## Текущее состояние инфраструктуры
-
-### TeamCity (teamcity.inc.elara.local)
-- **38 агентов**: Linux Debian/Debian12, Ubuntu, Rosa, Astra + Windows
-- **Пулы**: Build pool (22 агента), SANDBOX pool (2), Sura1 pool, Node(s) pool
-- **Проекты**: SURA1, SURA2 → COMPONENTS → CMAKE → пакеты
-
-### Текущая сборка third party (пример CURL)
-Каждый пакет имеет:
-- 6+ Build Configuration (Windows x86/x64 Static/Dynamic, Linux, Linux ARM)
-- 7 шагов в каждой: CleanUp → SetVersion → SkipLogic → StaticAnalysis → BuildRelease → BuildDebug → GuardantProtect
-- 86 параметров
-- Наследование от шаблона (CMAKE 100 BUILD Windows x86 StaticRT и др.)
-- Требует пропатченный CMakeLists.txt в Bitbucket
-
-### Что меняется с Conan
-- Один `conanfile.py` заменяет все Build Configuration для пакета
-- Профили заменяют отдельные шаблоны (x86/x64/Static/Dynamic)
-- Не нужен пропатченный CMakeLists.txt — исходники берутся как есть
+**Ключевой принцип:** Conan собирает пакеты из оригинальных исходников (без патчей),
+а `package-legacy.py` упаковывает результат в тот же формат zip-артефактов, что
+и текущая система. Потребители (SURA) не замечают разницы.
 
 ---
 
-## Шаг 1: Поднять Conan Server
-
-### Вариант A: Docker на любом Linux-сервере (рекомендуется)
-
-Файлы `docker-compose.yml` и `server.conf` уже подготовлены в этом репозитории.
-
-```bash
-# На сервере (например, на одном из ba-deb12-* или отдельном)
-cd /opt/conan-server
-cp docker-compose.yml server.conf .
-
-# ВАЖНО: отредактировать server.conf — задать пароли и jwt_secret!
-vim server.conf
-
-# Запустить
-docker-compose up -d
-
-# Проверить
-curl http://localhost:9300/v1/ping
-```
-
-### Вариант B: pip install (без Docker)
-
-```bash
-pip install conan_server
-# Скопировать server.conf в ~/.conan_server/server.conf
-conan_server
-```
-
-### Настроить DNS
-
-Попросить администратора добавить запись:
-```
-conan.elara.local → <IP сервера с Conan Server>
-```
-
-Или добавить в `/etc/hosts` на агентах:
-```
-192.168.x.x conan.elara.local
-```
-
----
-
-## Шаг 2: Bitbucket — создать репозиторий
+## Шаг 1: Bitbucket — создать репозиторий
 
 В Bitbucket (bitbucket.inc.elara.local):
 
-1. Проект: тот же, где лежат COMPONENTS (вероятно SURA2 или Infrastructure)
+1. Проект: тот же, где лежат COMPONENTS
 2. Создать репозиторий: **conan-recipes**
 
 ```bash
@@ -113,132 +49,149 @@ git push -u origin master
 
 ---
 
-## Шаг 3: Подготовить TeamCity-агентов
+## Шаг 2: Подготовить TeamCity-агентов
 
-Для тестирования — начать с **SANDBOX pool** (ba-deb-prb, ba-td-astra-01), чтобы не затронуть основные сборки.
+Начать с **SANDBOX pool** (ba-deb-prb), чтобы не затронуть основные сборки.
 
-### На Linux-агенте (ba-deb-prb)
+### На Linux-агенте
 
 ```bash
-# Установить Conan
-pip3 install conan
-
-# Первичная настройка
+pip3 install conan==2.27.1
 conan profile detect
-
-# Добавить Conan Server
-conan remote add elara http://conan.elara.local:9300
-
-# Авторизоваться
-conan remote login elara builder -p <пароль_из_server.conf>
-
-# Проверка
-conan remote list
-conan search --remote=elara "*"
 ```
 
-### На Windows-агенте (если нужно на этом этапе)
+### На Windows-агенте
 
 ```bat
-pip install conan
+pip install conan==2.27.1
 conan profile detect
-conan remote add elara http://conan.elara.local:9300
-conan remote login elara builder -p <пароль>
 ```
+
+Conan Server на этом этапе **не нужен** — zip-артефакты публикуются
+как обычные TeamCity artifacts (artifact dependencies).
 
 ---
 
-## Шаг 4: Создать проект в TeamCity
+## Шаг 3: Создать проект в TeamCity
 
-### 4.1 Структура проекта
+### 3.1 Структура проекта
 
 ```
-SURA2 (или Root)
+SURA2
 └── COMPONENTS
-    └── CONAN                          ← новый проект
-        ├── CN100 BUILD gtest Linux    ← Build Configuration
-        ├── CN101 BUILD gtest Windows
-        ├── CN900 PACKAGE gtest        ← упаковка + upload
-        └── ...
+    └── CONAN                                ← новый проект
+        ├── GTEST                            ← subproject на пакет
+        │   ├── CN100 Linux x64 shared       ← Build Configuration
+        │   ├── CN101 Linux x64 static
+        │   ├── CN110 Windows x64 shared
+        │   ├── CN111 Windows x64 static
+        │   └── CN900 PACKAGE                ← собирает все zip в один артефакт
+        ├── FMT                              ← IN-352
+        │   ├── CN200 Linux x64 shared
+        │   └── ...
+        └── ...                              ← другие пакеты
 ```
 
-Именование по вашей конвенции: CN = Conan prefix.
-
-### 4.2 Создать VCS Root
+### 3.2 Создать VCS Root (на уровне проекта CONAN)
 
 - **Type**: Git
 - **Fetch URL**: `ssh://git@bitbucket.inc.elara.local/<PROJECT>/conan-recipes.git`
 - **Default branch**: `refs/heads/master`
-- **Authentication**: SSH key (использовать существующий)
+- **Branch specification**: `+:refs/heads/*`
+- **Authentication**: SSH key (использовать существующий ключ из Bitbucket VCS Root)
 
-### 4.3 Build Configuration: CN100 BUILD gtest Linux
+### 3.3 Шаблон (Build Configuration Template)
 
-**General Settings:**
-- Name: `CN100 BUILD gtest Linux`
-- Build number format: `%package.version%`
+Создать шаблон **CONAN BUILD Template**, чтобы не дублировать настройки:
 
-**Parameters:**
-| Имя | Значение | Тип |
-|-----|----------|-----|
-| package.name | gtest | Config |
-| package.version | 1.14.0 | Config |
-| conan.profile | profiles/linux-gcc | Config |
-| conan.remote | elara | Config |
-| env.CONAN_PASSWORD | *** | Password |
+**Parameters (в шаблоне):**
 
-**Build Steps:**
+| Параметр | Значение по умолчанию | Описание |
+|----------|----------------------|----------|
+| package.name | — | Имя пакета (gtest, curl, fmt) |
+| package.version | — | Версия (1.14.0, 8.0.1) |
+| conan.profile | lin-gcc84-x86_64 | Имя профиля из profiles/ |
+| shared | True | Shared (True) или Static (False) |
 
-**Step 1: Build package** (Command Line)
+**Build Step 1: Build and Package** (Command Line)
+
+Runner type: Command Line
+Custom script:
+
 ```bash
 #!/bin/bash
 set -euo pipefail
 
-echo "##teamcity[progressMessage 'Building %package.name% %package.version%']"
+echo "##teamcity[progressMessage 'Conan: %package.name% %package.version% (%conan.profile%, shared=%shared%)']"
 
-# Собрать пакет из оригинальных исходников
-conan create %package.name%/ --profile=%conan.profile% --build=missing
+# 1. Собрать пакет из оригинальных исходников (БЕЗ модификации)
+conan create %package.name%/ \
+    --profile=profiles/%conan.profile% \
+    -o "%package.name%/*:shared=%shared%" \
+    --build=missing
 
-# Загрузить в Conan Server
-conan upload "%package.name%/*" --remote=%conan.remote% --confirm
+# 2. Упаковать в legacy zip-формат (тот же что в текущих артефактах)
+python3 teamcity/package-legacy.py \
+    --name %package.name% \
+    --version %package.version% \
+    --profile %conan.profile% \
+    --shared %shared% \
+    --output output
 
-echo "##teamcity[buildStatus text='%package.name% %package.version% uploaded to %conan.remote%']"
+echo "##teamcity[buildStatus text='%package.name% %package.version% (%conan.profile%, shared=%shared%)']"
 ```
 
-**Agent Requirements:**
-- `teamcity.agent.jvm.os.name` contains `Linux`
-- Или agent pool = SANDBOX (для тестирования)
+**Artifact paths:**
+```
+output/*.zip
+```
 
-**Triggers:**
-- VCS Trigger: при изменениях в `%package.name%/**`
-
-### 4.4 Build Configuration: CN101 BUILD gtest Windows
-
-Аналогично CN100, но:
-- Профиль: `profiles/windows-msvc`
-- Agent requirement: Windows
-- Скрипт (bat):
+**Windows-вариант** Build Step (для Windows-агентов):
 
 ```bat
-conan create %package.name%/ --profile=%conan.profile% --build=missing
-conan upload "%package.name%/*" --remote=%conan.remote% --confirm
+conan create %package.name%/ --profile=profiles/%conan.profile% -o "%package.name%/*:shared=%shared%" --build=missing
+
+python teamcity\package-legacy.py --name %package.name% --version %package.version% --profile %conan.profile% --shared %shared% --output output
 ```
 
-### 4.5 Build Configuration: CN900 PACKAGE gtest (опционально)
+---
 
-Если нужна цепочка как в текущей системе (CU900 PACKAGE):
+## Шаг 4: Создать Build Configurations
 
-- **Snapshot Dependencies**: CN100, CN101
-- **Step**: просто проверка, что пакет доступен в remote
+### GTEST
 
-```bash
-conan search "%package.name%/%package.version%@" --remote=%conan.remote%
-```
+Создать из шаблона CONAN BUILD Template, переопределив параметры:
+
+| Build Config | package.name | package.version | conan.profile | shared | Agent |
+|---|---|---|---|---|---|
+| CN100 Linux x64 shared | gtest | 1.14.0 | lin-gcc84-x86_64 | True | Linux |
+| CN101 Linux x64 static | gtest | 1.14.0 | lin-gcc84-x86_64 | False | Linux |
+| CN102 Linux x86 shared | gtest | 1.14.0 | lin-gcc84-i686 | True | Linux |
+| CN103 Linux ARM Linaro | gtest | 1.14.0 | lin-gcc75-arm-linaro | True | Linux |
+| CN110 Windows x64 shared | gtest | 1.14.0 | win-v142-x64 | True | Windows |
+| CN111 Windows x64 static | gtest | 1.14.0 | win-v142-x64 | False | Windows |
+| CN112 Windows x86 shared | gtest | 1.14.0 | win-v142-x86 | True | Windows |
+
+**Agent Requirements:**
+- Linux configs: `teamcity.agent.jvm.os.name` contains `Linux`
+- Windows configs: `teamcity.agent.jvm.os.name` contains `Windows`
+
+**Triggers:**
+- VCS Trigger с file filter: `+:gtest/**` (только при изменении рецепта gtest)
+
+### CN900 PACKAGE gtest (опционально)
+
+Если нужна единая точка, собирающая все варианты:
+
+- **Snapshot Dependencies**: CN100, CN101, CN110, CN111, ...
+- **Artifact Dependencies**: собрать все zip из зависимостей
+- **Build Step**: объединить zip-ы или просто пометить как готовые
 
 ---
 
 ## Шаг 5: Тестовый прогон
 
-### На агенте вручную (до настройки TeamCity)
+### Вручную на агенте (до создания Build Configuration)
 
 ```bash
 # Склонировать репо
@@ -246,82 +199,142 @@ git clone ssh://git@bitbucket.inc.elara.local/<PROJECT>/conan-recipes.git
 cd conan-recipes
 
 # Собрать gtest
-conan create gtest/ --profile=profiles/linux-gcc --build=missing
+conan create gtest/ --profile=profiles/lin-gcc84-x86_64 --build=missing
 
-# Загрузить в Conan Server
-conan upload "gtest/*" --remote=elara --confirm
+# Упаковать в legacy формат
+python3 teamcity/package-legacy.py \
+    --name gtest --version 1.14.0 \
+    --profile lin-gcc84-x86_64 --shared True \
+    --output output
 
-# Проверить, что пакет в remote
-conan search "gtest/1.14.0@" --remote=elara
-
-# Собрать пример-потребитель
-cd example
-conan install . --output-folder=build --build=missing --profile=../profiles/linux-gcc
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-cd build && ctest --output-on-failure
+# Проверить zip
+ls -la output/googletest.zip
+unzip -l output/googletest.zip
 ```
 
 ### Через TeamCity
 
-1. Запустить CN100 BUILD gtest Linux → Run
-2. Проверить лог — должно быть "uploaded to elara"
-3. Запустить CN101 BUILD gtest Windows → Run
+1. Запустить **CN100 Linux x64 shared** → Run
+2. Проверить Artifacts → `googletest.zip` с правильной структурой
+3. Запустить **CN110 Windows x64 shared** → Run
+4. Сравнить zip со старыми артефактами из EXTERNAL → GOOGLETEST
 
 ---
 
-## Шаг 6: Подключить к существующему проекту (потребителю)
+## Шаг 6: Подключить к потребителю
 
-Когда gtest собран и лежит в Conan Server, можно подключить его к любому
-проекту из COMPONENTS, который использует gtest.
+Когда gtest собран и zip лежит в артефактах TeamCity:
 
-В Build Steps существующего проекта добавить **новый первый шаг**:
+**Вариант A: Artifact Dependency (рекомендуется)**
 
-```bash
-# Step 0 (перед существующими шагами): Install Conan dependencies
-conan install . --output-folder=build --build=missing \
-  --profile=linux-gcc --remote=elara
+В существующей Build Configuration потребителя (SURA2 → COMPONENTS → CMAKE → GOOGLETEST):
+1. Добавить **Artifact Dependency** на CN900 PACKAGE gtest
+2. Артефакт `googletest.zip` скачается в ту же директорию, что и раньше
+3. Потребитель работает как раньше — никаких изменений в коде
+
+**Вариант B: Полная замена**
+
+Заменить старую Build Configuration (GT910 RELEASE) на новую Conan-based.
+Артефакты те же, потребители не заметят.
+
+---
+
+## Шаг 7: Добавление новых пакетов
+
+Для каждого нового пакета (например fmt, IN-352):
+
+### 1. Создать рецепт
+
+```
+conan-recipes/
+└── fmt/
+    ├── conanfile.py     ← описывает как собрать
+    └── src/             ← исходники (для offline сборки)
 ```
 
-И в шаге cmake добавить флаг:
+### 2. Добавить конфиг в package-legacy.py
+
+```python
+PACKAGE_CONFIG = {
+    ...
+    "fmt": {
+        "components": ["fmt"],
+        "platforms": ["WINDOWS", "LINUX", "LINUX_ARM_LINARO", ...],
+        "definitions": [],
+        "dependencies": [],
+    },
+}
+```
+
+### 3. Создать Build Configurations в TeamCity
+
+Из шаблона CONAN BUILD Template — только поменять параметры:
+- `package.name` = fmt
+- `package.version` = 10.2.1
+- Тот же `conan.profile` и `shared`
+
+### 4. Запустить и проверить
+
 ```bash
-cmake ... -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
+# Тест локально
+conan create fmt/ --profile=profiles/lin-gcc84-x86_64 --build=missing
+python3 teamcity/package-legacy.py --name fmt --version 10.2.1 --profile lin-gcc84-x86_64 --output output
+unzip -l output/fmt.zip
 ```
 
 ---
 
-## Шаг 7: Jira — связать с CI
+## Порядок миграции пакетов
 
-1. В commit-messages указывать `IN-353`
-2. В TeamCity → Administration → Issue Trackers:
-   - Type: JIRA
-   - Server URL: URL вашей Jira
-   - Pattern: `IN-\d+`
+Начинать с простых (без зависимостей), постепенно переходить к сложным:
+
+| Очередь | Пакет | Зависимости | Сложность |
+|---------|-------|-------------|-----------|
+| 1 | gtest | нет | простой (уже готов) |
+| 2 | fmt | нет | простой (IN-352) |
+| 3 | zlib | нет | простой |
+| 4 | cjson | нет | простой |
+| 5 | gflags | нет | простой |
+| 6 | glog | gflags | одна зависимость |
+| 7 | openssl | нет | средний (не CMake) |
+| 8 | ssh2 | openssl | одна зависимость |
+| 9 | curl | openssl, zlib, ssh2 | средний |
+| 10 | protobuf | zlib | средний |
+| 11 | grpc | protobuf, openssl, zlib, cares, absl | сложный |
 
 ---
 
 ## Чек-лист развёртывания
 
-### Этап 1: Инфраструктура
-- [ ] Поднять Conan Server (docker-compose на выделенном сервере)
-- [ ] Настроить DNS или /etc/hosts: conan.elara.local
-- [ ] Задать безопасные пароли в server.conf
-- [ ] Проверить доступность: `curl http://conan.elara.local:9300/v1/ping`
-
-### Этап 2: Код
+### Этап 1: Подготовка
 - [ ] Создать репо conan-recipes в Bitbucket
 - [ ] Залить рецепты, профили, скрипты
+- [ ] Установить Conan на 1 Linux-агенте (SANDBOX pool)
+- [ ] Установить Conan на 1 Windows-агенте
 
-### Этап 3: TeamCity
-- [ ] Установить Conan на агентах SANDBOX pool (ba-deb-prb)
-- [ ] Настроить conan remote и авторизацию на агентах
-- [ ] Создать проект CONAN в TeamCity
+### Этап 2: TeamCity
+- [ ] Создать проект CONAN в SURA2 → COMPONENTS
 - [ ] Создать VCS Root → conan-recipes
-- [ ] Создать CN100 BUILD gtest Linux
-- [ ] Тестовый прогон — Run
+- [ ] Создать шаблон CONAN BUILD Template
+- [ ] Создать CN100 Linux x64 shared (gtest)
+- [ ] Создать CN110 Windows x64 shared (gtest)
+- [ ] Тестовый прогон → проверить артефакты
 
-### Этап 4: Проверка
-- [ ] gtest собрался без ошибок
-- [ ] gtest загружен в Conan Server
-- [ ] Пример-потребитель собрался и тесты прошли
-- [ ] Показать результат на код-ревью / демо команде
+### Этап 3: Проверка
+- [ ] zip-артефакт имеет ту же структуру что старый
+- [ ] CMakeLists.var корректный
+- [ ] .targets файл корректный
+- [ ] include/ и lib/ содержат правильные файлы
+- [ ] Потребитель собирается с новым zip без изменений
+
+### Этап 4: Расширение
+- [ ] Добавить остальные профили (ARM, ATOM, WinCE)
+- [ ] Добавить fmt (IN-352)
+- [ ] Установить Conan на все агенты Build pool
+- [ ] Мигрировать следующие пакеты по таблице выше
+
+### Этап 5: Conan Server (опционально, позже)
+- [ ] Поднять Conan Server (docker-compose)
+- [ ] Настроить DNS: conan.elara.local
+- [ ] Добавить `conan upload` в build step
+- [ ] Conan Server как дополнительный кэш (ускоряет пересборку)
