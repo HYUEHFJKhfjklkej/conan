@@ -1,0 +1,11 @@
+[settings]
+os=Linux
+arch=armv8
+compiler=gcc
+compiler.version=7.5
+compiler.libcxx=libstdc++11
+compiler.cppstd=14
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:toolchain_file=/opt/linaro/aarch64-toolchain.cmake
