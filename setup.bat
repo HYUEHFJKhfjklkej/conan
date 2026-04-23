@@ -30,6 +30,11 @@ if exist venv (
 echo [INFO] Activating virtual environment...
 call venv\Scripts\activate.bat
 
+:: Install build dependencies first
+echo.
+echo [INFO] Installing setuptools and wheel...
+python -m pip install setuptools wheel --no-index --find-links=packages
+
 :: Install Conan from local packages (no internet required!)
 echo.
 echo [INFO] Installing Conan from local packages...
