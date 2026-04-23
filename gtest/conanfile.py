@@ -1,6 +1,7 @@
+import os
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import get
+from conan.tools.files import get, copy
 
 
 class GTestConan(ConanFile):
@@ -22,10 +23,16 @@ class GTestConan(ConanFile):
         "hide_symbols": False,
     }
 
+    exports_sources = "src/*.tar.gz"
+
     def source(self):
-        # Скачиваем оригинальные исходники без каких-либо модификаций
-        get(self, f"https://github.com/google/googletest/archive/refs/tags/v{self.version}.tar.gz",
-            strip_root=True)
+        # Try local archive first (offline), fallback to GitHub (online)
+        local_archive = os.path.join(self.recipe_folder, "src", f"v{self.version}.tar.gz")
+        if os.path.exists(local_archive):
+            get(self, f"file:///{local_archive}", strip_root=True)
+        else:
+            get(self, f"https://github.com/google/googletest/archive/refs/tags/v{self.version}.tar.gz",
+                strip_root=True)
 
     def layout(self):
         cmake_layout(self)
