@@ -309,14 +309,6 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     else:
         print(f"  WARNING: no lib/ in Conan package at {pkg_path}")
 
-    # Добавить .keepdir в пустые папки (для совместимости)
-    for keepdir in [dst_lib_net461, os.path.join(staging, "include"),
-                    os.path.join(staging, "proto")]:
-        keepfile = os.path.join(keepdir, ".keepdir")
-        if not os.path.exists(keepfile):
-            with open(keepfile, "w") as f:
-                pass
-
     # 3. build/native/ (.targets)
     build_native = os.path.join(staging, "build", "native")
     os.makedirs(build_native, exist_ok=True)
@@ -337,6 +329,13 @@ def package_legacy(name, version, profile_name, shared, output_dir,
 
     # 5. proto/ (пустая, для совместимости)
     os.makedirs(os.path.join(staging, "proto"), exist_ok=True)
+
+    # Добавить .keepdir в пустые папки (для совместимости)
+    for keepdir in [dst_lib_net461, os.path.join(staging, "proto")]:
+        keepfile = os.path.join(keepdir, ".keepdir")
+        if not os.path.exists(keepfile):
+            with open(keepfile, "w") as f:
+                pass
 
     # 6. CMakeLists.var
     var_content = generate_cmakelists_var(
