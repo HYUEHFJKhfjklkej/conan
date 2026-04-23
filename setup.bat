@@ -30,22 +30,30 @@ if exist venv (
 echo [INFO] Activating virtual environment...
 call venv\Scripts\activate.bat
 
-:: Install build dependencies first
+:: Set offline mode via environment variables
+:: These propagate to pip's build subprocesses
+set PIP_NO_INDEX=1
+set PIP_FIND_LINKS=packages
+
+:: Install setuptools and wheel first
 echo.
 echo [INFO] Installing setuptools and wheel...
-python -m pip install setuptools wheel --no-index --find-links=packages
+python -m pip install setuptools wheel
 
 :: Install Conan from local packages (no internet required!)
 echo.
 echo [INFO] Installing Conan from local packages...
-python -m pip install conan --no-index --find-links=packages
+python -m pip install conan
 
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to install Conan!
-    echo Try manually: python -m pip install conan --no-index --find-links=packages
     pause
     exit /b 1
 )
+
+:: Clear offline mode
+set PIP_NO_INDEX=
+set PIP_FIND_LINKS=
 
 echo [OK] Conan installed:
 conan --version
