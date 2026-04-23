@@ -1,7 +1,7 @@
 import os
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import get, copy
+from conan.tools.files import get
 
 
 class GTestConan(ConanFile):
@@ -23,7 +23,8 @@ class GTestConan(ConanFile):
         "hide_symbols": False,
     }
 
-    exports_sources = "src/*.tar.gz"
+    # Export source tarball with the recipe for offline builds
+    exports = "src/*.tar.gz"
 
     def source(self):
         # Try local archive first (offline), fallback to GitHub (online)
@@ -41,14 +42,12 @@ class GTestConan(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["BUILD_GMOCK"] = self.options.build_gmock
         tc.variables["INSTALL_GTEST"] = True
-        # Для Windows: использовать динамический CRT (/MD) вместо статического (/MT)
         tc.variables["gtest_force_shared_crt"] = True
         tc.variables["BUILD_SHARED_LIBS"] = self.options.shared
         tc.variables["gtest_hide_internal_symbols"] = self.options.hide_symbols
         tc.generate()
 
     def build(self):
-        # Собираем оригинальный CMake проект — без патчей, без модификации исходников
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
