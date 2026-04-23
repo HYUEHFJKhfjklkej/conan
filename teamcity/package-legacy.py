@@ -50,14 +50,36 @@ PACKAGE_NAME_MAP = {
 
 
 def get_conan_package_path(name, version):
-    """Получить путь к пакету в Conan-кэше."""
+    """Получить путь к собранному пакету (с include/, lib/) в Conan-кэше."""
+    # Сначала найти package_id через conan list
     result = subprocess.run(
-        ["conan", "cache", "path", f"{name}/{version}"],
+        ["conan", "list", f"{name}/{version}:*", "--format=json"],
         capture_output=True, text=True
     )
     if result.returncode != 0:
         raise RuntimeError(f"Package {name}/{version} not found in cache: {result.stderr}")
-    return result.stdout.strip()
+
+    data = json.loads(result.stdout)
+    # Структура: {"Local Cache": {"name/version": {"revisions": {"rev": {"packages": {"pkg_id": ...}}}}}}
+    for cache_name, refs in data.items():
+        for ref, ref_data in refs.items():
+            for rev_id, rev_data in ref_data.get("revisions", {}).items():
+                packages = rev_data.get("packages", {})
+                if packages:
+                    # Берём первый (или последний) package_id
+                    pkg_id = list(packages.keys())[-1]
+                    # Получить путь к package folder
+                    path_result = subprocess.run(
+                        ["conan", "cache", "path",
+                         f"{name}/{version}:{pkg_id}"],
+                        capture_output=True, text=True
+                    )
+                    if path_result.returncode == 0:
+                        pkg_path = path_result.stdout.strip()
+                        print(f"  Found package {pkg_id[:12]}... at {pkg_path}")
+                        return pkg_path
+
+    raise RuntimeError(f"No binary packages found for {name}/{version}. Run 'conan create' first.")
 
 
 def get_package_libs(package_path):
@@ -258,13 +280,42 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     if os.path.exists(src_include):
         shutil.copytree(src_include, dst_include, dirs_exist_ok=True)
         print(f"  Copied include/ ({len(os.listdir(dst_include))} items)")
+    else:
+        os.makedirs(dst_include, exist_ok=True)
+        print(f"  WARNING: no include/ in Conan package at {pkg_path}")
 
-    # 2. lib/
+    # 2. lib/ → lib/native/{variant}/ (legacy structure)
     src_lib = os.path.join(pkg_path, "lib")
-    dst_lib = os.path.join(staging, "lib")
+    lib_suffix = f"{os_name}-{compiler}-{linkage}-{arch}"
+    dst_lib_native = os.path.join(staging, "lib", "native", lib_suffix)
+    dst_lib_native_d = os.path.join(staging, "lib", "native", f"{lib_suffix}-d")
+    dst_lib_net461 = os.path.join(staging, "lib", "native", "net461")
+    os.makedirs(dst_lib_native, exist_ok=True)
+    os.makedirs(dst_lib_native_d, exist_ok=True)
+    os.makedirs(dst_lib_net461, exist_ok=True)
+
     if os.path.exists(src_lib):
-        shutil.copytree(src_lib, dst_lib, dirs_exist_ok=True)
-        print(f"  Copied lib/")
+        # Копировать все .lib/.a/.so/.dll в lib/native/{variant}/
+        for f in os.listdir(src_lib):
+            src_file = os.path.join(src_lib, f)
+            if os.path.isfile(src_file):
+                shutil.copy2(src_file, os.path.join(dst_lib_native, f))
+        # Дублировать в debug-папку (в реальности debug собирается отдельно)
+        for f in os.listdir(src_lib):
+            src_file = os.path.join(src_lib, f)
+            if os.path.isfile(src_file):
+                shutil.copy2(src_file, os.path.join(dst_lib_native_d, f))
+        print(f"  Copied lib/ → lib/native/{lib_suffix}/")
+    else:
+        print(f"  WARNING: no lib/ in Conan package at {pkg_path}")
+
+    # Добавить .keepdir в пустые папки (для совместимости)
+    for keepdir in [dst_lib_net461, os.path.join(staging, "include"),
+                    os.path.join(staging, "proto")]:
+        keepfile = os.path.join(keepdir, ".keepdir")
+        if not os.path.exists(keepfile):
+            with open(keepfile, "w") as f:
+                pass
 
     # 3. build/native/ (.targets)
     build_native = os.path.join(staging, "build", "native")
