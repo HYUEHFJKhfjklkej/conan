@@ -4,8 +4,9 @@
 
 Текущая система сборки требует модификации CMakeLists.txt каждого third party пакета:
 - Добавление include() кастомных CMake-модулей (ResolveDependencies, ConfigureCompiler и др.)
-- Адаптация под install.json
-- Применение патчей
+- Добавление CMakeLists.var с метаданными пакета
+- Добавление nuget/ (.nuspec, .targets шаблоны)
+- Применение патчей и адаптация под cmake/toolchains/
 
 Это приводит к:
 - Большим затратам времени при добавлении нового пакета (пример: gRPC)
@@ -14,33 +15,55 @@
 
 ## Решение: Conan 2.x
 
-Использовать Conan как систему управления C++ зависимостями. Conan позволяет:
-- Собирать пакеты из оригинальных исходников без модификации
-- Управлять версиями и зависимостями
-- Поддерживать кросс-платформенную сборку (Linux/Windows) через профили
-- Кэшировать собранные пакеты (не пересобирать каждый раз)
+Использовать Conan для сборки third party пакетов **без модификации** их исходников.
+
+После сборки результат упаковывается в **тот же формат zip-артефактов**,
+что и текущая система (CMakeLists.var, .targets, .nuspec, include/, lib/).
+Потребители (SURA1, SURA2) **не замечают разницы**.
+
+```
+БЫЛО:                                    СТАЛО:
+
+1. Скачать исходники                     1. Скачать исходники
+2. ПРОПАТЧИТЬ CMakeLists.txt             2. НЕ ТРОГАТЬ исходники
+   + CMakeLists.var                      3. conan create (conanfile.py)
+   + ResolveDependencies                 4. package-legacy.py → zip
+   + ConfigureTargets
+   + nuget/
+3. cmake → build → install
+4. zip-артефакт                          Тот же zip-артефакт
+```
 
 ## Архитектура
 
 ```
 conan-recipes/
-├── CONCEPT.md              # Этот документ
-├── profiles/
-│   ├── linux-gcc           # Release Linux GCC 12
-│   ├── linux-gcc-debug     # Debug Linux GCC 12
-│   ├── windows-msvc        # Release Windows MSVC 193
-│   └── windows-msvc-debug  # Debug Windows MSVC 193
+├── CONCEPT.md                  # Этот документ
+├── DEPLOY.md                   # Инструкция по развёртыванию на TeamCity
+├── ARCHITECTURE.md             # Детальная архитектура миграции
+├── profiles/                   # Профили платформ
+│   ├── lin-gcc84-x86_64        # Linux x64 GCC 8.4
+│   ├── lin-gcc84-i686          # Linux x86 GCC 8.4
+│   ├── lin-gcc75-arm-linaro    # ARM Linaro GCC 7.5 (cross)
+│   ├── lin-gcc-aarch64-linaro  # ARM64 Linaro GCC 7.5 (cross)
+│   ├── win-v142-x64            # Windows x64 MSVC 192
+│   ├── win-v142-x86            # Windows x86 MSVC 192
+│   ├── linux-gcc               # Linux generic (для тестов)
+│   └── windows-msvc            # Windows generic (для тестов)
 ├── gtest/
-│   └── conanfile.py        # Рецепт: собирает gtest из исходников
-├── example/
-│   ├── conanfile.py         # Проект-потребитель
+│   ├── conanfile.py            # Рецепт: собирает gtest из оригинальных исходников
+│   └── src/v1.14.0.tar.gz     # Исходники для offline-сборки
+├── example/                    # Проект-потребитель (для проверки)
+│   ├── conanfile.txt
 │   ├── CMakeLists.txt
 │   └── src/
-│       ├── example.hpp
-│       ├── example.cpp
-│       └── example_test.cpp
-└── <другие пакеты>/        # Добавляются по аналогии с gtest
-    └── conanfile.py
+├── teamcity/
+│   ├── build-recipe.sh         # Сборка + legacy-упаковка для TeamCity
+│   ├── build-matrix.sh         # Все комбинации профиль × shared/static
+│   └── package-legacy.py       # Упаковка в legacy zip-формат
+├── setup.bat                   # Offline-установка Conan на Windows
+├── build_test.bat              # Тест: собрать gtest + прогнать тесты
+└── build_test_legacy.bat       # Тест: собрать + упаковать в legacy zip
 ```
 
 ## Принцип работы
@@ -51,8 +74,11 @@ conan-recipes/
 
 ```python
 class GTestConan(ConanFile):
+    name = "gtest"
+    version = "1.14.0"
+
     def source(self):
-        # Скачать оригинальные исходники
+        # Скачать оригинальные исходники (или взять из src/)
         get(self, "https://github.com/.../v1.14.0.tar.gz", strip_root=True)
 
     def generate(self):
@@ -66,148 +92,148 @@ class GTestConan(ConanFile):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
-```
-
-Ключевой момент: исходники пакета не модифицируются. Все настройки передаются
-через CMake-переменные (-D), toolchain файлы и Conan-профили.
-
-### 2. Профили
-
-Профиль определяет целевую платформу, компилятор и тип сборки:
-
-```ini
-[settings]
-os=Linux
-compiler=gcc
-compiler.version=12
-build_type=Release
-arch=x86_64
-```
-
-Один и тот же рецепт собирает пакет под разные платформы — достаточно
-указать нужный профиль.
-
-### 3. Потребитель
-
-Проект, использующий third party пакеты, подключает их через стандартный
-CMake find_package():
-
-```cmake
-find_package(GTest REQUIRED)
-target_link_libraries(my_target GTest::gtest)
-```
-
-Conan генерирует необходимые CMake-конфиги автоматически.
-
-## Инструкция по сборке
-
-### Предварительные требования
-
-- Python 3.x
-- Conan 2.x: `pip install conan`
-- CMake >= 3.15
-- Компилятор (gcc/msvc)
-
-### Шаг 1: Настройка Conan (один раз)
-
-```bash
-conan profile detect
-```
-
-### Шаг 2: Сборка gtest из рецепта
-
-```bash
-# Linux
-cd conan-recipes
-conan create gtest/ --profile=profiles/linux-gcc
-
-# Windows
-conan create gtest/ --profile=profiles/windows-msvc
-```
-
-Conan скачает исходники gtest, соберёт их и поместит в локальный кэш.
-
-### Шаг 3: Сборка проекта-потребителя
-
-```bash
-cd example
-
-# Установить зависимости (gtest возьмётся из кэша)
-conan install . --output-folder=build --build=missing --profile=../profiles/linux-gcc
-
-# Сконфигурировать и собрать
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-
-# Запустить тесты
-cd build && ctest --output-on-failure
-```
-
-## Добавление нового third party пакета
-
-Для добавления нового пакета (например, spdlog):
-
-1. Создать директорию `conan-recipes/spdlog/`
-2. Создать `conanfile.py` по аналогии с gtest
-3. Собрать: `conan create spdlog/ --profile=profiles/linux-gcc`
-
-Пример минимального рецепта:
-
-```python
-from conan import ConanFile
-from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import get
-
-
-class SpdlogConan(ConanFile):
-    name = "spdlog"
-    version = "1.13.0"
-    settings = "os", "compiler", "build_type", "arch"
-
-    def source(self):
-        get(self, "https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.tar.gz",
-            strip_root=True)
-
-    def layout(self):
-        cmake_layout(self)
-
-    def generate(self):
-        tc = CMakeToolchain(self)
-        tc.variables["SPDLOG_BUILD_EXAMPLE"] = False
-        tc.variables["SPDLOG_BUILD_TESTS"] = False
-        tc.generate()
-
-    def build(self):
-        cmake = CMake(self)
-        cmake.configure()
-        cmake.build()
 
     def package(self):
         cmake = CMake(self)
         cmake.install()
 
     def package_info(self):
-        self.cpp_info.libs = ["spdlog"]
+        # Какие библиотеки пакет предоставляет (аналог CMakeLists.var)
+        self.cpp_info.components["libgtest"].libs = ["gtest"]
+        self.cpp_info.components["gtest_main"].libs = ["gtest_main"]
+        self.cpp_info.components["libgmock"].libs = ["gmock"]
+        self.cpp_info.components["gmock_main"].libs = ["gmock_main"]
 ```
 
-## Интеграция с внутренней системой сборки
+Ключевой момент: **исходники пакета не модифицируются**. Все настройки передаются
+через CMake-переменные (-D), toolchain файлы и Conan-профили.
 
-Внутренние CMake-модули (ConfigureCompiler, ResolveDependencies и др.)
-продолжают использоваться для ВАШИХ проектов. Разделение:
+### 2. Профили
 
-- **Внутренний код**: собирается вашей системой сборки (кастомные модули, install.json)
-- **Third party**: собирается Conan-рецептами из оригинальных исходников
+Профиль определяет целевую платформу и компилятор. Один рецепт собирает пакет
+под разные платформы — достаточно указать нужный профиль:
 
-Conan и внутренняя система сборки не конфликтуют — Conan предоставляет
-стандартные CMake-таргеты через find_package(), которые ваш CMake подхватывает.
+```ini
+# profiles/lin-gcc84-x86_64
+[settings]
+os=Linux
+compiler=gcc
+compiler.version=8.4
+compiler.libcxx=libstdc++11
+build_type=Release
+arch=x86_64
+```
+
+Маппинг на текущие платформы из CMakeLists.var:
+
+| CMakeLists.var | Conan-профиль |
+|---|---|
+| LINUX (x64) | lin-gcc84-x86_64 |
+| LINUX (x86) | lin-gcc84-i686 |
+| LINUX_ARM_LINARO | lin-gcc75-arm-linaro |
+| LINUX_ARM64_LINARO | lin-gcc-aarch64-linaro |
+| WINDOWS (x64) | win-v142-x64 |
+| WINDOWS (x86) | win-v142-x86 |
+
+### 3. Legacy-упаковка (package-legacy.py)
+
+После сборки Conan-ом результат упаковывается в тот же формат zip,
+что и текущая система. Скрипт `package-legacy.py` генерирует:
+
+- **CMakeLists.var** — метаданные пакета (project_name, version, components, platforms, dependencies)
+- **.targets** — MSBuild-файл для NuGet-интеграции
+- **.nuspec** — NuGet-спецификация
+
+```
+googletest.zip                       ← тот же формат
+└── win.v142.static.x64/
+    ├── build/native/*.targets       ← генерируется
+    ├── include/                     ← из Conan-пакета
+    ├── lib/native/                  ← из Conan-пакета
+    │   ├── win-v142-static-x64/
+    │   ├── win-v142-static-x64-d/
+    │   └── net461/
+    ├── nuget/*.nuspec               ← генерируется
+    ├── proto/
+    ├── CMakeLists.var               ← генерируется
+    └── LICENSE.txt
+```
+
+### 4. Потребитель
+
+Потребитель (SURA1, SURA2) получает **тот же zip-артефакт** из TeamCity
+и использует его как раньше через `ResolveDependencies.cmake`.
+**Никаких изменений на стороне потребителя не требуется.**
+
+## Проверка концепта
+
+### На Windows ПК (быстрая проверка)
+
+```powershell
+# Установить Conan (offline)
+setup.bat
+
+# Собрать gtest + прогнать тесты
+build_test.bat
+
+# Собрать + упаковать в legacy zip
+build_test_legacy.bat
+```
+
+### На Linux
+
+```bash
+pip3 install conan
+conan profile detect
+conan create gtest/ --profile=profiles/linux-gcc --build=missing
+
+python3 teamcity/package-legacy.py \
+    --name gtest --version 1.14.0 \
+    --profile linux-gcc --shared False \
+    --output output
+
+unzip -l output/googletest.zip
+```
+
+## Добавление нового пакета
+
+Для каждого нового пакета:
+
+1. Создать `conan-recipes/<пакет>/conanfile.py` (по аналогии с gtest)
+2. Добавить конфиг в `PACKAGE_CONFIG` в `package-legacy.py`
+3. Собрать: `conan create <пакет>/ --profile=profiles/...`
+4. Упаковать: `python3 teamcity/package-legacy.py --name <пакет> ...`
+
+Время: **~30 минут** вместо часов/дней при текущем подходе.
+
+## Интеграция с текущей системой
+
+```
+Текущая система (не меняется):           Новая система (Conan):
+
+Bitbucket: пропатченный форк             Bitbucket: conan-recipes/
+    ↓                                        ↓
+TeamCity: cmake с кастомным               TeamCity: conan create
+          фреймворком                              + package-legacy.py
+    ↓                                        ↓
+Артефакт: googletest.zip                  Артефакт: googletest.zip
+    ↓                                        ↓
+Потребитель: ResolveDependencies ──────── Потребитель: ResolveDependencies
+             (без изменений)                          (без изменений)
+```
+
+Системы не конфликтуют. Можно мигрировать пакеты по одному —
+потребитель не заметит, откуда пришёл zip.
 
 ## Преимущества
 
 | Критерий | Текущий подход | Conan |
 |----------|---------------|-------|
-| Модификация исходников | Да | Нет |
-| Обновление версии | Повторный патчинг | Смена version в рецепте |
-| Кросс-платформенность | Ручная адаптация | Профили |
+| Модификация исходников | Да (патчи, CMakeLists.var) | Нет |
+| Обновление версии | Перепатчить форк заново | Поменять version в conanfile.py |
+| Кросс-платформенность | Ручная адаптация toolchains | Профили |
 | Кэширование сборок | Нет | Да (Conan cache) |
-| Время добавления пакета | Часы/дни (gRPC) | Минуты |
+| Время добавления пакета | Часы/дни (gRPC) | ~30 минут |
 | Воспроизводимость | Зависит от патчей | Детерминированная |
+| Формат артефактов | zip (CMakeLists.var, .targets) | **Тот же zip** |
+| Изменения у потребителя | — | **Не требуются** |
