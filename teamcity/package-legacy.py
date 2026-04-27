@@ -39,6 +39,7 @@ PROFILE_MAP = {
     "win-v142-x86":           {"os": "win", "compiler": "v142",   "arch": "i686",   "arch_short": "x86"},
     "linux-gcc":              {"os": "lin", "compiler": "gcc",     "arch": "x86_64", "arch_short": "x64"},
     "linux-gcc-debug":        {"os": "lin", "compiler": "gcc",     "arch": "x86_64", "arch_short": "x64"},
+    "astra-gcc":              {"os": "astra", "compiler": "gcc",   "arch": "x86_64", "arch_short": "x64"},
     "windows-msvc":           {"os": "win", "compiler": "v142",   "arch": "x86_64", "arch_short": "x64"},
     "windows-msvc-debug":     {"os": "win", "compiler": "v142",   "arch": "x86_64", "arch_short": "x64"},
 }
