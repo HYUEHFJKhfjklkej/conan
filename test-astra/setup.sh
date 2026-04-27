@@ -63,14 +63,20 @@ source "$ROOT_DIR/venv/bin/activate"
 echo ""
 echo "[INFO] Installing Conan from local packages (offline)..."
 
-# Сначала setuptools (нужен для сборки .tar.gz пакетов)
-pip install --upgrade pip setuptools wheel 2>/dev/null || true
-
 if [ -d "$ROOT_DIR/packages-linux" ]; then
+    PKGS="$ROOT_DIR/packages-linux"
     echo "[INFO] Using packages-linux/ (source distributions)"
-    pip install --no-index --find-links="$ROOT_DIR/packages-linux" conan
+
+    # Сначала установить build-зависимости (setuptools, wheel, pip)
+    # без них pip не может собрать .tar.gz пакеты
+    echo "[INFO] Installing build dependencies..."
+    pip install --no-index --find-links="$PKGS" pip setuptools wheel 2>/dev/null || true
+
+    # Теперь установить Conan со всеми зависимостями
+    echo "[INFO] Installing Conan..."
+    pip install --no-index --find-links="$PKGS" conan
 elif [ -d "$ROOT_DIR/packages" ]; then
-    echo "[INFO] Using packages/ (Windows wheels, may not work on Linux)"
+    echo "[INFO] Using packages/"
     pip install --no-index --find-links="$ROOT_DIR/packages" conan
 else
     echo "[INFO] No local packages found, installing from pip..."
