@@ -12,6 +12,9 @@ set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
 pushd "%ROOT_DIR%"
 
+set RC=0
+if not exist output mkdir output
+
 :: Активировать venv если есть
 if exist venv\Scripts\activate.bat (
     call venv\Scripts\activate.bat
@@ -21,7 +24,8 @@ if exist venv\Scripts\activate.bat (
 set PROFILE=%ROOT_DIR%\profiles\win-v142-x64
 if not exist "%PROFILE%" (
     echo [ERROR] Profile not found: %PROFILE%
-    exit /b 1
+    set RC=1
+    goto :END
 )
 echo [INFO] Using profile: %PROFILE%
 echo.
@@ -36,7 +40,8 @@ for %%B in (Release Debug) do (
     conan create gtest\ --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
     if errorlevel 1 (
         echo [FAIL] gtest %%B build failed
-        exit /b 1
+        set RC=1
+        goto :END
     )
 )
 echo [OK] gtest Release+Debug built
@@ -52,19 +57,25 @@ if exist build rmdir /s /q build
 conan install . --output-folder=build --build=missing --profile="%PROFILE%" --no-remote
 if errorlevel 1 (
     echo [FAIL] conan install for example failed
-    popd & exit /b 1
+    popd
+    set RC=1
+    goto :END
 )
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=build\conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-if errorlevel 1 ( popd & exit /b 1 )
+if errorlevel 1 ( popd & set RC=1 & goto :END )
 cmake --build build --config Release
-if errorlevel 1 ( popd & exit /b 1 )
+if errorlevel 1 ( popd & set RC=1 & goto :END )
 pushd build
 ctest -C Release --output-on-failure
 if errorlevel 1 (
     echo [FAIL] tests failed
-    popd & popd & exit /b 1
+    popd
+    popd
+    set RC=1
+    goto :END
 )
-popd & popd
+popd
+popd
 echo [OK] Tests passed
 
 :: -----------------------------------------------------------
@@ -73,7 +84,6 @@ echo ============================================
 echo  Test 3/3: Package via Conan deployer
 echo ============================================
 echo.
-if not exist output mkdir output
 del /q output\*.nupkg 2>nul
 conan install ^
     --requires=gtest/1.15.2 ^
@@ -83,7 +93,8 @@ conan install ^
     --deployer-folder="%ROOT_DIR%\output"
 if errorlevel 1 (
     echo [FAIL] deployer failed
-    exit /b 1
+    set RC=1
+    goto :END
 )
 
 echo.
@@ -101,5 +112,15 @@ echo.
 echo ============================================
 echo  ALL TESTS PASSED
 echo ============================================
+
+:END
 popd
-endlocal
+echo.
+if "%RC%"=="0" (
+    echo [DONE] success
+) else (
+    echo [DONE] FAILED with code %RC%
+)
+echo Press any key to close this window...
+pause >nul
+endlocal & exit /b %RC%
