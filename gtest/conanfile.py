@@ -1,12 +1,12 @@
 import os
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import get
+from conan.tools.files import get, copy
 
 
 class GTestConan(ConanFile):
     name = "gtest"
-    version = "1.14.0"
+    version = "1.15.2"
     description = "Google Testing and Mocking Framework"
     license = "BSD-3-Clause"
     url = "https://github.com/google/googletest"
@@ -55,6 +55,7 @@ class GTestConan(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
+        copy(self, "LICENSE", self.source_folder, os.path.join(self.package_folder, "licenses"))
 
     def package_info(self):
         self.cpp_info.components["libgtest"].libs = ["gtest"]

@@ -97,7 +97,7 @@ PROFILE_NAME=$(basename "$PROFILE")
 mkdir -p "$ROOT_DIR/output"
 python3 "$ROOT_DIR/teamcity/package-legacy.py" \
     --name gtest \
-    --version 1.14.0 \
+    --version 1.15.2 \
     --profile "$PROFILE_NAME" \
     --shared False \
     --output "$ROOT_DIR/output"
@@ -109,18 +109,21 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[OK] Legacy zip created"
+echo "[OK] Legacy nupkg created"
 echo ""
 
-# Показать содержимое zip
-echo "[INFO] Zip contents:"
-python3 -c "
-import zipfile, sys, os
-zf = zipfile.ZipFile('$ROOT_DIR/output/googletest.zip')
+# Показать содержимое nupkg
+NUPKG=$(ls "$ROOT_DIR/output"/googletest.*.nupkg 2>/dev/null | head -1)
+if [ -n "$NUPKG" ]; then
+    echo "[INFO] $(basename "$NUPKG") contents:"
+    python3 -c "
+import zipfile
+zf = zipfile.ZipFile('$NUPKG')
 for i in zf.infolist():
     size = f'{i.file_size:,} bytes' if i.file_size > 0 else 'dir'
     print(f'  {i.filename}  ({size})')
 "
+fi
 
 echo ""
 echo "============================================"
@@ -133,8 +136,8 @@ echo ""
 echo " 2. Example consumer compiled and tests passed"
 echo "    (find_package + target_link_libraries)"
 echo ""
-echo " 3. Legacy zip artifact created:"
-echo "    output/googletest.zip"
+echo " 3. Legacy nupkg artifact created:"
+echo "    output/googletest.{os}.{compiler}.{linkage}.{arch}.{ver}.nupkg"
 echo "    (same structure as current TeamCity artifacts)"
 echo ""
 echo " Source code was NOT modified."

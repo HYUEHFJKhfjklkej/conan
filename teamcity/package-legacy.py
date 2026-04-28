@@ -96,139 +96,136 @@ def get_package_libs(package_path):
     return libs
 
 
+KEEPDIR_CONTENT = """#
+# *** IMPORTANT NOTE ***
+#
+# Please, do not delete this file. This file is used for keeping empty directories.
+#
+"""
+
+
 def generate_cmakelists_var(name, version, components, platforms, definitions, dependencies):
-    """Генерация CMakeLists.var в legacy-формате."""
+    """Генерация CMakeLists.var в legacy-формате (один-в-один с TeamCity-артефактом)."""
     legacy_name = PACKAGE_NAME_MAP.get(name, name)
     parts = version.split(".")
     major = parts[0] if len(parts) > 0 else "0"
     minor = parts[1] if len(parts) > 1 else "0"
     patch = parts[2] if len(parts) > 2 else "0"
 
-    lines = []
-    lines.append("#")
-    lines.append("# Project Name (unique project name)")
-    lines.append(f"set(project_name {legacy_name})")
-    lines.append("")
-    lines.append("#")
-    lines.append("# Project Version")
-    lines.append(f'set(${{{legacy_name}}}_major {major})')
-    lines.append(f'set(${{{legacy_name}}}_minor {minor})')
-    lines.append(f'set(${{{legacy_name}}}_patch {patch})')
-    lines.append(f'set(${{{legacy_name}}}_prerelease_suffix "-alpha")')
-    lines.append("")
-    lines.append("#")
-    lines.append("# List of components included in the project.")
-    lines.append("set(components")
+    header = "#" * 67
+
+    lines = [header, "#", "# Project Name (Unique project name)", "#",
+             f"set(project_name {legacy_name})", ""]
+    lines += ["#", "# Project Version", "#",
+              f"set(${{project_name}}_major {major})",
+              f"set(${{project_name}}_minor {minor})",
+              f"set(${{project_name}}_patch {patch})",
+              f'set(${{project_name}}_prerelease_suffix "-alpha")', ""]
+    lines += ["#", "# List of components included in the project.", "#",
+              "set(components"]
     for comp in components:
         lines.append(f"    {comp}")
-    lines.append(")")
-    lines.append("")
-
-    lines.append("#")
-    lines.append("# List of platforms supported by each component.")
+    lines += ["    )", ""]
+    lines += ["#", "# List of platforms supported by each component.", "#"]
     for comp in components:
         lines.append(f"set({comp}")
         for plat in platforms:
             lines.append(f"    {plat}")
-        lines.append(")")
-        lines.append("")
-
-    lines.append("#")
-    lines.append("# List of test components included in the project.")
-    lines.append("set(test_components")
-    lines.append(")")
-    lines.append("")
-
-    lines.append("#")
-    lines.append("# Definitions for all components in project.")
-    lines.append(f"set(${{{legacy_name}}}_definitions")
+        lines += ["    )", ""]
+    lines += ["#", "# List of test components included in the project.", "#",
+              "set(test_components", "    )", ""]
+    lines += ["#", "# Definitions for all components in project.", "#",
+              "set(${project_name}_definitions"]
     for d in definitions:
         lines.append(f"    {d}")
-    lines.append(")")
-    lines.append("")
-
-    lines.append("#")
-    lines.append("# List of dependencies on other projects.")
-    lines.append(f"set(${{{legacy_name}}}_dependencies")
+    lines += ["    )", ""]
+    lines += ["#", "# List of dependencies on other projects.", "#",
+              "set(${project_name}_dependencies"]
     for dep in dependencies:
         lines.append(f"    {dep}")
-    lines.append(")")
-    lines.append("")
+    lines += ["    )", ""]
 
     return "\n".join(lines)
 
 
 def generate_targets(legacy_name, profile_info, shared, libs):
-    """Генерация .targets файла для NuGet/MSBuild."""
+    """Генерация .targets файла для NuGet/MSBuild (один-в-один с TeamCity)."""
     os_name = profile_info["os"]
     compiler = profile_info["compiler"]
     linkage = "shared" if shared else "static"
-    arch = profile_info["arch_short"]
+    arch = profile_info["arch"]  # full: x86_64 (not arch_short)
 
     lib_suffix = f"{os_name}-{compiler}-{linkage}-{arch}"
     lib_deps = ";".join([f"{lib}.lib" for lib in libs]) + ";%(AdditionalDependencies)"
 
-    lines = []
-    lines.append('<?xml version="1.0" encoding="utf-8"?>')
-    lines.append(f'<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" >')
-    lines.append('  <ItemDefinitionGroup>')
-    lines.append('    <ClCompile>')
-    lines.append(f'      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\\..\\include\\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>')
-    lines.append('    </ClCompile>')
-    lines.append('    <Link>')
-    lines.append(f'      <AdditionalDependencies>{lib_deps}</AdditionalDependencies>')
-    lines.append('    </Link>')
-    lines.append('  </ItemDefinitionGroup>')
-    lines.append('')
+    lines = ['<?xml version="1.0" encoding="utf-8"?>',
+             '<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" >',
+             '    <ItemDefinitionGroup>',
+             '        <ClCompile>',
+             '            <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\\..\\include\\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>',
+             '        </ClCompile>',
+             '        <Link>',
+             f'            <AdditionalDependencies>{lib_deps}</AdditionalDependencies>',
+             '        </Link>',
+             '    </ItemDefinitionGroup>',
+             '']
 
     for config in ["Debug", "Release"]:
         suffix = "-d" if config == "Debug" else ""
-        lines.append(f'  <ItemDefinitionGroup Condition="\'$(Configuration)\' == \'{config}\' And \'$(Platform)\' == \'\'">')
-        lines.append('    <Link>')
-        lines.append(f'      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)..\\..\\lib\\native\\{lib_suffix}{suffix}\\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>')
-        lines.append('    </Link>')
-        lines.append('  </ItemDefinitionGroup>')
-        if shared:
-            lines.append(f'  <ItemGroup Condition="\'$(Configuration)\' == \'{config}\' And \'$(Platform)\' == \'\'">')
-            lines.append(f'    <Content Include="$(MSBuildThisFileDirectory)..\\..\\lib\\native\\{lib_suffix}{suffix}\\*.dll">')
-            lines.append('      <CopyToOutputDirectory>Always</CopyToOutputDirectory>')
-            lines.append('    </Content>')
-            lines.append('  </ItemGroup>')
-        lines.append('')
+        lines += [f'    <ItemDefinitionGroup Condition="\'$(Configuration)\' == \'{config}\' And \'$(Platform)\' == \'\'">',
+                  '        <Link>',
+                  f'            <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)..\\..\\lib\\native\\{lib_suffix}{suffix}\\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>',
+                  '        </Link>',
+                  '    </ItemDefinitionGroup>',
+                  f'    <ItemGroup Condition="\'$(Configuration)\' == \'{config}\' And \'$(Platform)\' == \'\'">',
+                  f'        <Content Include="$(MSBuildThisFileDirectory)..\\..\\lib\\native\\{lib_suffix}{suffix}\\*.dll">',
+                  '            <CopyToOutputDirectory>Always</CopyToOutputDirectory>',
+                  '        </Content>',
+                  '    </ItemGroup>',
+                  '']
 
     lines.append('</Project>')
     return "\n".join(lines)
 
 
 def generate_nuspec(legacy_name, version, profile_info, shared, dependencies):
-    """Генерация .nuspec файла."""
+    """Генерация .nuspec файла (один-в-один с TeamCity-артефактом)."""
     os_name = profile_info["os"]
     compiler = profile_info["compiler"]
     linkage = "shared" if shared else "static"
-    arch = profile_info["arch_short"]
+    arch = profile_info["arch"]  # full: x86_64
     pkg_id = f"{legacy_name}.{os_name}.{compiler}.{linkage}.{arch}"
 
-    lines = []
-    lines.append('<?xml version="1.0"?>')
-    lines.append('<package>')
-    lines.append('  <metadata>')
-    lines.append(f'    <id>{pkg_id}</id>')
-    lines.append(f'    <version>{version}</version>')
-    lines.append(f'    <description>{legacy_name} package</description>')
-    lines.append('    <authors>Elara</authors>')
-
-    if dependencies:
-        lines.append('    <dependencies>')
-        for dep in dependencies:
-            parts = dep.rsplit("-", 1)
-            dep_name = parts[0]
-            dep_ver = parts[1] if len(parts) > 1 else "0.0.0"
-            dep_id = f"{dep_name}.{os_name}.{compiler}.{linkage}.{arch}"
-            lines.append(f'      <dependency id="{dep_id}" version="{dep_ver}" />')
-        lines.append('    </dependencies>')
-
-    lines.append('  </metadata>')
-    lines.append('</package>')
+    lines = ['<?xml version="1.0"?>',
+             '<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">',
+             '    <metadata>',
+             f'        <id>{pkg_id}</id>',
+             f'        <version>{version}</version>',
+             '        <copyright>Copyright (c) 2018</copyright>',
+             '        <summary>Insert summary here!</summary>',
+             '        <description>Insert description here!</description>',
+             '        <owners>Insert owners here!</owners>',
+             '        <authors>Insert authors here!</authors>',
+             '        <dependencies>',
+             '            <group>']
+    for dep in dependencies:
+        parts = dep.rsplit("-", 1)
+        dep_name = parts[0]
+        dep_ver = parts[1] if len(parts) > 1 else "0.0.0"
+        dep_id = f"{dep_name}.{os_name}.{compiler}.{linkage}.{arch}"
+        lines.append(f'                <dependency id="{dep_id}" version="{dep_ver}" />')
+    lines += ['            </group>',
+              '        </dependencies>',
+              '    </metadata>',
+              '    <files>',
+              '        <file src="lib\\**" target="lib"/>',
+              '        <file src="include\\**" target="include" />',
+              '        <file src="build\\**" target="build" />',
+              '        <file src="proto\\**" target="proto" />',
+              '        <file src="CMakeLists.var" target=""/>',
+              '        <file src="LICENSE.txt" target=""/>',
+              '    </files>',
+              '</package>']
     return "\n".join(lines)
 
 
@@ -328,15 +325,20 @@ def package_legacy(name, version, profile_name, shared, output_dir,
         f.write(nuspec_content)
     print(f"  Generated {legacy_name}.nuspec")
 
-    # 5. proto/ (пустая, для совместимости)
-    os.makedirs(os.path.join(staging, "proto"), exist_ok=True)
+    # 5. proto/ + lib/net461/ — пустые папки с .keepdir-маркером
+    proto_dir = os.path.join(staging, "proto")
+    os.makedirs(proto_dir, exist_ok=True)
 
-    # Добавить .keepdir в пустые папки (для совместимости)
-    for keepdir in [dst_lib_net461, os.path.join(staging, "proto")]:
-        keepfile = os.path.join(keepdir, ".keepdir")
-        if not os.path.exists(keepfile):
-            with open(keepfile, "w") as f:
-                pass
+    keepdir_locations = [
+        dst_lib_net461,
+        proto_dir,
+        os.path.join(dst_include, "gmock", "internal", "custom"),
+        os.path.join(dst_include, "gtest", "internal", "custom"),
+    ]
+    for kd in keepdir_locations:
+        os.makedirs(kd, exist_ok=True)
+        with open(os.path.join(kd, ".keepdir"), "w", encoding="utf-8") as f:
+            f.write(KEEPDIR_CONTENT)
 
     # 6. CMakeLists.var
     var_content = generate_cmakelists_var(
@@ -355,11 +357,12 @@ def package_legacy(name, version, profile_name, shared, output_dir,
         with open(os.path.join(staging, "LICENSE.txt"), "w") as f:
             f.write("")
 
-    # 8. Создать zip
-    zip_name = f"{legacy_name}.zip"
-    zip_path = os.path.join(output_dir, zip_name)
+    # 8. Создать .nupkg (это zip с NuGet-структурой внутри)
+    pkg_id = f"{legacy_name}.{os_name}.{compiler}.{linkage}.{profile_info['arch']}"
+    nupkg_name = f"{pkg_id}.{version}.nupkg"
+    nupkg_path = os.path.join(output_dir, nupkg_name)
     staging_root = os.path.join(output_dir, "staging")
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(nupkg_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(staging_root):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -369,18 +372,19 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     # Cleanup staging
     shutil.rmtree(staging_root)
 
-    zip_size = os.path.getsize(zip_path) / (1024 * 1024)
-    print(f"\n  Created: {zip_path} ({zip_size:.1f} MB)")
+    nupkg_size = os.path.getsize(nupkg_path) / (1024 * 1024)
+    print(f"\n  Created: {nupkg_path} ({nupkg_size:.1f} MB)")
     print(f"  Structure: {variant_dir}/")
     print(f"    ├── build/native/{targets_name}.targets")
-    print(f"    ├── include/")
-    print(f"    ├── lib/")
+    print(f"    ├── include/{{gmock,gtest}}/")
+    print(f"    ├── lib/native/{lib_suffix}{{,-d}}/")
+    print(f"    ├── lib/net461/.keepdir")
     print(f"    ├── nuget/{legacy_name}.nuspec")
-    print(f"    ├── proto/")
+    print(f"    ├── proto/.keepdir")
     print(f"    ├── CMakeLists.var")
     print(f"    └── LICENSE.txt")
 
-    return zip_path
+    return nupkg_path
 
 
 # Конфигурация пакетов — компоненты, платформы, зависимости

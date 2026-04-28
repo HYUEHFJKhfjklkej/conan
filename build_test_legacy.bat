@@ -26,7 +26,7 @@ echo [OK] gtest built successfully.
 echo.
 echo [2/4] Packaging in legacy format (same as TeamCity artifacts)...
 if not exist output mkdir output
-python teamcity\package-legacy.py --name gtest --version 1.14.0 --profile windows-msvc --shared False --output output
+python teamcity\package-legacy.py --name gtest --version 1.15.2 --profile windows-msvc --shared False --output output
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to package!
     pause
