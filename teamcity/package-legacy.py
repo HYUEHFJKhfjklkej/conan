@@ -287,7 +287,7 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     lib_suffix = f"{os_name}-{compiler}-{linkage}-{arch}"
     dst_lib_native = os.path.join(staging, "lib", "native", lib_suffix)
     dst_lib_native_d = os.path.join(staging, "lib", "native", f"{lib_suffix}-d")
-    dst_lib_net461 = os.path.join(staging, "lib", "native", "net461")
+    dst_lib_net461 = os.path.join(staging, "lib", "net461")
     os.makedirs(dst_lib_native, exist_ok=True)
     os.makedirs(dst_lib_native_d, exist_ok=True)
     os.makedirs(dst_lib_net461, exist_ok=True)
