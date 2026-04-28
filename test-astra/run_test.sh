@@ -28,17 +28,20 @@ fi
 echo "[INFO] Using profile: $PROFILE"
 echo ""
 
-# Собрать gtest
-conan create "$ROOT_DIR/gtest/" \
-    --profile="$PROFILE" \
-    --build=missing \
-    --no-remote
-
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "[FAIL] gtest build failed!"
-    exit 1
-fi
+# Собрать gtest в Release и Debug
+for BT in Release Debug; do
+    echo "[INFO] Building gtest build_type=$BT"
+    conan create "$ROOT_DIR/gtest/" \
+        --profile="$PROFILE" \
+        --build=missing \
+        --no-remote \
+        -s build_type="$BT"
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "[FAIL] gtest $BT build failed!"
+        exit 1
+    fi
+done
 
 echo ""
 echo "[OK] gtest built from ORIGINAL sources (no modification)"

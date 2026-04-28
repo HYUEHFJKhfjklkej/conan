@@ -50,9 +50,8 @@ PACKAGE_NAME_MAP = {
 }
 
 
-def get_conan_package_path(name, version):
-    """Получить путь к собранному пакету (с include/, lib/) в Conan-кэше."""
-    # Сначала найти package_id через conan list
+def get_conan_package_path(name, version, build_type=None):
+    """Найти package folder в Conan-кэше, опционально с фильтром по build_type."""
     result = subprocess.run(
         ["conan", "list", f"{name}/{version}:*", "--format=json"],
         capture_output=True, text=True
@@ -61,26 +60,28 @@ def get_conan_package_path(name, version):
         raise RuntimeError(f"Package {name}/{version} not found in cache: {result.stderr}")
 
     data = json.loads(result.stdout)
-    # Структура: {"Local Cache": {"name/version": {"revisions": {"rev": {"packages": {"pkg_id": ...}}}}}}
+    matches = []
     for cache_name, refs in data.items():
         for ref, ref_data in refs.items():
             for rev_id, rev_data in ref_data.get("revisions", {}).items():
-                packages = rev_data.get("packages", {})
-                if packages:
-                    # Берём первый (или последний) package_id
-                    pkg_id = list(packages.keys())[-1]
-                    # Получить путь к package folder
-                    path_result = subprocess.run(
-                        ["conan", "cache", "path",
-                         f"{name}/{version}:{pkg_id}"],
-                        capture_output=True, text=True
-                    )
-                    if path_result.returncode == 0:
-                        pkg_path = path_result.stdout.strip()
-                        print(f"  Found package {pkg_id[:12]}... at {pkg_path}")
-                        return pkg_path
+                for pkg_id, pkg_data in rev_data.get("packages", {}).items():
+                    settings = pkg_data.get("info", {}).get("settings", {})
+                    if build_type and settings.get("build_type") != build_type:
+                        continue
+                    matches.append(pkg_id)
 
-    raise RuntimeError(f"No binary packages found for {name}/{version}. Run 'conan create' first.")
+    if not matches:
+        bt = f" (build_type={build_type})" if build_type else ""
+        raise RuntimeError(f"No binary packages for {name}/{version}{bt}. Run 'conan create' first.")
+
+    pkg_id = matches[-1]
+    path_result = subprocess.run(
+        ["conan", "cache", "path", f"{name}/{version}:{pkg_id}"],
+        capture_output=True, text=True
+    )
+    pkg_path = path_result.stdout.strip()
+    print(f"  Found {build_type or 'any'} package {pkg_id[:12]}... at {pkg_path}")
+    return pkg_path
 
 
 def get_package_libs(package_path):
@@ -238,9 +239,14 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     if not profile_info:
         raise ValueError(f"Unknown profile: {profile_name}. Known: {list(PROFILE_MAP.keys())}")
 
-    # Получить путь к пакету в Conan-кэше
-    pkg_path = get_conan_package_path(name, version)
-    print(f"Conan package path: {pkg_path}")
+    # Найти Release и Debug пакеты в Conan-кэше отдельно.
+    # Release обязателен (из него include/, метаданные); Debug опционален.
+    pkg_path = get_conan_package_path(name, version, build_type="Release")
+    try:
+        debug_path = get_conan_package_path(name, version, build_type="Debug")
+    except RuntimeError:
+        print("  WARN: Debug package not found, debug folder will mirror Release")
+        debug_path = pkg_path
 
     # Определить имя поддиректории (lin.gcc.shared.x64)
     os_name = profile_info["os"]
@@ -292,20 +298,21 @@ def package_legacy(name, version, profile_name, shared, output_dir,
     os.makedirs(dst_lib_native_d, exist_ok=True)
     os.makedirs(dst_lib_net461, exist_ok=True)
 
-    if os.path.exists(src_lib):
-        # Копировать все .lib/.a/.so/.dll в lib/native/{variant}/
-        for f in os.listdir(src_lib):
-            src_file = os.path.join(src_lib, f)
-            if os.path.isfile(src_file):
-                shutil.copy2(src_file, os.path.join(dst_lib_native, f))
-        # Дублировать в debug-папку (в реальности debug собирается отдельно)
-        for f in os.listdir(src_lib):
-            src_file = os.path.join(src_lib, f)
-            if os.path.isfile(src_file):
-                shutil.copy2(src_file, os.path.join(dst_lib_native_d, f))
-        print(f"  Copied lib/ → lib/native/{lib_suffix}/")
-    else:
-        print(f"  WARNING: no lib/ in Conan package at {pkg_path}")
+    def _copy_libs(src, dst):
+        if not os.path.exists(src):
+            return 0
+        n = 0
+        for f in os.listdir(src):
+            sf = os.path.join(src, f)
+            if os.path.isfile(sf):
+                shutil.copy2(sf, os.path.join(dst, f))
+                n += 1
+        return n
+
+    n_rel = _copy_libs(src_lib, dst_lib_native)
+    n_dbg = _copy_libs(os.path.join(debug_path, "lib"), dst_lib_native_d)
+    print(f"  Release lib/ → lib/native/{lib_suffix}/ ({n_rel} files)")
+    print(f"  Debug   lib/ → lib/native/{lib_suffix}-d/ ({n_dbg} files)")
 
     # 3. build/native/ (.targets)
     build_native = os.path.join(staging, "build", "native")
