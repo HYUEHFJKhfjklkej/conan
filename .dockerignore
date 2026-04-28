@@ -1,0 +1,9 @@
+.git
+venv/
+output/
+example/build/
+**/.DS_Store
+**/build/
+**/__pycache__/
+*.md
+photo_*.jpg

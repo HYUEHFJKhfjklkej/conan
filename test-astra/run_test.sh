@@ -93,17 +93,16 @@ echo " Test 3/3: Package in legacy format"
 echo "============================================"
 echo ""
 
-# Определить имя профиля
-PROFILE_NAME=$(basename "$PROFILE")
-
-# Упаковать в legacy zip
+# Упаковать через Conan deployer (вариант "Conan-native")
 mkdir -p "$ROOT_DIR/output"
-python3 "$ROOT_DIR/teamcity/package-legacy.py" \
-    --name gtest \
-    --version 1.15.2 \
-    --profile "$PROFILE_NAME" \
-    --shared False \
-    --output "$ROOT_DIR/output"
+rm -f "$ROOT_DIR/output"/*.nupkg
+conan install \
+    --requires=gtest/1.15.2 \
+    --profile="$PROFILE" \
+    --no-remote \
+    -c tools.system.package_manager:mode=install \
+    --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \
+    --deployer-folder="$ROOT_DIR/output"
 
 if [ $? -ne 0 ]; then
     echo ""
