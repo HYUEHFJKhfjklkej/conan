@@ -12,7 +12,7 @@ set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
 pushd "%ROOT_DIR%"
 
-set RC=0
+set EXITCODE=0
 if not exist output mkdir output
 
 :: Активировать venv если есть
@@ -28,7 +28,7 @@ if not exist "%PROFILE%" (
     echo [ERROR] Profile not found: %PROFILE%
     echo Available profiles:
     dir /b "%ROOT_DIR%\profiles\win-*"
-    set RC=1
+    set EXITCODE=1
     goto :END
 )
 echo [INFO] Using profile: %PROFILE%
@@ -44,7 +44,7 @@ for %%B in (Release Debug) do (
     conan create gtest\ --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
     if errorlevel 1 (
         echo [FAIL] gtest %%B build failed
-        set RC=1
+        set EXITCODE=1
         goto :END
     )
 )
@@ -62,20 +62,20 @@ conan install . --output-folder=build --build=missing --profile="%PROFILE%" --no
 if errorlevel 1 (
     echo [FAIL] conan install for example failed
     popd
-    set RC=1
+    set EXITCODE=1
     goto :END
 )
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=build\conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-if errorlevel 1 ( popd & set RC=1 & goto :END )
+if errorlevel 1 ( popd & set EXITCODE=1 & goto :END )
 cmake --build build --config Release
-if errorlevel 1 ( popd & set RC=1 & goto :END )
+if errorlevel 1 ( popd & set EXITCODE=1 & goto :END )
 pushd build
 ctest -C Release --output-on-failure
 if errorlevel 1 (
     echo [FAIL] tests failed
     popd
     popd
-    set RC=1
+    set EXITCODE=1
     goto :END
 )
 popd
@@ -97,7 +97,7 @@ conan install ^
     --deployer-folder="%ROOT_DIR%\output"
 if errorlevel 1 (
     echo [FAIL] deployer failed
-    set RC=1
+    set EXITCODE=1
     goto :END
 )
 
@@ -120,11 +120,11 @@ echo ============================================
 :END
 popd
 echo.
-if "%RC%"=="0" (
+if "%EXITCODE%"=="0" (
     echo [DONE] success
 ) else (
-    echo [DONE] FAILED with code %RC%
+    echo [DONE] FAILED with code %EXITCODE%
 )
 echo Press any key to close this window...
 pause >nul
-endlocal & exit /b %RC%
+endlocal & exit /b %EXITCODE%
