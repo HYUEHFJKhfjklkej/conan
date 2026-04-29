@@ -12,7 +12,7 @@ COPY packages-linux /work/conan-recipes/packages-linux
 COPY gtest /work/conan-recipes/gtest
 COPY example /work/conan-recipes/example
 COPY profiles /work/conan-recipes/profiles
-COPY teamcity/package-legacy.py /work/conan-recipes/teamcity/package-legacy.py
+COPY extensions /work/conan-recipes/extensions
 
 WORKDIR /work/conan-recipes
 RUN ./test-astra/setup.sh
