@@ -226,18 +226,39 @@ curl -fsSL -o zlib/src/zlib-1.3.1.tar.gz \
 shasum -a 256 zlib/src/zlib-1.3.1.tar.gz   # должен совпадать с conandata.yml
 ```
 
-**Шаг 4.** Прописать локальный URL первым в `conandata.yml` для offline-сборки в закрытом контуре:
+**Шаг 4.** Адаптировать рецепт для offline-сборки. Canonical-рецепты тянут исходники по URL из `conandata.yml`, что не работает в закрытом контуре. Решение — bundle архива через `exports_sources` плюс fallback в `source()`:
+
+```python
+# В conanfile.py добавить как атрибут класса:
+exports_sources = "src/*.tar.gz"
+
+# Переопределить source() — сначала пробовать локальный архив:
+from conan.tools.files import unzip, get
+import os
+
+def source(self):
+    local_archive = os.path.join(self.export_sources_folder, "src", f"zlib-{self.version}.tar.gz")
+    if os.path.exists(local_archive):
+        unzip(self, local_archive, destination=self.source_folder, strip_root=True)
+    else:
+        get(self, **self.conan_data["sources"][self.version],
+            destination=self.source_folder, strip_root=True)
+```
+
+`conandata.yml` оставляй как у upstream (только URL и sha256, без `file:///`):
 ```yaml
 sources:
   "1.3.1":
     url:
-      - "file:///work/conan-recipes/zlib/src/zlib-1.3.1.tar.gz"
       - "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
       - "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
     sha256: "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
 ```
 
-Conan пробует URL по порядку; в закрытом контуре сработает локальный, в открытом — upstream.
+**Почему так, а не `file:///` URL в conandata:**
+- абсолютный путь хардкодится под одну машину (например, `/work/...` работает только в Docker)
+- `get()` с `file://` в современном Conan 2 пытается «скачать» в `source_folder` и сваливается с `SameFileError`, если архив там же
+- `exports_sources` переносит архив в Conan-кеш вместе с рецептом — путь `self.export_sources_folder` всегда корректен, и `unzip()` распаковывает напрямую без download-семантики
 
 **Шаг 5.** (опционально) Маппинг имени для legacy `.nupkg`, если внутреннее имя отличается от Conan-name:
 ```python
@@ -293,7 +314,7 @@ git commit -m "Add zlib 1.3.1 recipe (canonical from conan-center-index)"
 import os
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import get, copy
+from conan.tools.files import copy, unzip
 
 class FooConan(ConanFile):
     name = "foo"
@@ -303,15 +324,16 @@ class FooConan(ConanFile):
     options = {"shared": [True, False], "fPIC": [True, False]}
     default_options = {"shared": False, "fPIC": True}
 
-    exports = "src/*.tar.gz"
+    # Bundle the upstream archive with the recipe — works on offline machines.
+    exports_sources = "src/*.tar.gz"
 
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
 
     def source(self):
-        local = os.path.join(self.recipe_folder, "src", f"v{self.version}.tar.gz")
-        get(self, f"file:///{local}", strip_root=True)
+        local = os.path.join(self.export_sources_folder, "src", f"v{self.version}.tar.gz")
+        unzip(self, local, destination=self.source_folder, strip_root=True)
 
     def layout(self):
         cmake_layout(self)
