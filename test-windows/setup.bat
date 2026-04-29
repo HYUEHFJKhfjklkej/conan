@@ -1,75 +1,94 @@
 @echo off
+:: ============================================
+::  Conan Environment Setup (OFFLINE) — Windows
+:: ============================================
+setlocal ENABLEEXTENSIONS
+
+:: Перейти в корень репо (на уровень выше test-windows/)
+set SCRIPT_DIR=%~dp0
+set ROOT_DIR=%SCRIPT_DIR%..
+pushd "%ROOT_DIR%"
+
 echo ============================================
 echo  Conan Environment Setup (OFFLINE)
 echo ============================================
 echo.
 
-:: Check Python
+:: Проверить Python
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Python not found!
-    echo Download: https://www.python.org/downloads/
-    echo Make sure to check "Add Python to PATH" during installation
-    pause
-    exit /b 1
+    echo [ERROR] Python not found in PATH
+    echo Install Python 3.11 from python.org and check "Add to PATH"
+    goto :END
 )
+for /f "delims=" %%V in ('python --version') do set PYVER=%%V
+echo [OK] %PYVER%
 
-echo [OK] Python found:
-python --version
+:: Колёса в packages/ собраны под Python 3.14 (cp314 win_amd64)
+:: Если у вас другая версия — pip install ниже упадёт; используйте python 3.14
 
-:: Create virtual environment
+:: Создать venv
 echo.
-echo [INFO] Creating virtual environment...
+echo [INFO] Creating virtual environment in %ROOT_DIR%\venv ...
 if exist venv (
     echo [INFO] venv already exists, skipping
 ) else (
     python -m venv venv
+    if errorlevel 1 (
+        echo [ERROR] venv creation failed
+        goto :END
+    )
 )
 
-:: Activate
-echo [INFO] Activating virtual environment...
 call venv\Scripts\activate.bat
 
-:: Set offline mode via environment variables
-:: These propagate to pip's build subprocesses
+:: Offline-режим pip
 set PIP_NO_INDEX=1
-set PIP_FIND_LINKS=packages
+set PIP_FIND_LINKS=%ROOT_DIR%\packages
 
-:: Install setuptools and wheel first
+if not exist "%PIP_FIND_LINKS%" (
+    echo [ERROR] Папка с offline-пакетами не найдена: %PIP_FIND_LINKS%
+    goto :END
+)
+
+echo.
+echo [INFO] Using local wheels from: %PIP_FIND_LINKS%
 echo.
 echo [INFO] Installing setuptools and wheel...
 python -m pip install setuptools wheel
+if errorlevel 1 (
+    echo [ERROR] setuptools/wheel install failed
+    goto :END
+)
 
-:: Install Conan from local packages (no internet required!)
 echo.
 echo [INFO] Installing Conan from local packages...
 python -m pip install conan
-
-if %errorlevel% neq 0 (
-    echo [ERROR] Failed to install Conan!
-    pause
-    exit /b 1
+if errorlevel 1 (
+    echo [ERROR] Conan install failed
+    goto :END
 )
 
-:: Clear offline mode
 set PIP_NO_INDEX=
 set PIP_FIND_LINKS=
 
+echo.
 echo [OK] Conan installed:
 conan --version
 
-:: Configure Conan
 echo.
 echo [INFO] Detecting Conan profile...
-conan profile detect
+conan profile detect --force
 
 echo.
 echo ============================================
 echo  Done! Environment is ready.
 echo ============================================
+echo Next: test-windows\run_test.bat
+
+:END
+popd
 echo.
-echo Next step - build gtest:
-echo   venv\Scripts\activate.bat
-echo   conan create gtest/ --build=missing
-echo.
-pause
+echo Press any key to close...
+pause >nul
+endlocal
