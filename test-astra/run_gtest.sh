@@ -54,8 +54,8 @@ SRC_TARBALL="$ROOT_DIR/gtest/src/v1.15.2.tar.gz"
 if [ -f "$SRC_TARBALL" ]; then
     SHA=$(sha256sum "$SRC_TARBALL" | awk '{print $1}')
     echo "  upstream:  $SHA"
-    echo "  expected:  78c676fc63881529bf97bf9d45948d905a66833fbfa5318ea2cd7478cb98f399"
-    if [ "$SHA" = "78c676fc63881529bf97bf9d45948d905a66833fbfa5318ea2cd7478cb98f399" ]; then
+    echo "  expected:  7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926"
+    if [ "$SHA" = "7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926" ]; then
         echo "  [OK] upstream sha256 matches conan-center conandata.yml"
     fi
 fi
