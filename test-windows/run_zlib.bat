@@ -54,7 +54,7 @@ echo ============================================
 echo  zlib 1.3.1  linkage=%LINKAGE%  build_type=%BT%
 echo ============================================
 
-conan create "%ROOT_DIR%\zlib\" ^
+conan create "%ROOT_DIR%\zlib" ^
     --version=1.3.1 ^
     --profile="%PROFILE%" ^
     --build=missing ^

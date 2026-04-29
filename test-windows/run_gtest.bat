@@ -55,7 +55,7 @@ echo ============================================
 echo  gtest 1.16.0  linkage=%LINKAGE%  build_type=%BT%
 echo ============================================
 
-conan create "%ROOT_DIR%\gtest\" ^
+conan create "%ROOT_DIR%\gtest" ^
     --version=1.16.0 ^
     --profile="%PROFILE%" ^
     --build=missing ^

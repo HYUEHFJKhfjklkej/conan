@@ -32,6 +32,7 @@ echo ""
 for BT in Release Debug; do
     echo "[INFO] Building gtest build_type=$BT"
     conan create "$ROOT_DIR/gtest/" \
+        --version=1.16.0 \
         --profile="$PROFILE" \
         --build=missing \
         --no-remote \
@@ -97,7 +98,7 @@ echo ""
 mkdir -p "$ROOT_DIR/output"
 rm -f "$ROOT_DIR/output"/*.nupkg
 conan install \
-    --requires=gtest/1.15.2 \
+    --requires=gtest/1.16.0 \
     --profile="$PROFILE" \
     --no-remote \
     -c tools.system.package_manager:mode=install \
