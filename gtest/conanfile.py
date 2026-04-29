@@ -2,7 +2,7 @@ from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import copy, get, replace_in_file, rm, rmdir
+from conan.tools.files import copy, get, replace_in_file, rm, rmdir, unzip
 from conan.tools.microsoft import is_msvc_static_runtime, msvc_runtime_flag
 from conan.tools.scm import Version
 import os
@@ -40,6 +40,11 @@ class GTestConan(ConanFile):
     extension_properties = {"compatibility_cppstd": False}
     implements = ["auto_shared_fpic"]
 
+    # Bundle the upstream archive with the recipe so offline machines
+    # (no internet) can still build. Conan copies these into the recipe
+    # cache when the recipe is exported.
+    exports_sources = "src/*.tar.gz"
+
     def layout(self):
         cmake_layout(self, src_folder="src")
 
@@ -53,7 +58,12 @@ class GTestConan(ConanFile):
         check_min_cppstd(self, 17 if Version(self.version) >= "1.17.0" else 14)
 
     def source(self):
-        get(self, **self.conan_data["sources"][self.version], strip_root=True)
+        # Prefer the bundled archive (offline-friendly).
+        local_archive = os.path.join(self.export_sources_folder, "src", f"v{self.version}.tar.gz")
+        if os.path.exists(local_archive):
+            unzip(self, local_archive, destination=self.source_folder, strip_root=True)
+        else:
+            get(self, **self.conan_data["sources"][self.version], strip_root=True)
 
         internal_utils = os.path.join(self.source_folder, "googletest", "cmake", "internal_utils.cmake")
         replace_in_file(self, internal_utils, "-WX", "")

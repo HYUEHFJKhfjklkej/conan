@@ -1,6 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
-from conan.tools.files import apply_conandata_patches, export_conandata_patches, get, load, replace_in_file, save
+from conan.tools.files import apply_conandata_patches, export_conandata_patches, get, load, replace_in_file, save, unzip
 from conan.tools.scm import Version
 import os
 
@@ -27,6 +27,11 @@ class ZlibConan(ConanFile):
         "fPIC": True,
     }
 
+    # Bundle the upstream archive with the recipe so offline machines
+    # (no internet) can still build. Conan copies it into the recipe
+    # cache when the recipe is exported.
+    exports_sources = "src/*.tar.gz"
+
     def export_sources(self):
         export_conandata_patches(self)
 
@@ -44,8 +49,13 @@ class ZlibConan(ConanFile):
         cmake_layout(self, src_folder="src")
 
     def source(self):
-        get(self, **self.conan_data["sources"][self.version],
-            destination=self.source_folder, strip_root=True)
+        # Prefer the bundled archive (offline-friendly).
+        local_archive = os.path.join(self.export_sources_folder, "src", f"zlib-{self.version}.tar.gz")
+        if os.path.exists(local_archive):
+            unzip(self, local_archive, destination=self.source_folder, strip_root=True)
+        else:
+            get(self, **self.conan_data["sources"][self.version],
+                destination=self.source_folder, strip_root=True)
 
     def generate(self):
         tc = CMakeToolchain(self)
