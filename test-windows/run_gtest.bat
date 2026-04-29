@@ -36,7 +36,7 @@ if errorlevel 1 goto :END
 
 echo.
 echo [INFO] Conan cache after builds:
-conan list "gtest/1.16.0:*"
+conan list "gtest/1.15.2:*"
 
 echo.
 echo ============================================
@@ -52,11 +52,11 @@ set SHARED=False
 if "%LINKAGE%"=="shared" set SHARED=True
 
 echo ============================================
-echo  gtest 1.16.0  linkage=%LINKAGE%  build_type=%BT%
+echo  gtest 1.15.2  linkage=%LINKAGE%  build_type=%BT%
 echo ============================================
 
 conan create "%ROOT_DIR%\gtest" ^
-    --version=1.16.0 ^
+    --version=1.15.2 ^
     --profile="%PROFILE%" ^
     --build=missing ^
     --no-remote ^

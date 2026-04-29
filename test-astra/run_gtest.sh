@@ -27,11 +27,11 @@ build_one() {
     [ "$linkage" = "shared" ] && shared=True
 
     echo "============================================"
-    echo " gtest 1.16.0  linkage=$linkage  build_type=$build_type"
+    echo " gtest 1.15.2  linkage=$linkage  build_type=$build_type"
     echo "============================================"
 
     conan create "$ROOT_DIR/gtest/" \
-        --version=1.16.0 \
+        --version=1.15.2 \
         --profile="$PROFILE" \
         --build=missing \
         --no-remote \
@@ -46,11 +46,11 @@ build_one shared  Debug
 
 echo ""
 echo "[INFO] Conan cache after builds:"
-conan list "gtest/1.16.0:*" 2>/dev/null || true
+conan list "gtest/1.15.2:*" 2>/dev/null || true
 
 echo ""
 echo "[INFO] Confirming upstream sources untouched:"
-SRC_TARBALL="$ROOT_DIR/gtest/src/v1.16.0.tar.gz"
+SRC_TARBALL="$ROOT_DIR/gtest/src/v1.15.2.tar.gz"
 if [ -f "$SRC_TARBALL" ]; then
     SHA=$(sha256sum "$SRC_TARBALL" | awk '{print $1}')
     echo "  upstream:  $SHA"

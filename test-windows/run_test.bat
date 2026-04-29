@@ -41,7 +41,7 @@ echo ============================================
 echo.
 for %%B in (Release Debug) do (
     echo [INFO] Building gtest build_type=%%B
-    conan create gtest\ --version=1.16.0 --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
+    conan create gtest\ --version=1.15.2 --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
     if errorlevel 1 (
         echo [FAIL] gtest %%B build failed
         set EXITCODE=1
@@ -90,7 +90,7 @@ echo ============================================
 echo.
 del /q output\*.nupkg 2>nul
 conan install ^
-    --requires=gtest/1.16.0 ^
+    --requires=gtest/1.15.2 ^
     --profile="%PROFILE%" ^
     --no-remote ^
     --deployer="%ROOT_DIR%\extensions\deployers\legacy_nupkg.py" ^
