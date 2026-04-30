@@ -301,13 +301,19 @@ def deploy(graph, output_folder, **kwargs):
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
             f.write(_generate_cmakelists_var(legacy_name, version, components, platforms))
 
-        # 7. LICENSE.txt
+        # 7. LICENSE.txt — некоторые рецепты (openssl) кладут в licenses/ не только
+        # файлы, но и подпапки (licenses/external/...). Берём только plain-файлы;
+        # последний выигрывает (одного файла достаточно для legacy-формата).
         src_lic = os.path.join(release_pkg, "licenses")
         dst_lic = os.path.join(staging, "LICENSE.txt")
+        copied = False
         if os.path.isdir(src_lic):
             for lf in os.listdir(src_lic):
-                shutil.copy2(os.path.join(src_lic, lf), dst_lic)
-        else:
+                src_path = os.path.join(src_lic, lf)
+                if os.path.isfile(src_path):
+                    shutil.copy2(src_path, dst_lic)
+                    copied = True
+        if not copied:
             open(dst_lic, "w").close()
 
         # 8. .nupkg
