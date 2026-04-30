@@ -535,11 +535,24 @@ class OpenSSLConan(ConanFile):
     def _perl(self):
         if self._use_nmake:
             # Offline-патч: strawberryperl declared via [platform_tool_requires] — not a real
-            # Conan dep, so self.dependencies.build["strawberryperl"] raises KeyError. Fallback
-            # to system perl on PATH (Strawberry Perl installer adds itself to PATH on Windows).
+            # Conan dep, so self.dependencies.build["strawberryperl"] raises KeyError.
+            # Fallback: resolve absolute path to perl.exe via system PATH or common
+            # install locations. We can't return literal "perl" because Conan's build env
+            # (VirtualBuildEnv) does not preserve full system PATH.
             try:
                 return self.dependencies.build["strawberryperl"].conf_info.get("user.strawberryperl:perl", check_type=str)
             except KeyError:
+                import shutil
+                perl_path = shutil.which("perl") or shutil.which("perl.exe")
+                if perl_path:
+                    return perl_path
+                for candidate in (
+                    r"C:\Strawberry\perl\bin\perl.exe",
+                    r"C:\Perl64\bin\perl.exe",
+                    r"C:\Perl\bin\perl.exe",
+                ):
+                    if os.path.isfile(candidate):
+                        return candidate
                 return "perl"
         return "perl"
 
