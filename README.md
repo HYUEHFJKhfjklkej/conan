@@ -64,96 +64,143 @@ Conan-рецепты для third-party C++ библиотек, использу
 
 ```
 conan-recipes/
-├── README.md                       ← этот документ
-├── requirements.txt                ← conan>=2.0
+├── README.md                              ← этот документ
+├── requirements.txt                       ← conan>=2.0
 ├── .gitignore
 ├── .dockerignore
 │
-├── gtest/                          ← каждый пакет одинаковой структуры:
-│   ├── conanfile.py                  canonical-рецепт + offline-патч
-│   ├── conanfile.py.my-poc.bak       (бэкап исходного PoC-рецепта, можно удалить)
-│   ├── conandata.yml                 версии + sha256 + URL источников (upstream)
-│   ├── src/                          tarball-ы для offline-сборки
-│   │   └── v1.15.2.tar.gz
-│   └── test_package/                 минимальный consumer-тест (smoke)
-│
-├── zlib/
+├── gtest/                                 ← пример: canonical-рецепт + два архива
 │   ├── conanfile.py
-│   ├── conanfile.py.my-poc.bak       (бэкап PoC, можно удалить)
+│   ├── conanfile.py.my-poc.bak            (бэкап исходного PoC, можно удалить)
+│   ├── conandata.yml                      версии 1.15.2, 1.16.0, 1.17.0
+│   ├── src/
+│   │   ├── v1.15.2.tar.gz
+│   │   └── v1.16.0.tar.gz
+│   └── test_package/                      минимальный consumer-тест (smoke)
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       ├── main.cpp
+│       └── test_package.cpp
+│
+├── zlib/                                  ← пример: canonical + canonical-патч
+│   ├── conanfile.py
+│   ├── conanfile.py.my-poc.bak            (бэкап PoC, можно удалить)
 │   ├── conandata.yml
-│   ├── patches/1.3.1/                canonical-патчи conan-center-index
-│   ├── src/zlib-1.3.1.tar.gz
+│   ├── patches/
+│   │   └── 1.3.1/
+│   │       └── 0001-fix-cmake.patch
+│   ├── src/
+│   │   └── zlib-1.3.1.tar.gz
 │   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       └── test_package.c
 │
 ├── abseil/
 │   ├── conanfile.py
 │   ├── conandata.yml
-│   ├── patches/                      patches канонические (на разные версии)
-│   │   ├── 0003-absl-string-libm.patch         (+ .20230802 / .20240116 варианты)
+│   ├── patches/                           canonical-патчи под разные версии
+│   │   ├── 0003-absl-string-libm.patch
+│   │   ├── 0003-absl-string-libm-20230802.patch
+│   │   ├── 0003-absl-string-libm-20240116.patch
 │   │   ├── 0004-test-allocator-testonly.patch
 │   │   ├── 0006-backport-arm-compilation-fix.patch
 │   │   ├── 20230802.1-0001-fix-mingw.patch
 │   │   ├── 20240116.1-0001-fix-filesystem-include.patch
 │   │   └── 20260107.1-0001-fix-heterogeneous_lookup-flag.patch
-│   ├── src/20250127.0.tar.gz
+│   ├── src/
+│   │   └── 20250127.0.tar.gz
 │   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       └── test_package.cpp
 │
-├── c-ares/
-│   ├── conanfile.py, conandata.yml
-│   ├── src/c-ares-1.34.6.tar.gz
-│   └── test_package/                 (без patches — рецепт чистый)
+├── c-ares/                                (без patches)
+│   ├── conanfile.py
+│   ├── conandata.yml
+│   ├── src/
+│   │   └── c-ares-1.34.6.tar.gz
+│   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       └── test_package.c
 │
-├── re2/
-│   ├── conanfile.py, conandata.yml
-│   ├── src/2025-11-05.tar.gz
-│   └── test_package/                 (без patches)
+├── re2/                                   (без patches)
+│   ├── conanfile.py
+│   ├── conandata.yml
+│   ├── src/
+│   │   └── 2025-11-05.tar.gz
+│   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       └── test_package.cpp
 │
 ├── protobuf/
-│   ├── conanfile.py, conandata.yml
+│   ├── conanfile.py
+│   ├── conandata.yml
 │   ├── patches/
 │   │   ├── protobuf-3.20.0-upstream-macos-macros.patch
 │   │   └── protobuf-3.21.12-upstream-macos-macros.patch
-│   ├── protobuf-conan-protoc-target.cmake   ← хелпер для импорта protoc-таргета
-│   ├── src/protobuf-29.6.tar.gz
+│   ├── protobuf-conan-protoc-target.cmake ← хелпер для импорта protoc-таргета
+│   ├── src/
+│   │   └── protobuf-29.6.tar.gz
 │   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── addressbook.proto              .proto-файл для генерации
+│       ├── conanfile.py
+│       └── test_package.cpp
 │
-├── openssl/
-│   ├── conanfile.py, conandata.yml
-│   ├── src/openssl-3.4.5.tar.gz
-│   └── test_package/                 (без patches)
-│
-├── grpc/                           ← см. раздел «gRPC: особенности»
+├── openssl/                               (без patches)
 │   ├── conanfile.py
-│   ├── conandata.yml                 версии 1.78.1, 1.69.0, 1.54.3
-│   ├── conan_cmake_project_include.cmake    линкер-фикс check_epollexclusive
-│   ├── cmake/grpc_plugin_template.cmake.in  шаблон executable imported targets
-│   ├── target_info/                          декларативные описания компонентов
+│   ├── conandata.yml
+│   ├── src/
+│   │   └── openssl-3.4.5.tar.gz
+│   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       ├── digest.c                       тест нового provider API
+│       ├── digest_legacy.c                тест legacy ENGINE API
+│       └── test_package.c
+│
+├── grpc/                                  ← см. раздел «gRPC: особенности»
+│   ├── conanfile.py
+│   ├── conandata.yml                      версии 1.78.1, 1.69.0, 1.54.3
+│   ├── conan_cmake_project_include.cmake  линкер-фикс check_epollexclusive
+│   ├── cmake/
+│   │   └── grpc_plugin_template.cmake.in  шаблон executable imported targets
+│   ├── target_info/                       декларативные описания компонентов
 │   │   ├── grpc_1.54.3.yml
 │   │   ├── grpc_1.69.0.yml
 │   │   └── grpc_1.78.1.yml
-│   ├── patches/v1.50.x/             legacy-патчи для 1.54.3
-│   ├── src/v1.78.1.tar.gz
+│   ├── patches/
+│   │   └── v1.50.x/
+│   │       └── 002-CMake-Add-gRPC_USE_SYSTEMD-option-34384.patch
+│   ├── src/
+│   │   └── v1.78.1.tar.gz
 │   └── test_package/
+│       ├── CMakeLists.txt
+│       ├── conanfile.py
+│       └── test_package.cpp
 │
-├── profiles/                       ← один файл на платформу/тулчейн
-│   ├── astra-gcc                     Astra Linux, GCC (offline-готов)
-│   ├── lin-gcc84-x86_64              Linux x64, GCC 8.4
-│   ├── lin-gcc84-i686                Linux x86, GCC 8.4
-│   ├── lin-gcc75-arm-linaro          Linux ARM, Linaro GCC 7.5
-│   ├── lin-gcc-aarch64-linaro        Linux ARM64, Linaro GCC 7.5
-│   ├── linux-gcc                     общий Linux GCC (без привязки к Astra)
-│   ├── linux-gcc-debug               то же + build_type=Debug дефолтом
-│   ├── win-v142-x64                  Windows MSVC 2019 x64
-│   ├── win-v142-x86                  Windows MSVC 2019 x86
-│   ├── win-v143-x64                  Windows MSVC 2022 x64
-│   ├── windows-msvc                  generic-MSVC (без фиксации toolset)
-│   └── windows-msvc-debug            то же + Debug
+├── profiles/                              ← один файл на платформу/тулчейн
+│   ├── astra-gcc                          Astra Linux, GCC из дистрибутива
+│   ├── lin-gcc84-x86_64                   Linux x64, GCC 8.4
+│   ├── lin-gcc84-i686                     Linux x86, GCC 8.4
+│   ├── lin-gcc75-arm-linaro               Linux ARM, Linaro GCC 7.5
+│   ├── lin-gcc-aarch64-linaro             Linux ARM64, Linaro GCC 7.5
+│   ├── linux-gcc                          generic Linux GCC (без привязки к Astra)
+│   ├── linux-gcc-debug                    то же + build_type=Debug дефолтом
+│   ├── win-v142-x64                       Windows MSVC 2019 x64
+│   ├── win-v142-x86                       Windows MSVC 2019 x86
+│   ├── win-v143-x64                       Windows MSVC 2022 x64
+│   ├── windows-msvc                       generic-MSVC (без фиксации toolset)
+│   └── windows-msvc-debug                 то же + Debug
 │
 ├── extensions/
 │   └── deployers/
-│       └── legacy_nupkg.py         ← Conan-deployer: упаковщик в legacy `.nupkg`
+│       └── legacy_nupkg.py                ← Conan-deployer: упаковщик в legacy `.nupkg`
 │
-├── example/                        ← consumer-проект для end-to-end проверки (gtest)
+├── example/                               ← consumer-проект для end-to-end проверки (gtest)
 │   ├── CMakeLists.txt
 │   ├── conanfile.txt
 │   └── src/
@@ -161,38 +208,45 @@ conan-recipes/
 │       ├── example.hpp
 │       └── example_test.cpp
 │
-├── packages-linux/                 ← offline pip-колёса Conan для Linux x86_64
-├── packages/                       ← offline pip-колёса Conan для Windows x86_64
+├── packages-linux/                        ← 18 offline pip-колёс Conan для Linux x86_64
+│   ├── conan-2.27.1.tar.gz                core
+│   └── … (certifi, charset_normalizer, colorama, distro, fasteners, idna,
+│           jinja2, markupsafe, packaging, patch_ng, python_dateutil, pyyaml,
+│           requests, setuptools, six, urllib3, wheel)
 │
-├── test-astra/                     ← bash-скрипты валидации на Linux/Astra
-│   ├── README.md                     инструкция запуска на Astra
-│   ├── install_deps.sh               apt-зависимости (gcc, cmake, python3-venv)
-│   ├── setup.sh                      создание venv + offline install Conan
-│   ├── run_gtest.sh                  gtest sanity (Release+Debug)
-│   ├── run_zlib.sh                   zlib sanity (Release+Debug)
-│   ├── run_grpc.sh                   grpc + 6 deps (sanity, только static/Release)
-│   ├── run_test.sh                   gtest e2e + legacy `.nupkg` через deployer
-│   └── run_test_zlib.sh              zlib e2e + legacy `.nupkg`
+├── packages/                              ← 17 offline pip-колёс Conan для Windows x86_64
+│   ├── conan-2.27.1.tar.gz
+│   └── … (тот же набор без distro, под cp314-win_amd64)
 │
-├── test-windows/                   ← bat-скрипты валидации на Windows
+├── test-astra/                            ← bash-скрипты валидации на Linux/Astra
+│   ├── README.md                          инструкция запуска на Astra
+│   ├── install_deps.sh                    apt-зависимости (gcc, cmake, python3-venv)
+│   ├── setup.sh                           создание venv + offline install Conan
+│   ├── run_gtest.sh                       gtest sanity (Release+Debug)
+│   ├── run_zlib.sh                        zlib sanity (Release+Debug)
+│   ├── run_grpc.sh                        grpc + 6 deps (sanity, только static/Release)
+│   ├── run_test.sh                        gtest e2e + legacy `.nupkg` через deployer
+│   └── run_test_zlib.sh                   zlib e2e + legacy `.nupkg`
+│
+├── test-windows/                          ← bat-скрипты валидации на Windows
 │   ├── setup.bat
-│   ├── run_gtest.bat                 (зеркала Linux-скриптов)
+│   ├── run_gtest.bat                      (зеркала Linux-скриптов)
 │   ├── run_zlib.bat
-│   ├── run_grpc.bat                  4 варианта (static/shared × Release/Debug)
+│   ├── run_grpc.bat                       4 варианта (static/shared × Release/Debug)
 │   ├── run_test.bat
 │   └── run_test_zlib.bat
 │
-├── Dockerfile.astra-test           ← e2e тест в контейнере (gcc:12-bookworm)
-├── Dockerfile.gtest-test           ← минимальный — только gtest
-├── Dockerfile.zlib-test            ← только zlib
-├── Dockerfile.grpc-test            ← grpc + 6 deps (offline-проверка с --network=none)
-├── docker-compose.yml              ← опциональный локальный Conan-сервер
-├── server.conf                     ← конфиг Conan-сервера для docker-compose
-│
-└── venv/                           ← (создаётся через setup.sh, в репо не коммитится)
+├── Dockerfile.astra-test                  ← e2e тест в контейнере (gcc:12-bookworm)
+├── Dockerfile.gtest-test                  ← минимальный — только gtest
+├── Dockerfile.zlib-test                   ← только zlib
+├── Dockerfile.grpc-test                   ← grpc + 6 deps (offline с --network=none)
+├── docker-compose.yml                     ← опциональный локальный Conan-сервер
+└── server.conf                            ← конфиг Conan-сервера для docker-compose
 ```
 
-> **Замечание о `.my-poc.bak`-файлах в `gtest/` и `zlib/`** — это бэкапы PoC-рецептов с самого начала миграции, оставлены для истории. После того как соответствующие пакеты пройдут TC-валидацию — можно удалить.
+> **`.my-poc.bak`-файлы в `gtest/` и `zlib/`** — бэкапы PoC-рецептов с начала миграции, оставлены для истории. После полной TC-валидации соответствующих пакетов — можно удалить.
+>
+> **`venv/`** в репо не коммитится (см. `.gitignore`), создаётся через `test-astra/setup.sh` или `test-windows/setup.bat`.
 
 ---
 
