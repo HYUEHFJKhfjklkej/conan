@@ -15,12 +15,14 @@ perl/5.32.1
 nasm/2.16.01
 strawberryperl/5.32.1.1
 
+{% set tools_dir = profile_dir + "/../tools/windows" %}
+
 [buildenv]
-# Используем перенесённые в репо тулзы (распакованы test-windows\install_deps.bat
-# в conan-recipes\tools\windows\). Conan подставит {{ os.path.join(profile_dir, ...) }}
-# при загрузке профиля.  Запасные системные пути добавлены в конец на случай,
-# если репо склонировано в другое место.
-PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "strawberryperl", "perl", "bin") }}
-PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "nasm") }}
+# Используем тулзы внутри репо (распакованы test-windows\install_deps.bat
+# в conan-recipes\tools\windows\). profile_dir даёт путь к этому профилю,
+# tools_dir — путь к bundle.  Запасные системные пути добавлены в конец
+# на случай, если bundle отсутствует, но Strawberry Perl/NASM есть в системе.
+PATH=+(path){{ tools_dir }}/strawberryperl/perl/bin
+PATH=+(path){{ tools_dir }}/nasm
 PATH+=(path)C:\Strawberry\perl\bin
 PATH+=(path)C:\Program Files\NASM
