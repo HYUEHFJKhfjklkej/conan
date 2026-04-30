@@ -4,14 +4,18 @@ Conan-рецепты для third-party C++ библиотек, использу
 
 **Цель:** перейти с самописных TeamCity-сборок на стандартный Conan-пакетинг, сохранив бесшовную совместимость с существующими `.nupkg`-артефактами (имена, структура, метаданные) — миграция идёт пакет-за-пакетом, потребители не ломаются.
 
+**Ключевое свойство:** репозиторий полностью **offline-self-contained** — все source-архивы third-party и pip-колёса Conan лежат внутри. На закрытом контуре (Astra, изолированные TC-агенты) сборка идёт без обращений к интернету.
+
 ---
 
 ## Содержание
 
 - [Подход: canonical-first](#подход-canonical-first)
+- [Что уже мигрировано](#что-уже-мигрировано)
 - [Структура репозитория](#структура-репозитория)
 - [Как это работает](#как-это-работает)
 - [Linux vs Windows](#linux-vs-windows)
+- [gRPC: особенности](#grpc-особенности)
 - [Добавление нового пакета](#добавление-нового-пакета)
 - [Профили Conan](#профили-conan)
 - [Интеграция с TeamCity](#интеграция-с-teamcity)
@@ -27,7 +31,7 @@ Conan-рецепты для third-party C++ библиотек, использу
 
 | Тип пакета | Что делаем |
 |---|---|
-| Есть на conan-center, подходит | Зеркалим рецепт в этот репо, адаптируем под закрытый контур (локальные URL источников). Минимум кода — максимум переиспользования. |
+| Есть на conan-center, подходит | Зеркалим рецепт в этот репо, добавляем offline-патч (см. ниже). Минимум кода — максимум переиспользования. |
 | Есть на conan-center, нужны правки | Форк рецепта в наш репо + патч в `<pkg>/patches/<version>/`. Свои изменения изолированы и переживут обновление upstream. |
 | Нет на conan-center / проприетарный | Пишем рецепт с нуля по тем же conan-конвенциям. Это нормально и для индустриальных библиотек (OPC UA SDK, EtherCAT-стеки, протоколы Siemens S7 и т.п.). |
 
@@ -39,71 +43,156 @@ Conan-рецепты для third-party C++ библиотек, использу
 
 ---
 
+## Что уже мигрировано
+
+| Пакет | Версия | Источник рецепта |
+|---|---|---|
+| **gtest** | 1.15.2 (+ 1.16.0, 1.17.0) | conan-center-index, без правок |
+| **zlib** | 1.3.1 | conan-center-index + canonical patch |
+| **abseil** | 20250127.0 | conan-center-index |
+| **c-ares** | 1.34.6 | conan-center-index |
+| **re2** | 20251105 | conan-center-index |
+| **protobuf** | 5.29.6 | conan-center-index |
+| **openssl** | 3.4.5 | conan-center-index |
+| **grpc** | 1.78.1 | conan-center-index |
+
+Сборка всего дерева gRPC (со всеми deps + zlib) подтверждена в Docker `gcc:12-bookworm` с `--network=none` — полностью offline.
+
+---
+
 ## Структура репозитория
 
 ```
 conan-recipes/
-├── ARCHITECTURE.md                 ← этот документ
-├── README.md
+├── README.md                       ← этот документ
 ├── requirements.txt                ← conan>=2.0
+├── .gitignore
+├── .dockerignore
 │
-├── gtest/                          ← пример: canonical-рецепт + локальный архив
-│   ├── conanfile.py                  с conan-center-index, без правок
-│   ├── conandata.yml                 версии + sha256 + URL источников (локальный + upstream)
+├── gtest/                          ← каждый пакет одинаковой структуры:
+│   ├── conanfile.py                  canonical-рецепт + offline-патч
+│   ├── conanfile.py.my-poc.bak       (бэкап исходного PoC-рецепта, можно удалить)
+│   ├── conandata.yml                 версии + sha256 + URL источников (upstream)
 │   ├── src/                          tarball-ы для offline-сборки
-│   │   └── v1.16.0.tar.gz
-│   └── test_package/                 минимальный consumer-тест (smoke-check)
-│       ├── conanfile.py
-│       ├── CMakeLists.txt
-│       ├── main.cpp
-│       └── test_package.cpp
+│   │   └── v1.15.2.tar.gz
+│   └── test_package/                 минимальный consumer-тест (smoke)
 │
-├── zlib/                           ← пример: canonical-рецепт + патч
+├── zlib/
+│   ├── conanfile.py
+│   ├── conanfile.py.my-poc.bak       (бэкап PoC, можно удалить)
+│   ├── conandata.yml
+│   ├── patches/1.3.1/                canonical-патчи conan-center-index
+│   ├── src/zlib-1.3.1.tar.gz
+│   └── test_package/
+│
+├── abseil/
 │   ├── conanfile.py
 │   ├── conandata.yml
-│   ├── patches/1.3.1/
-│   │   └── 0001-fix-cmake.patch
-│   ├── src/
-│   │   └── zlib-1.3.1.tar.gz
+│   ├── patches/                      patches канонические (на разные версии)
+│   │   ├── 0003-absl-string-libm.patch         (+ .20230802 / .20240116 варианты)
+│   │   ├── 0004-test-allocator-testonly.patch
+│   │   ├── 0006-backport-arm-compilation-fix.patch
+│   │   ├── 20230802.1-0001-fix-mingw.patch
+│   │   ├── 20240116.1-0001-fix-filesystem-include.patch
+│   │   └── 20260107.1-0001-fix-heterogeneous_lookup-flag.patch
+│   ├── src/20250127.0.tar.gz
+│   └── test_package/
+│
+├── c-ares/
+│   ├── conanfile.py, conandata.yml
+│   ├── src/c-ares-1.34.6.tar.gz
+│   └── test_package/                 (без patches — рецепт чистый)
+│
+├── re2/
+│   ├── conanfile.py, conandata.yml
+│   ├── src/2025-11-05.tar.gz
+│   └── test_package/                 (без patches)
+│
+├── protobuf/
+│   ├── conanfile.py, conandata.yml
+│   ├── patches/
+│   │   ├── protobuf-3.20.0-upstream-macos-macros.patch
+│   │   └── protobuf-3.21.12-upstream-macos-macros.patch
+│   ├── protobuf-conan-protoc-target.cmake   ← хелпер для импорта protoc-таргета
+│   ├── src/protobuf-29.6.tar.gz
+│   └── test_package/
+│
+├── openssl/
+│   ├── conanfile.py, conandata.yml
+│   ├── src/openssl-3.4.5.tar.gz
+│   └── test_package/                 (без patches)
+│
+├── grpc/                           ← см. раздел «gRPC: особенности»
+│   ├── conanfile.py
+│   ├── conandata.yml                 версии 1.78.1, 1.69.0, 1.54.3
+│   ├── conan_cmake_project_include.cmake    линкер-фикс check_epollexclusive
+│   ├── cmake/grpc_plugin_template.cmake.in  шаблон executable imported targets
+│   ├── target_info/                          декларативные описания компонентов
+│   │   ├── grpc_1.54.3.yml
+│   │   ├── grpc_1.69.0.yml
+│   │   └── grpc_1.78.1.yml
+│   ├── patches/v1.50.x/             legacy-патчи для 1.54.3
+│   ├── src/v1.78.1.tar.gz
 │   └── test_package/
 │
 ├── profiles/                       ← один файл на платформу/тулчейн
-│   ├── astra-gcc                     Astra Linux, GCC из дистрибутива
+│   ├── astra-gcc                     Astra Linux, GCC (offline-готов)
 │   ├── lin-gcc84-x86_64              Linux x64, GCC 8.4
 │   ├── lin-gcc84-i686                Linux x86, GCC 8.4
 │   ├── lin-gcc75-arm-linaro          Linux ARM, Linaro GCC 7.5
 │   ├── lin-gcc-aarch64-linaro        Linux ARM64, Linaro GCC 7.5
+│   ├── linux-gcc                     общий Linux GCC (без привязки к Astra)
+│   ├── linux-gcc-debug               то же + build_type=Debug дефолтом
 │   ├── win-v142-x64                  Windows MSVC 2019 x64
 │   ├── win-v142-x86                  Windows MSVC 2019 x86
-│   └── win-v143-x64                  Windows MSVC 2022 x64
+│   ├── win-v143-x64                  Windows MSVC 2022 x64
+│   ├── windows-msvc                  generic-MSVC (без фиксации toolset)
+│   └── windows-msvc-debug            то же + Debug
 │
-├── extensions/deployers/
-│   └── legacy_nupkg.py             ← Conan-deployer: упаковщик в legacy `.nupkg`
+├── extensions/
+│   └── deployers/
+│       └── legacy_nupkg.py         ← Conan-deployer: упаковщик в legacy `.nupkg`
 │
-├── example/                        ← consumer-проект для end-to-end проверки
-│   ├── conanfile.txt
+├── example/                        ← consumer-проект для end-to-end проверки (gtest)
 │   ├── CMakeLists.txt
+│   ├── conanfile.txt
 │   └── src/
+│       ├── example.cpp
+│       ├── example.hpp
+│       └── example_test.cpp
 │
 ├── packages-linux/                 ← offline pip-колёса Conan для Linux x86_64
 ├── packages/                       ← offline pip-колёса Conan для Windows x86_64
 │
-├── test-astra/                     ← bash-скрипты валидации на Linux
-│   ├── install_deps.sh
-│   ├── setup.sh
-│   ├── run_test.sh
-│   ├── run_zlib.sh
-│   └── run_gtest.sh
+├── test-astra/                     ← bash-скрипты валидации на Linux/Astra
+│   ├── README.md                     инструкция запуска на Astra
+│   ├── install_deps.sh               apt-зависимости (gcc, cmake, python3-venv)
+│   ├── setup.sh                      создание venv + offline install Conan
+│   ├── run_gtest.sh                  gtest sanity (Release+Debug)
+│   ├── run_zlib.sh                   zlib sanity (Release+Debug)
+│   ├── run_grpc.sh                   grpc + 6 deps (sanity, только static/Release)
+│   ├── run_test.sh                   gtest e2e + legacy `.nupkg` через deployer
+│   └── run_test_zlib.sh              zlib e2e + legacy `.nupkg`
 │
 ├── test-windows/                   ← bat-скрипты валидации на Windows
 │   ├── setup.bat
-│   └── run_test.bat
+│   ├── run_gtest.bat                 (зеркала Linux-скриптов)
+│   ├── run_zlib.bat
+│   ├── run_grpc.bat                  4 варианта (static/shared × Release/Debug)
+│   ├── run_test.bat
+│   └── run_test_zlib.bat
 │
 ├── Dockerfile.astra-test           ← e2e тест в контейнере (gcc:12-bookworm)
-├── Dockerfile.gtest-test
-├── Dockerfile.zlib-test
-└── docker-compose.yml + server.conf  ← опциональный локальный Conan-сервер
+├── Dockerfile.gtest-test           ← минимальный — только gtest
+├── Dockerfile.zlib-test            ← только zlib
+├── Dockerfile.grpc-test            ← grpc + 6 deps (offline-проверка с --network=none)
+├── docker-compose.yml              ← опциональный локальный Conan-сервер
+├── server.conf                     ← конфиг Conan-сервера для docker-compose
+│
+└── venv/                           ← (создаётся через setup.sh, в репо не коммитится)
 ```
+
+> **Замечание о `.my-poc.bak`-файлах в `gtest/` и `zlib/`** — это бэкапы PoC-рецептов с самого начала миграции, оставлены для истории. После того как соответствующие пакеты пройдут TC-валидацию — можно удалить.
 
 ---
 
@@ -112,7 +201,7 @@ conan-recipes/
 ```
         ┌─────────────────────┐
         │   <pkg>/            │   рецепт + версии + патчи + tarball
-        │   conanfile.py      │
+        │   conanfile.py      │   (с offline-патчем: exports_sources + unzip)
         │   conandata.yml     │
         │   patches/<ver>/    │
         │   src/<archive>     │
@@ -124,6 +213,8 @@ conan-recipes/
  ┌──────▼──────┐      ┌───────▼──────┐
  │ profiles/   │      │ profiles/    │
  │ astra-gcc   │      │ win-v143-x64 │
+ │ + platform_ │      │ + platform_  │
+ │ tool_req'es │      │ tool_req'es  │
  └──────┬──────┘      └───────┬──────┘
         │                     │
         │ test-astra/         │ test-windows/
@@ -153,15 +244,17 @@ conan-recipes/
 1. **Подготовка окружения** (один раз):
    - Linux: `sudo ./test-astra/install_deps.sh && ./test-astra/setup.sh`
    - Windows: `test-windows\setup.bat`
-2. **Release**: `conan create <pkg>/ --profile=<profile> -s build_type=Release --build=missing --no-remote`
+2. **Release**: `conan create <pkg>/ --version=<ver> -pr:h=<profile> -pr:b=<profile> -s build_type=Release --build=missing --no-remote`
 3. **Debug**: тот же `conan create` с `-s build_type=Debug`. У них разные `package_id` — обе версии параллельно живут в кеше.
 4. **Smoke-тест**: `conan create` автоматически запускает `<pkg>/test_package/`, если он есть — это минимальный consumer-проект, проверяющий, что `find_package(...)` цепляется и линковка работает.
 5. **Упаковка legacy**: `conan install --requires=<pkg>/<ver> --deployer=extensions/deployers/legacy_nupkg.py --deployer-folder=output/`. Deployer берёт обе сборки из кеша и собирает `.nupkg` со старой структурой.
 
+> **Важно: `-pr:b=<profile>`** обязательно для offline-сборок. Без явного build-профиля Conan возьмёт default profile для build-context, который не содержит наших `[platform_tool_requires]` — и упадёт на `cmake/[>=3.16] not resolved` для пакетов с `tool_requires`.
+
 ### Структура выходного `.nupkg`
 
 ```
-googletest.lin.gcc84.shared.x86_64.1.16.0.nupkg
+googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg
 └── lin.gcc84.shared.x86_64/
     ├── build/native/googletest.lin.gcc84.shared.x86_64.targets
     ├── include/{gmock,gtest}/...
@@ -183,8 +276,8 @@ googletest.lin.gcc84.shared.x86_64.1.16.0.nupkg
 | Аспект | Linux | Windows |
 |---|---|---|
 | Скрипт прогона | `test-astra/run_*.sh` | `test-windows/run_*.bat` |
-| Установка зависимостей | apt-get (один раз с интернетом) | предустановлены: VS 2019/2022, CMake, Python |
-| Offline pip-пакеты | `packages-linux/` (cp311 manylinux) | `packages/` (cp311 win_amd64) |
+| Установка зависимостей | apt-get (один раз) | предустановлены: VS 2019/2022, CMake, Python, **Strawberry Perl**, **NASM** (для openssl) |
+| Offline pip-пакеты | `packages-linux/` | `packages/` |
 | Кеш Conan | `~/.conan2/` | `%USERPROFILE%\.conan2\` |
 | Компилятор | gcc | MSVC (`cl.exe`, `link.exe`, `rc.exe`) |
 | CMake-генератор | Ninja / Unix Makefiles | Visual Studio 17 2022 (multi-config) |
@@ -194,6 +287,239 @@ googletest.lin.gcc84.shared.x86_64.1.16.0.nupkg
 | Профиль | `astra-gcc`, `lin-gcc84-x86_64` | `win-v142-x64`, `win-v143-x64` |
 
 **Windows-специфика.** В `.bat`-скриптах **нельзя использовать переменную `RC`** как локальную — она зарезервирована под Resource Compiler (`rc.exe`). Перезаписывание ломает CMake.
+
+---
+
+## gRPC: особенности
+
+gRPC — самый «толстый» пакет в репо: 6 транзитивных зависимостей, ~80 CMake-targets, 7 опциональных языковых плагинов. Поэтому его рецепт отличается от остальных и требует пояснений.
+
+### Структура папки
+
+```
+grpc/
+├── conanfile.py                        ← рецепт + offline-патч (стандартный)
+├── conandata.yml                       ← версии (1.78.1, 1.69.0, 1.54.3) + patches
+├── conan_cmake_project_include.cmake   ← инжект в CMakeLists.txt верхнего уровня
+├── cmake/
+│   └── grpc_plugin_template.cmake.in   ← шаблон для эмуляции executable imported targets
+├── target_info/                        ← декларативное описание компонентов
+│   ├── grpc_1.54.3.yml
+│   ├── grpc_1.69.0.yml
+│   └── grpc_1.78.1.yml
+├── patches/v1.50.x/                    ← legacy-патчи (только для 1.54.3)
+├── src/v1.78.1.tar.gz                  ← bundled tarball для offline
+└── test_package/
+```
+
+Три файла, которых нет у других пакетов:
+
+- **`target_info/grpc_<ver>.yml`** — описание всех `cpp_info.components`, которые exposes пакет: имя, тип библиотеки, requires, плагины. Читается в `package_info()` → `cpp_info.components[...]`. Файл свой на каждую версию gRPC, потому что список targets между релизами меняется. В `export()` копируется в `export_folder` рецепта, чтобы быть доступным при build-time у consumer'а.
+- **`cmake/grpc_plugin_template.cmake.in`** — шаблон CMake-модуля для каждого языкового плагина (`grpc_cpp_plugin`, `grpc_python_plugin`, …). Conan-генераторы не умеют делать executable imported targets, поэтому в `package()` для каждого включённого плагина из шаблона генерируется свой `<plugin>.cmake` в `lib/cmake/conan_trick/`, и они подключаются через `cmake_build_modules`.
+- **`conan_cmake_project_include.cmake`** — крошечный фикс: `set_target_properties(check_epollexclusive PROPERTIES LINKER_LANGUAGE CXX)`. Без него gcc падает на линковке epoll-теста при резолве abseil-символов. Подключается через `CMAKE_PROJECT_grpc_INCLUDE` (CMake-хук, который выполняется внутри `project(grpc ...)`).
+
+### Дерево зависимостей и порядок сборки
+
+```
+grpc/1.78.1
+├── protobuf/5.29.6
+│   ├── abseil/20250127.0
+│   └── zlib/1.3.1
+├── abseil/20250127.0
+├── re2/20251105 → abseil
+├── c-ares/1.34.6
+├── openssl/3.4.5 → zlib
+└── zlib/1.3.1
+```
+
+Поэтому `test-astra/run_grpc.sh` перед `conan install` делает `conan export` всех 7 пакетов в локальный кеш:
+
+```bash
+for pkg in zlib abseil c-ares re2 protobuf openssl grpc; do
+    conan export "$ROOT_DIR/$pkg/" --version="$ver"
+done
+conan install --requires=grpc/1.78.1 --build=missing --no-remote -o "*/*:shared=$shared"
+```
+
+Без `export` всех зависимостей `--no-remote` свалится: для транзитивных рецептов Conan не имеет ни кеша, ни источника.
+
+### Жёсткие version-ranges
+
+`requirements()` хардкодит совместимые диапазоны зависимостей в зависимости от версии gRPC:
+
+| grpc | protobuf | abseil | re2 |
+|---|---|---|---|
+| > 1.69 | `[>=5.27.0 <7]` | `[*]` | `[>=20251105]` |
+| 1.65–1.69 | `[>=5.27.0 <6]` | `[>=20240116.1 <=20250127.0]` | `20250722` |
+| < 1.65 | `3.21.12` | `[>=20230125.3 <=20230802.1]` | `20230301` |
+
+Для 1.78.1 у нас есть только **abseil 20250127.0** в репо — это попадает в диапазон `[*]` (т.е. любой), но если когда-нибудь обновим protobuf до 6.x, придётся пересмотреть.
+
+> Ошибка `Version range 'abseil/[>=20230802.1 <=20250127.0]' could not be resolved` (см. «Типовые проблемы») — это именно про эти таблицы.
+
+### Языковые плагины (опции)
+
+```python
+options = {
+    "cpp_plugin": [True, False],          # grpc_cpp_plugin   — нужен всегда, дефолт True
+    "csharp_plugin": [...],
+    "node_plugin": [...],
+    "objective_c_plugin": [...],
+    "php_plugin": [...],
+    "python_plugin": [...],               # grpc_python_plugin
+    "ruby_plugin": [...],
+    "otel_plugin": [True, False],         # OpenTelemetry, доступно с 1.65, дефолт False
+    "csharp_ext": [True, False],
+    "codegen": [True, False],             # grpc++_reflection, grpcpp_channelz
+    "secure": [True, False],              # выбрасывает unsecure-варианты из cpp_info
+    "with_libsystemd": [...]              # только Linux/FreeBSD
+}
+```
+
+Каждый плагин = отдельный `<name>.cmake` в `lib/cmake/conan_trick/`, регистрируемый через `cmake_build_modules`. Если потребитель не использует язык — отключайте через `-o "grpc/*:python_plugin=False"` и т.п. чтобы не ставить лишние executables.
+
+### Offline-критичные CMake-переменные
+
+В `generate()` в toolchain прописываются:
+
+```python
+tc.cache_variables["gRPC_DOWNLOAD_ARCHIVES"] = False     # gRPC ≥1.62: не лезть в сеть за архивами
+tc.cache_variables["gRPC_INSTALL"] = True                 # нужны сгенерированные cmake/-файлы
+tc.cache_variables["gRPC_BUILD_TESTS"] = "OFF"
+tc.cache_variables["gRPC_ZLIB_PROVIDER"] = "package"      # findpackage(ZLIB) — Conan-овский
+tc.cache_variables["gRPC_CARES_PROVIDER"] = "package"
+tc.cache_variables["gRPC_RE2_PROVIDER"] = "package"
+tc.cache_variables["gRPC_SSL_PROVIDER"] = "package"
+tc.cache_variables["gRPC_PROTOBUF_PROVIDER"] = "package"
+tc.cache_variables["gRPC_ABSL_PROVIDER"] = "package"
+tc.cache_variables["gRPC_OPENTELEMETRY_PROVIDER"] = "package"
+tc.cache_variables["CMAKE_PROJECT_grpc_INCLUDE"] = ".../conan_cmake_project_include.cmake"
+```
+
+`gRPC_*_PROVIDER=package` — главное: без них grpc попытается тянуть свои собственные copies зависимостей через `FetchContent`. С ними он использует `find_package(...)` и берёт всё из Conan-кеша.
+
+### `tool_requires("protobuf/<host_version>")`
+
+```python
+def build_requirements(self):
+    self.tool_requires("cmake/[>=3.25]")
+    self.tool_requires("protobuf/<host_version>")
+    if cross_building(self):
+        self.tool_requires(f"grpc/{self.version}")
+```
+
+protobuf нужен **и как host-зависимость** (линкуем `libprotobuf.a` в gRPC), **и как build-tool** (`protoc` запускается на этапе сборки). `<host_version>` гарантирует одинаковую версию в обоих контекстах. Следствие: при кросс-сборке protobuf компилируется дважды — для host и для build машины.
+
+### Кросс-сборка
+
+Если `cross_building(self)`:
+- gRPC требует сам себя как `tool_requires` — нужен предсобранный `grpc_cpp_plugin` для build-машины.
+- В `configure()` принудительно `protobuf:shared=True` если `grpc:shared=True` — иначе `grpc_cpp_plugin` (запускающийся на build-машине во время сборки потребителя) не сможет slинковаться с системной libprotobuf.
+
+### Workaround для shared protobuf/abseil
+
+Если protobuf и abseil собраны как shared, при запуске `protoc` (host = build, обычная сборка) или `grpc_cpp_plugin` нужно дотянуть `LD_LIBRARY_PATH` / `PATH` / `DYLD_LIBRARY_PATH` до их `.so`/`.dll`. `_patch_sources()` оборачивает CMake-команду:
+
+```cmake
+COMMAND ${_gRPC_PROTOBUF_PROTOC_EXECUTABLE} ...
+# →
+COMMAND ${CMAKE_COMMAND} -E env --modify "LD_LIBRARY_PATH=path_list_prepend:$<JOIN:${CMAKE_LIBRARY_PATH},:>" ${_gRPC_PROTOBUF_PROTOC_EXECUTABLE} ...
+```
+
+`cmake -E env --modify` появилось в **CMake 3.25** — отсюда `tool_requires("cmake/[>=3.25]")`. На Astra с предустановленным cmake 3.16 это означает `[platform_tool_requires] cmake/3.25.1` в профиле должна быть реальная версия ≥ 3.25, иначе сборка свалится при первом же запуске protoc.
+
+### MSVC runtime
+
+В `source()`:
+
+```python
+replace_in_file(self, "CMakeLists.txt", "include(cmake/msvc_static_runtime.cmake)", "")
+```
+
+gRPC по дефолту сам выбирает `/MD` или `/MT`. Мы это убираем, чтобы Conan определял `CMAKE_MSVC_RUNTIME_LIBRARY` через `compiler.runtime` в профиле. Без этой замены — конфликт между значением профиля и хардкодом gRPC.
+
+### Известные ограничения
+
+- **Shared на MSVC не поддерживается** (`raise ConanInvalidConfiguration` в `validate()`). Только static на Windows.
+- **`compiler.cppstd` должен совпадать с abseil**. gRPC ≥1.70 требует C++17, ≤1.69 — C++14. Профиль с `cppstd=20` для grpc 1.78.1 ОК, но abseil должен быть собран тоже с 20.
+- **`with_libsystemd`** — только Linux/FreeBSD. Сейчас по дефолту `False`, у нас `libsystemd` рецепта нет.
+- **Heavy build**: чистая сборка дерева ≈ 8–15 минут на 8 ядрах. `run_grpc.sh` собирает только static/Release; для полного цикла Release+Debug нужно гонять руками или дописать скрипт.
+
+### Получение `.nupkg` для сравнения с TeamCity
+
+`run_grpc.sh` / `run_grpc.bat` сейчас выполняют только sanity-сборку дерева, **deployer-шаг в них не включён** — `.nupkg` на выходе не появляется. Чтобы получить артефакт, идентичный TeamCity-сборке, и сравнить его с текущим:
+
+**Linux:**
+```bash
+source venv/bin/activate
+PROFILE=profiles/astra-gcc
+
+# 1. Собрать дерево Release+Debug (для legacy-формата нужны оба варианта одновременно)
+for BT in Release Debug; do
+    conan install --requires=grpc/1.78.1 \
+        -pr:h="$PROFILE" -pr:b="$PROFILE" \
+        --build=missing --no-remote \
+        -s build_type="$BT" \
+        -o "*/*:shared=False"
+done
+
+# 2. Запустить deployer
+mkdir -p output && rm -f output/*.nupkg
+conan install --requires=grpc/1.78.1 \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
+    --no-remote \
+    --deployer=extensions/deployers/legacy_nupkg.py \
+    --deployer-folder=output/
+```
+
+**Windows** — то же самое, но `--profile=profiles\win-v143-x64` и `^` вместо `\` в continuation.
+
+### Что попадёт в `output/`
+
+Deployer обходит **весь install-граф**, поэтому одна команда выдаёт `.nupkg` на каждый пакет дерева — 7 артефактов:
+
+```
+output/
+├── grpc.lin.gcc84.static.x86_64.1.78.1.nupkg
+├── protobuf.lin.gcc84.static.x86_64.5.29.6.nupkg
+├── abseil.lin.gcc84.static.x86_64.20250127.0.nupkg
+├── re2.lin.gcc84.static.x86_64.20251105.nupkg
+├── c-ares.lin.gcc84.static.x86_64.1.34.6.nupkg
+├── openssl.lin.gcc84.static.x86_64.3.4.5.nupkg
+└── zlib.lin.gcc84.static.x86_64.1.3.1.nupkg
+```
+
+Сравнение с TeamCity:
+
+| Что сравнивать | Как |
+|---|---|
+| Имя файла | `<name>.<os>.<compiler>.<linkage>.<arch>.<ver>.nupkg` — должно совпадать с TeamCity байт-в-байт |
+| Структура внутри | `unzip -l <our>.nupkg` vs `unzip -l <tc>.nupkg` — то же дерево директорий и тот же набор файлов |
+| `.nuspec` | `<dependencies>` должен включать те же 6 транзитивных deps с теми же версиями (см. `_grpc_components` для списка) |
+| `.targets` | `<AdditionalDependencies>` — список `.lib`/`.a` в правильном порядке линковки |
+| `lib/native/.../`| диффом: `diff <(unzip -p our grpc.a) <(unzip -p tc grpc.a)` — для бинарей не сойдётся (timestamps), но размеры должны быть в одном порядке |
+| `include/` | `diff -r` распакованных include-директорий — должно быть одинаково |
+
+**Подводный камень: `LEGACY_NAME_MAP`.** Если у TeamCity grpc пакуется под другим именем (например, `grpcpp` или с суффиксом), нужно добавить в `extensions/deployers/legacy_nupkg.py`:
+```python
+LEGACY_NAME_MAP = {
+    "gtest": "googletest",
+    # "grpc": "grpcpp",  # если TeamCity использует другое имя
+}
+```
+
+То же самое для зависимостей — если abseil/openssl/etc. в TeamCity называются иначе.
+
+**TODO в скриптах.** В `run_grpc.sh` пока собирается только `static/Release` (одна вариация). Чтобы получить `.nupkg` идентичный TeamCity, нужно добавить Debug-проход и deployer-шаг — по аналогии с `run_test_zlib.sh`.
+
+### Что делать при обновлении версии gRPC
+
+1. Скачать новый tarball: `curl -L https://github.com/grpc/grpc/archive/refs/tags/v<ver>.tar.gz -o grpc/src/v<ver>.tar.gz`, проверить sha256.
+2. Добавить запись в `conandata.yml`.
+3. **Создать `target_info/grpc_<ver>.yml`** — взять из conan-center-index `recipes/grpc/all/target_info/`. Без этого `package_info()` упадёт.
+4. Свериться с upstream `requirements()` — диапазоны abseil/protobuf/re2 для нового minor могут поменяться. Проверить, что в репо есть версия каждой зависимости в новом диапазоне; иначе — обновлять и их.
+5. Если новая major протобуфа (>= 6.x) — abseil-диапазон тоже сдвинется.
+6. Прогнать `test-astra/run_grpc.sh` в Docker `gcc:12-bookworm` с `--network=none`.
 
 ---
 
@@ -226,39 +552,54 @@ curl -fsSL -o zlib/src/zlib-1.3.1.tar.gz \
 shasum -a 256 zlib/src/zlib-1.3.1.tar.gz   # должен совпадать с conandata.yml
 ```
 
-**Шаг 4.** Адаптировать рецепт для offline-сборки. Canonical-рецепты тянут исходники по URL из `conandata.yml`, что не работает в закрытом контуре. Решение — bundle архива через `exports_sources` плюс fallback в `source()`:
+**Файл должен называться так же, как имя файла в URL `conandata.yml`** — `_offline_source_archive` ищет совпадение по filename из URL.
 
+**Шаг 4.** Адаптировать рецепт для offline-сборки. Это **2 правки** в `conanfile.py`:
+
+a) Добавить класс-атрибут — Conan скопирует архив в кеш вместе с рецептом:
 ```python
-# В conanfile.py добавить как атрибут класса:
 exports_sources = "src/*.tar.gz"
+```
 
-# Переопределить source() — сначала пробовать локальный архив:
-from conan.tools.files import unzip, get
-import os
+b) Добавить helper и переписать `source()` так, чтобы сначала пробовался локальный архив, и только потом fallback на upstream URL:
+```python
+def _offline_source_archive(self):
+    """Return path to bundled source archive in export_sources, or None."""
+    import os
+    src_dir = os.path.join(self.export_sources_folder, "src")
+    if not os.path.isdir(src_dir):
+        return None
+    # Prefer matching the upstream URL filename from conandata.yml
+    sources = self.conan_data.get("sources", {}).get(str(self.version), {})
+    urls = sources.get("url")
+    if isinstance(urls, str):
+        urls = [urls]
+    elif urls is None:
+        urls = []
+    for url in urls:
+        fname = url.rsplit("/", 1)[-1]
+        candidate = os.path.join(src_dir, fname)
+        if os.path.isfile(candidate):
+            return candidate
+    # Fallback: any tarball in src/
+    for fname in os.listdir(src_dir):
+        if fname.endswith((".tar.gz", ".tgz")):
+            return os.path.join(src_dir, fname)
+    return None
 
 def source(self):
-    local_archive = os.path.join(self.export_sources_folder, "src", f"zlib-{self.version}.tar.gz")
-    if os.path.exists(local_archive):
-        unzip(self, local_archive, destination=self.source_folder, strip_root=True)
+    _local = self._offline_source_archive()
+    if _local:
+        from conan.tools.files import unzip
+        unzip(self, _local, strip_root=True)
     else:
-        get(self, **self.conan_data["sources"][self.version],
-            destination=self.source_folder, strip_root=True)
+        get(self, **self.conan_data["sources"][self.version], strip_root=True)
+    # ... остальные шаги source() (apply_conandata_patches, replace_in_file и т.п.) — без изменений
 ```
 
-`conandata.yml` оставляй как у upstream (только URL и sha256, без `file:///`):
-```yaml
-sources:
-  "1.3.1":
-    url:
-      - "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
-      - "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
-    sha256: "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
-```
+**`conandata.yml` оставляй как у upstream — без правок.** Никаких `file:///` URL: они хардкодятся под путь Docker и ломаются на Windows из-за UNC-интерпретации.
 
-**Почему так, а не `file:///` URL в conandata:**
-- абсолютный путь хардкодится под одну машину (например, `/work/...` работает только в Docker)
-- `get()` с `file://` в современном Conan 2 пытается «скачать» в `source_folder` и сваливается с `SameFileError`, если архив там же
-- `exports_sources` переносит архив в Conan-кеш вместе с рецептом — путь `self.export_sources_folder` всегда корректен, и `unzip()` распаковывает напрямую без download-семантики
+**Почему именно `unzip()`, а не `get(file://...)`:** modern Conan 2 в `get()` имеет download-семантику и пытается «скачать» в `source_folder`. Если файл уже там (а после `exports_sources` он будет в кеше) — `get()` сваливается с `SameFileError`. `unzip()` распаковывает напрямую, без шага download.
 
 **Шаг 5.** (опционально) Маппинг имени для legacy `.nupkg`, если внутреннее имя отличается от Conan-name:
 ```python
@@ -274,23 +615,30 @@ LEGACY_NAME_MAP = {
 Linux:
 ```bash
 source venv/bin/activate
-conan create zlib/ --profile=profiles/astra-gcc -s build_type=Release --build=missing --no-remote
-conan create zlib/ --profile=profiles/astra-gcc -s build_type=Debug   --build=missing --no-remote
+conan create zlib/ --version=1.3.1 \
+    -pr:h=profiles/astra-gcc -pr:b=profiles/astra-gcc \
+    -s build_type=Release --build=missing --no-remote
+conan create zlib/ --version=1.3.1 \
+    -pr:h=profiles/astra-gcc -pr:b=profiles/astra-gcc \
+    -s build_type=Debug   --build=missing --no-remote
 ```
 
 Windows:
 ```cmd
 call venv\Scripts\activate.bat
-conan create zlib\ --profile=profiles\win-v143-x64 -s build_type=Release --build=missing --no-remote
-conan create zlib\ --profile=profiles\win-v143-x64 -s build_type=Debug   --build=missing --no-remote
+conan create zlib --version=1.3.1 ^
+    -pr:h=profiles\win-v143-x64 -pr:b=profiles\win-v143-x64 ^
+    -s build_type=Release --build=missing --no-remote
 ```
+
+> Не забывайте `-pr:b` — иначе при offline-сборке упадёт на `tool_requires` (cmake/perl/nasm).
 
 **Шаг 7.** Проверить кеш и упаковать legacy:
 ```bash
 conan list "zlib/1.3.1:*"
 
 conan install --requires=zlib/1.3.1 \
-    --profile=profiles/astra-gcc \
+    -pr:h=profiles/astra-gcc -pr:b=profiles/astra-gcc \
     --no-remote \
     --deployer=extensions/deployers/legacy_nupkg.py \
     --deployer-folder=output/
@@ -324,7 +672,7 @@ class FooConan(ConanFile):
     options = {"shared": [True, False], "fPIC": [True, False]}
     default_options = {"shared": False, "fPIC": True}
 
-    # Bundle the upstream archive with the recipe — works on offline machines.
+    # Bundle the upstream archive — works on offline machines.
     exports_sources = "src/*.tar.gz"
 
     def config_options(self):
@@ -332,8 +680,9 @@ class FooConan(ConanFile):
             del self.options.fPIC
 
     def source(self):
-        local = os.path.join(self.export_sources_folder, "src", f"v{self.version}.tar.gz")
-        unzip(self, local, destination=self.source_folder, strip_root=True)
+        # Локальный архив всегда есть (внутренние пакеты не из интернета).
+        archive = os.path.join(self.export_sources_folder, "src", f"v{self.version}.tar.gz")
+        unzip(self, archive, destination=self.source_folder, strip_root=True)
 
     def layout(self):
         cmake_layout(self)
@@ -364,7 +713,7 @@ class FooConan(ConanFile):
 
 ```python
 def requirements(self):
-    self.requires("openssl/3.2.0")
+    self.requires("openssl/3.4.5")
     self.requires("zlib/1.3.1")
 ```
 
@@ -372,6 +721,8 @@ Conan автоматически:
 - проверяет/собирает зависимости при `conan install`
 - передаёт их пути в build (через `CMakeDeps`)
 - заполняет `<dependencies>` в `.nuspec` через deployer
+
+Для пакетов с deps (как grpc) скрипт сборки делает `conan export` каждой зависимости заранее (см. `test-astra/run_grpc.sh`), потом `conan install --requires=grpc/X.Y.Z --build=missing` собирает всё дерево.
 
 ---
 
@@ -392,6 +743,20 @@ compiler.cppstd=17
 arch=x86_64
 build_type=Release
 ```
+
+### `[platform_tool_requires]` — критично для offline
+
+Многие canonical-рецепты имеют `tool_requires("cmake/[>=3.16]")`, `tool_requires("nasm/2.16.01")` и т.п. В режиме `--no-remote` Conan не может скачать рецепт cmake/nasm, и сборка падает. Решение — заявить системные тулзы как «уже установленные»:
+
+```ini
+[platform_tool_requires]
+cmake/3.25.1
+perl/5.36.0
+nasm/2.16.01            # на Windows — для openssl
+strawberryperl/5.32.1.1 # на Windows — для openssl
+```
+
+Conan примет это как «cmake/3.25.1 уже есть, не пытайся его собирать», и `tool_requires` рецептов разрешатся через системные бинари.
 
 ### Дополнительные флаги
 
@@ -415,18 +780,11 @@ CXX=/opt/custom-gcc/bin/g++
 AR=/opt/custom-gcc/bin/ar
 ```
 
-### Tool-чейн (cmake/ninja фиксированной версии)
-
-Секция `[tool_requires]`:
-```ini
-[tool_requires]
-cmake/3.27.0
-```
-
 ### Переопределение из CLI
 
 ```bash
-conan create gtest/ --profile=astra-gcc \
+conan create gtest/ --version=1.15.2 \
+    -pr:h=astra-gcc -pr:b=astra-gcc \
     -s build_type=Debug \
     -s compiler.cppstd=20 \
     -o "gtest/*:shared=True" \
@@ -457,12 +815,14 @@ VERSION=%package.version%
 PROFILE=profiles/%package.profile%
 
 for BT in Release Debug; do
-    conan create "$NAME/" --profile="$PROFILE" -s build_type=$BT --build=missing --no-remote
+    conan create "$NAME/" --version="$VERSION" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE" \
+        -s build_type=$BT --build=missing --no-remote
 done
 
 mkdir -p output
 conan install --requires="$NAME/$VERSION" \
-    --profile="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote \
     --deployer=extensions/deployers/legacy_nupkg.py \
     --deployer-folder=output/
@@ -474,15 +834,16 @@ conan install --requires="$NAME/$VERSION" \
 
 ## Чек-лист добавления пакета
 
-- [ ] `<name>/conanfile.py` (адаптация conan-center или свой)
-- [ ] `<name>/conandata.yml` с локальным URL первым и upstream-fallback
-- [ ] `<name>/src/<archive>` положен, sha256 совпадает с `conandata.yml`
-- [ ] `<name>/patches/<ver>/*.patch` (если у canonical были — переносим)
+- [ ] `<name>/conanfile.py` — canonical + offline-патч (`exports_sources` + helper + `source()`)
+- [ ] `<name>/conandata.yml` — без правок относительно upstream
+- [ ] `<name>/src/<archive>` положен с тем же именем, что в URL conandata, sha256 совпадает
+- [ ] `<name>/patches/<ver>/*.patch` — если у canonical были, переносим
 - [ ] `<name>/test_package/` со smoke-тестом
 - [ ] (опц.) `LEGACY_NAME_MAP` в deployer
 - [ ] (опц.) `requirements()` для зависимостей
-- [ ] `conan create` Release + Debug на Linux прошёл
-- [ ] `conan create` Release + Debug на Windows прошёл
+- [ ] При зависимостях — обновить test-скрипт, добавить `conan export` для каждой
+- [ ] `conan create` Release + Debug на Linux прошёл (с `-pr:b`)
+- [ ] `conan create` Release + Debug на Windows прошёл (с `-pr:b`)
 - [ ] `test_package` отработал на обеих платформах
 - [ ] `conan install --deployer=…` дал валидный `.nupkg`
 - [ ] Структура `.nupkg` совпадает со старым артефактом
@@ -497,6 +858,15 @@ conan install --requires="$NAME/$VERSION" \
 **`'settings.compiler.runtime' value not defined`** на Windows
 — в профиле MSVC отсутствует `compiler.runtime=dynamic` или `=static`. Добавить.
 
+**`Package 'cmake/[>=X.Y]' not resolved`**
+— рецепт имеет `tool_requires("cmake/...")`, но нет ни remote, ни системного объявления. Добавить `cmake/X.Y.Z` в `[platform_tool_requires]` профиля. То же для `nasm`, `perl`, `strawberryperl`.
+
+**Тот же error даже после правки профиля**
+— забыли `-pr:b=<profile>`. Conan для build-context использует default profile, который наших `[platform_tool_requires]` не видит. Передавайте профиль и в host (`-pr:h`), и в build (`-pr:b`).
+
+**`Could not download from the URL ...: NameResolutionError`** в offline-сборке
+— ваш `_offline_source_archive` не нашёл локальный архив, и Conan ушёл в сеть. Проверьте, что имя файла в `<pkg>/src/` совпадает с filename из URL в `conandata.yml`.
+
 **`Package 'xxx' build failed: Could not find compiler in env RC`** на Windows
 — bat-скрипт перезаписал переменную `RC`. Имя `RC` зарезервировано под Resource Compiler.
 
@@ -504,7 +874,7 @@ conan install --requires="$NAME/$VERSION" \
 — в gcc-профиле отсутствует `compiler.libcxx`. Должно быть `libstdc++11` для C++11 ABI.
 
 **`Package gtest/X.Y.Z not found in cache`** при `conan install --requires=…`
-— забыли `conan create` перед `conan install`. Без remote Conan не скачает.
+— забыли `conan create` (или `conan export`) перед `conan install`. Без remote Conan не скачает.
 
 **`shared` в имени `.nupkg`, но внутри `.lib`/`.a`**
 — это NuGet-конвенция: `shared` означает динамический MSVC runtime (`/MD`), а не shared-линковку самой библиотеки. Не баг.
@@ -512,5 +882,11 @@ conan install --requires="$NAME/$VERSION" \
 **`sha256 mismatch`** при первом `conan create`
 — скачали не тот tarball (например, github auto-archive `v1.3.1.tar.gz` вместо официального release `zlib-1.3.1.tar.gz`). Сравните с `sha256` в `conandata.yml`.
 
+**`Version range 'abseil/[>=20230802.1 <=20250127.0]' could not be resolved`** при сборке protobuf/grpc
+— взяли слишком новую abseil. Каждая версия protobuf жёстко ограничивает диапазон abseil. Подберите версию в указанных границах (см. `requirements()` соответствующего рецепта).
+
 **`patch failed: ... already exists`**
 — патч из `patches/<ver>/` уже применён (например, при повторном `conan create` после ручной правки исходника в кеше). Очистить кеш: `conan remove "<pkg>/<ver>" --confirm` и повторить.
+
+**`SameFileError`** при `conan create`
+— старый паттерн `get(self, f"file:///{local}", ...)` в `source()`. В Conan 2 он сваливается, если файл уже скопирован через `exports_sources`. Замените на `unzip()` (см. шаблон в Шаге 4).
