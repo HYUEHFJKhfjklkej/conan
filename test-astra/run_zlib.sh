@@ -32,7 +32,7 @@ build_one() {
 
     conan create "$ROOT_DIR/zlib/" \
         --version=1.3.1 \
-        --profile="$PROFILE" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing \
         --no-remote \
         -s build_type="$build_type" \

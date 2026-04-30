@@ -29,7 +29,7 @@ for BT in Release Debug; do
     echo "[INFO] Building zlib build_type=$BT"
     conan create "$ROOT_DIR/zlib/" \
         --version=1.3.1 \
-        --profile="$PROFILE" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing \
         --no-remote \
         -s build_type="$BT"
@@ -53,7 +53,7 @@ mkdir -p "$ROOT_DIR/output"
 rm -f "$ROOT_DIR/output"/zlib.*.nupkg
 conan install \
     --requires=zlib/1.3.1 \
-    --profile="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote \
     -c tools.system.package_manager:mode=install \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \

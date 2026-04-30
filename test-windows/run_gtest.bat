@@ -57,7 +57,7 @@ echo ============================================
 
 conan create "%ROOT_DIR%\gtest" ^
     --version=1.15.2 ^
-    --profile="%PROFILE%" ^
+    -pr:h="%PROFILE%" -pr:b="%PROFILE%" ^
     --build=missing ^
     --no-remote ^
     -s build_type=%BT% ^

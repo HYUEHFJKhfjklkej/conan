@@ -4,4 +4,11 @@ arch=x86
 compiler=msvc
 compiler.version=192
 compiler.cppstd=17
+compiler.runtime=dynamic
 build_type=Release
+
+[platform_tool_requires]
+cmake/3.25.1
+perl/5.32.1
+nasm/2.16.01
+strawberryperl/5.32.1.1

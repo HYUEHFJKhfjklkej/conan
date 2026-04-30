@@ -41,7 +41,7 @@ echo ============================================
 echo.
 for %%B in (Release Debug) do (
     echo [INFO] Building gtest build_type=%%B
-    conan create gtest\ --version=1.15.2 --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
+    conan create gtest\ --version=1.15.2 -pr:h="%PROFILE%" -pr:b="%PROFILE%" --build=missing --no-remote -s build_type=%%B
     if errorlevel 1 (
         echo [FAIL] gtest %%B build failed
         set EXITCODE=1
@@ -58,7 +58,7 @@ echo ============================================
 echo.
 pushd example
 if exist build rmdir /s /q build
-conan install . --output-folder=build --build=missing --profile="%PROFILE%" --no-remote
+conan install . --output-folder=build --build=missing -pr:h="%PROFILE%" -pr:b="%PROFILE%" --no-remote
 if errorlevel 1 (
     echo [FAIL] conan install for example failed
     popd
@@ -91,7 +91,7 @@ echo.
 del /q output\*.nupkg 2>nul
 conan install ^
     --requires=gtest/1.15.2 ^
-    --profile="%PROFILE%" ^
+    -pr:h="%PROFILE%" -pr:b="%PROFILE%" ^
     --no-remote ^
     --deployer="%ROOT_DIR%\extensions\deployers\legacy_nupkg.py" ^
     --deployer-folder="%ROOT_DIR%\output"

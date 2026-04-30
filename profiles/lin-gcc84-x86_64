@@ -6,3 +6,9 @@ compiler.version=8.4
 compiler.libcxx=libstdc++11
 compiler.cppstd=17
 build_type=Release
+
+[platform_tool_requires]
+# Use system-provided tools instead of building them via Conan.
+# Required because we operate in --no-remote mode (no Conan-built cmake/perl available).
+cmake/3.25.1
+perl/5.36.0

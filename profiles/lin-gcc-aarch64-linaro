@@ -7,5 +7,9 @@ compiler.libcxx=libstdc++11
 compiler.cppstd=14
 build_type=Release
 
+[platform_tool_requires]
+cmake/3.25.1
+perl/5.36.0
+
 [conf]
 tools.cmake.cmaketoolchain:toolchain_file=/opt/linaro/aarch64-toolchain.cmake

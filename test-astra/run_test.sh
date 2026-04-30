@@ -33,7 +33,7 @@ for BT in Release Debug; do
     echo "[INFO] Building gtest build_type=$BT"
     conan create "$ROOT_DIR/gtest/" \
         --version=1.15.2 \
-        --profile="$PROFILE" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing \
         --no-remote \
         -s build_type="$BT"
@@ -62,7 +62,7 @@ rm -rf build
 conan install . \
     --output-folder=build \
     --build=missing \
-    --profile="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote
 
 # Собрать
@@ -99,7 +99,7 @@ mkdir -p "$ROOT_DIR/output"
 rm -f "$ROOT_DIR/output"/*.nupkg
 conan install \
     --requires=gtest/1.15.2 \
-    --profile="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote \
     -c tools.system.package_manager:mode=install \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \

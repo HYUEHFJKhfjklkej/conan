@@ -33,7 +33,7 @@ echo ============================================
 echo.
 for %%B in (Release Debug) do (
     echo [INFO] Building zlib build_type=%%B
-    conan create zlib\ --version=1.3.1 --profile="%PROFILE%" --build=missing --no-remote -s build_type=%%B
+    conan create zlib\ --version=1.3.1 -pr:h="%PROFILE%" -pr:b="%PROFILE%" --build=missing --no-remote -s build_type=%%B
     if errorlevel 1 (
         echo [FAIL] zlib %%B build failed
         set EXITCODE=1
@@ -50,7 +50,7 @@ echo.
 del /q output\zlib.*.nupkg 2>nul
 conan install ^
     --requires=zlib/1.3.1 ^
-    --profile="%PROFILE%" ^
+    -pr:h="%PROFILE%" -pr:b="%PROFILE%" ^
     --no-remote ^
     --deployer="%ROOT_DIR%\extensions\deployers\legacy_nupkg.py" ^
     --deployer-folder="%ROOT_DIR%\output"
