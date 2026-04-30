@@ -6,3 +6,11 @@ compiler.version=194
 compiler.cppstd=17
 compiler.runtime=dynamic
 build_type=Release
+
+[platform_tool_requires]
+# Use system-provided tools instead of building them via Conan.
+# Required because we operate in --no-remote mode (no Conan-built tools available).
+cmake/3.25.1
+perl/5.32.1
+nasm/2.16.01
+strawberryperl/5.32.1.1
