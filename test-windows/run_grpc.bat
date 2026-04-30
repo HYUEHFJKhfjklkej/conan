@@ -29,12 +29,29 @@ echo.
 echo ============================================
 echo  Step 1: Export all recipes to local cache
 echo ============================================
-call :export_one zlib     1.3.1         || goto :END
-call :export_one abseil   20250127.0    || goto :END
-call :export_one c-ares   1.34.6        || goto :END
-call :export_one re2      20251105      || goto :END
-call :export_one protobuf 5.29.6        || goto :END
-call :export_one openssl  3.4.5         || goto :END
+echo [INFO] conan export zlib (1.3.1)
+conan export "%ROOT_DIR%\zlib" --version=1.3.1
+if errorlevel 1 goto :END
+
+echo [INFO] conan export abseil (20250127.0)
+conan export "%ROOT_DIR%\abseil" --version=20250127.0
+if errorlevel 1 goto :END
+
+echo [INFO] conan export c-ares (1.34.6)
+conan export "%ROOT_DIR%\c-ares" --version=1.34.6
+if errorlevel 1 goto :END
+
+echo [INFO] conan export re2 (20251105)
+conan export "%ROOT_DIR%\re2" --version=20251105
+if errorlevel 1 goto :END
+
+echo [INFO] conan export protobuf (5.29.6)
+conan export "%ROOT_DIR%\protobuf" --version=5.29.6
+if errorlevel 1 goto :END
+
+echo [INFO] conan export openssl (3.4.5)
+conan export "%ROOT_DIR%\openssl" --version=3.4.5
+if errorlevel 1 goto :END
 echo.
 
 call :build_one static  Release
@@ -69,16 +86,11 @@ echo ============================================
 
 conan create "%ROOT_DIR%\grpc" ^
     --version=1.78.1 ^
-    --profile="%PROFILE%" ^
+    -pr:h="%PROFILE%" -pr:b="%PROFILE%" ^
     --build=missing ^
     --no-remote ^
     -s build_type=%BT% ^
     -o "*/*:shared=%SHARED%"
-exit /b %errorlevel%
-
-:export_one
-echo [INFO] conan export %~1 (%~2)
-conan export "%ROOT_DIR%\%~1" --version=%~2
 exit /b %errorlevel%
 
 :END

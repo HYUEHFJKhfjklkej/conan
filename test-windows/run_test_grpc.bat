@@ -34,13 +34,33 @@ echo ============================================
 echo  Step 1/3: Export all recipes to local cache
 echo ============================================
 echo.
-call :export_one zlib     1.3.1         || goto :END
-call :export_one abseil   20250127.0    || goto :END
-call :export_one c-ares   1.34.6        || goto :END
-call :export_one re2      20251105      || goto :END
-call :export_one protobuf 5.29.6        || goto :END
-call :export_one openssl  3.4.5         || goto :END
-call :export_one grpc     1.78.1        || goto :END
+echo [INFO] conan export zlib (1.3.1)
+conan export "%ROOT_DIR%\zlib" --version=1.3.1
+if errorlevel 1 ( echo [FAIL] zlib export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export abseil (20250127.0)
+conan export "%ROOT_DIR%\abseil" --version=20250127.0
+if errorlevel 1 ( echo [FAIL] abseil export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export c-ares (1.34.6)
+conan export "%ROOT_DIR%\c-ares" --version=1.34.6
+if errorlevel 1 ( echo [FAIL] c-ares export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export re2 (20251105)
+conan export "%ROOT_DIR%\re2" --version=20251105
+if errorlevel 1 ( echo [FAIL] re2 export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export protobuf (5.29.6)
+conan export "%ROOT_DIR%\protobuf" --version=5.29.6
+if errorlevel 1 ( echo [FAIL] protobuf export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export openssl (3.4.5)
+conan export "%ROOT_DIR%\openssl" --version=3.4.5
+if errorlevel 1 ( echo [FAIL] openssl export & set EXITCODE=1 & goto :END )
+
+echo [INFO] conan export grpc (1.78.1)
+conan export "%ROOT_DIR%\grpc" --version=1.78.1
+if errorlevel 1 ( echo [FAIL] grpc export & set EXITCODE=1 & goto :END )
 echo.
 
 :: -----------------------------------------------------------
@@ -102,11 +122,6 @@ echo  Artifacts: output\*.nupkg (7 files)
 echo  Structure matches TeamCity format.
 echo ============================================
 goto :END
-
-:export_one
-echo [INFO] conan export %~1 (%~2)
-conan export "%ROOT_DIR%\%~1" --version=%~2
-exit /b %errorlevel%
 
 :END
 popd
