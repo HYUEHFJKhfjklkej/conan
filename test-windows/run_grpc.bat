@@ -24,6 +24,19 @@ for /f "delims=" %%V in ('conan --version') do echo [INFO] %%V
 echo [INFO] Recipe: canonical from conan-center-index
 echo.
 
+:: Step 1: export every recipe so Conan can find them in --no-remote mode.
+:: Without this, `conan create grpc/` fails with "protobuf not resolved" etc.
+echo ============================================
+echo  Step 1: Export all recipes to local cache
+echo ============================================
+call :export_one zlib     1.3.1         || goto :END
+call :export_one abseil   20250127.0    || goto :END
+call :export_one c-ares   1.34.6        || goto :END
+call :export_one re2      20251105      || goto :END
+call :export_one protobuf 5.29.6        || goto :END
+call :export_one openssl  3.4.5         || goto :END
+echo.
+
 call :build_one static  Release
 if errorlevel 1 goto :END
 call :build_one static  Debug
@@ -61,6 +74,11 @@ conan create "%ROOT_DIR%\grpc" ^
     --no-remote ^
     -s build_type=%BT% ^
     -o "*/*:shared=%SHARED%"
+exit /b %errorlevel%
+
+:export_one
+echo [INFO] conan export %~1 (%~2)
+conan export "%ROOT_DIR%\%~1" --version=%~2
 exit /b %errorlevel%
 
 :END
