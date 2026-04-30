@@ -534,7 +534,13 @@ class OpenSSLConan(ConanFile):
     @property
     def _perl(self):
         if self._use_nmake:
-            return self.dependencies.build["strawberryperl"].conf_info.get("user.strawberryperl:perl", check_type=str)
+            # Offline-патч: strawberryperl declared via [platform_tool_requires] — not a real
+            # Conan dep, so self.dependencies.build["strawberryperl"] raises KeyError. Fallback
+            # to system perl on PATH (Strawberry Perl installer adds itself to PATH on Windows).
+            try:
+                return self.dependencies.build["strawberryperl"].conf_info.get("user.strawberryperl:perl", check_type=str)
+            except KeyError:
+                return "perl"
         return "perl"
 
     def _make(self):
