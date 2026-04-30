@@ -12,6 +12,7 @@ Conan-рецепты для third-party C++ библиотек, использу
 
 - [Подход: canonical-first](#подход-canonical-first)
 - [Что уже мигрировано](#что-уже-мигрировано)
+- [Сборка legacy `.nupkg` (Astra + Windows)](#сборка-legacy-nupkg-astra--windows)
 - [Структура репозитория](#структура-репозитория)
 - [Как это работает](#как-это-работает)
 - [Linux vs Windows](#linux-vs-windows)
@@ -57,6 +58,50 @@ Conan-рецепты для third-party C++ библиотек, использу
 | **grpc** | 1.78.1 | conan-center-index |
 
 Сборка всего дерева gRPC (со всеми deps + zlib) подтверждена в Docker `gcc:12-bookworm` с `--network=none` — полностью offline.
+
+---
+
+## Сборка legacy `.nupkg` (Astra + Windows)
+
+Готовые скрипты, выдающие `.nupkg` в `output/`, идентичные по структуре текущим TeamCity-артефактам:
+
+| Что собрать | Astra Linux | Windows |
+|---|---|---|
+| **gtest** (1 артефакт) | `./test-astra/run_test.sh` | `test-windows\run_test.bat` |
+| **zlib** (1 артефакт) | `./test-astra/run_test_zlib.sh` | `test-windows\run_test_zlib.bat` |
+| **grpc + 6 deps** (7 артефактов) | `./test-astra/run_test_grpc.sh` | `test-windows\run_test_grpc.bat` |
+
+Каждый скрипт делает одно и то же: `conan create` (или `conan install --requires=`) для **Release+Debug**, потом `conan install --deployer=legacy_nupkg.py` — deployer обходит install-граф и кладёт `.nupkg` на каждый пакет.
+
+**Что нужно один раз перед запуском:**
+```bash
+# Linux/Astra (один раз):
+sudo ./test-astra/install_deps.sh    # apt-зависимости: gcc, cmake, python3-venv
+./test-astra/setup.sh                 # venv + offline install Conan из packages-linux/
+
+# Windows (один раз):
+test-windows\setup.bat               # venv + offline install Conan из packages\
+```
+
+**Профили:**
+- Astra: `profiles/astra-gcc` (определяется автоматически в скриптах).
+- Windows: дефолт `win-v143-x64` (VS2022). Для VS2019: `set PROFILE_NAME=win-v142-x64` перед запуском `.bat`.
+
+**Артефакты:**
+```
+output/
+├── googletest.lin.gcc84.static.x86_64.1.15.2.nupkg    ← run_test.sh
+├── zlib.lin.gcc84.static.x86_64.1.3.1.nupkg           ← run_test_zlib.sh
+├── grpc.lin.gcc84.static.x86_64.1.78.1.nupkg          ┐
+├── protobuf.lin.gcc84.static.x86_64.5.29.6.nupkg      │
+├── abseil.lin.gcc84.static.x86_64.20250127.0.nupkg    │
+├── re2.lin.gcc84.static.x86_64.20251105.nupkg         ├ run_test_grpc.sh
+├── c-ares.lin.gcc84.static.x86_64.1.34.6.nupkg        │
+├── openssl.lin.gcc84.static.x86_64.3.4.5.nupkg        │
+└── … (zlib re-используется из run_test_zlib)          ┘
+```
+
+На Windows имена будут с `win.v143.static.x86_64`. Подробности про сравнение с TeamCity-артефактами — в разделе [gRPC: особенности → Получение legacy `.nupkg` для всего дерева](#получение-legacy-nupkg-для-всего-дерева).
 
 ---
 
@@ -226,7 +271,8 @@ conan-recipes/
 │   ├── run_zlib.sh                        zlib sanity (Release+Debug)
 │   ├── run_grpc.sh                        grpc + 6 deps (sanity, только static/Release)
 │   ├── run_test.sh                        gtest e2e + legacy `.nupkg` через deployer
-│   └── run_test_zlib.sh                   zlib e2e + legacy `.nupkg`
+│   ├── run_test_zlib.sh                   zlib e2e + legacy `.nupkg`
+│   └── run_test_grpc.sh                   grpc + 6 deps Release+Debug + 7×legacy `.nupkg`
 │
 ├── test-windows/                          ← bat-скрипты валидации на Windows
 │   ├── setup.bat
@@ -234,7 +280,8 @@ conan-recipes/
 │   ├── run_zlib.bat
 │   ├── run_grpc.bat                       4 варианта (static/shared × Release/Debug)
 │   ├── run_test.bat
-│   └── run_test_zlib.bat
+│   ├── run_test_zlib.bat
+│   └── run_test_grpc.bat                  grpc + 6 deps Release+Debug + 7×legacy `.nupkg`
 │
 ├── Dockerfile.astra-test                  ← e2e тест в контейнере (gcc:12-bookworm)
 ├── Dockerfile.gtest-test                  ← минимальный — только gtest
@@ -499,34 +546,28 @@ gRPC по дефолту сам выбирает `/MD` или `/MT`. Мы это
 - **`with_libsystemd`** — только Linux/FreeBSD. Сейчас по дефолту `False`, у нас `libsystemd` рецепта нет.
 - **Heavy build**: чистая сборка дерева ≈ 8–15 минут на 8 ядрах. `run_grpc.sh` собирает только static/Release; для полного цикла Release+Debug нужно гонять руками или дописать скрипт.
 
-### Получение `.nupkg` для сравнения с TeamCity
+### Получение legacy `.nupkg` для всего дерева
 
-`run_grpc.sh` / `run_grpc.bat` сейчас выполняют только sanity-сборку дерева, **deployer-шаг в них не включён** — `.nupkg` на выходе не появляется. Чтобы получить артефакт, идентичный TeamCity-сборке, и сравнить его с текущим:
+Готовые скрипты, которые экспортируют все 7 рецептов, собирают grpc-tree в Release+Debug и прогоняют deployer:
 
-**Linux:**
+**Astra Linux:**
 ```bash
-source venv/bin/activate
-PROFILE=profiles/astra-gcc
-
-# 1. Собрать дерево Release+Debug (для legacy-формата нужны оба варианта одновременно)
-for BT in Release Debug; do
-    conan install --requires=grpc/1.78.1 \
-        -pr:h="$PROFILE" -pr:b="$PROFILE" \
-        --build=missing --no-remote \
-        -s build_type="$BT" \
-        -o "*/*:shared=False"
-done
-
-# 2. Запустить deployer
-mkdir -p output && rm -f output/*.nupkg
-conan install --requires=grpc/1.78.1 \
-    -pr:h="$PROFILE" -pr:b="$PROFILE" \
-    --no-remote \
-    --deployer=extensions/deployers/legacy_nupkg.py \
-    --deployer-folder=output/
+./test-astra/run_test_grpc.sh
 ```
 
-**Windows** — то же самое, но `--profile=profiles\win-v143-x64` и `^` вместо `\` в continuation.
+**Windows (MSVC):**
+```cmd
+test-windows\run_test_grpc.bat
+:: Профиль по умолчанию win-v143-x64; для VS2019:
+::   set PROFILE_NAME=win-v142-x64 & test-windows\run_test_grpc.bat
+```
+
+Что они делают пошагово:
+1. **`conan export`** всех 7 рецептов в локальный кеш — без этого `--no-remote` не найдёт транзитивные зависимости.
+2. **`conan install --requires=grpc/1.78.1 --build=missing -s build_type=Release`** + такой же проход с **`Debug`** — deployer требует оба варианта в кеше одновременно для генерации `lib/native/.../-d/`.
+3. **`conan install ... --deployer=legacy_nupkg.py --deployer-folder=output/`** — обходит install-граф, генерит `.targets`/`.nuspec`/`CMakeLists.var` для каждого пакета и упаковывает в `.nupkg`.
+
+Время прогона: ~15–25 мин на Linux 8 ядер, 30–60 мин на Windows.
 
 ### Что попадёт в `output/`
 
@@ -564,7 +605,7 @@ LEGACY_NAME_MAP = {
 
 То же самое для зависимостей — если abseil/openssl/etc. в TeamCity называются иначе.
 
-**TODO в скриптах.** В `run_grpc.sh` пока собирается только `static/Release` (одна вариация). Чтобы получить `.nupkg` идентичный TeamCity, нужно добавить Debug-проход и deployer-шаг — по аналогии с `run_test_zlib.sh`.
+**Sanity vs legacy.** `run_grpc.sh`/`.bat` собирают только sanity (без deployer): для CI/проверки совместимости. `run_test_grpc.sh`/`.bat` — полный пайплайн с `.nupkg` на выходе. Используйте второй для production-артефактов.
 
 ### Что делать при обновлении версии gRPC
 
