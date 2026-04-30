@@ -16,8 +16,11 @@ nasm/2.16.01
 strawberryperl/5.32.1.1
 
 [buildenv]
-# Гарантируем, что perl.exe и nasm.exe видны внутри Conan build-env,
-# даже если их нет в системном PATH.  При нестандартном пути установки —
-# поправьте локально.
-PATH=+(path)C:\Strawberry\perl\bin
-PATH=+(path)C:\Program Files\NASM
+# Используем перенесённые в репо тулзы (распакованы test-windows\install_deps.bat
+# в conan-recipes\tools\windows\). Conan подставит {{ os.path.join(profile_dir, ...) }}
+# при загрузке профиля.  Запасные системные пути добавлены в конец на случай,
+# если репо склонировано в другое место.
+PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "strawberryperl", "perl", "bin") }}
+PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "nasm") }}
+PATH+=(path)C:\Strawberry\perl\bin
+PATH+=(path)C:\Program Files\NASM

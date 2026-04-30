@@ -81,10 +81,19 @@ echo [INFO] Detecting Conan profile...
 conan profile detect --force
 
 echo.
+echo.
+echo [INFO] Setting up Strawberry Perl + NASM in tools\windows\ ...
+call "%SCRIPT_DIR%install_deps.bat"
+if errorlevel 1 (
+    echo [ERROR] install_deps.bat failed. См. вывод выше.
+    goto :END
+)
+
+echo.
 echo ============================================
 echo  Done! Environment is ready.
 echo ============================================
-echo Next: test-windows\run_test.bat
+echo Next: test-windows\run_test_grpc.bat
 
 :END
 popd

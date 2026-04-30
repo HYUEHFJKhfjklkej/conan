@@ -14,5 +14,7 @@ nasm/2.16.01
 strawberryperl/5.32.1.1
 
 [buildenv]
-PATH=+(path)C:\Strawberry\perl\bin
-PATH=+(path)C:\Program Files\NASM
+PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "strawberryperl", "perl", "bin") }}
+PATH=+(path){{ os.path.join(profile_dir, "..", "tools", "windows", "nasm") }}
+PATH+=(path)C:\Strawberry\perl\bin
+PATH+=(path)C:\Program Files\NASM

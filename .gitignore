@@ -2,3 +2,8 @@ venv/
 .DS_Store
 output/
 build/
+
+# Распакованные тулзы для Windows-сборки (создаются test-windows\install_deps.bat).
+# ZIP-архивы остаются в репо (если переносятся через USB на оффлайн-машину).
+tools/windows/strawberryperl/
+tools/windows/nasm/
