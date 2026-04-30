@@ -14,3 +14,10 @@ cmake/3.25.1
 perl/5.32.1
 nasm/2.16.01
 strawberryperl/5.32.1.1
+
+[buildenv]
+# Гарантируем, что perl.exe и nasm.exe видны внутри Conan build-env,
+# даже если их нет в системном PATH.  При нестандартном пути установки —
+# поправьте локально.
+PATH=+(path)C:\Strawberry\perl\bin
+PATH=+(path)C:\Program Files\NASM
