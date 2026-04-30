@@ -49,10 +49,24 @@ class CAresConan(ConanFile):
         """Return path to bundled source archive in export_sources, or None."""
         import os
         src_dir = os.path.join(self.export_sources_folder, "src")
-        if os.path.isdir(src_dir):
-            for fname in os.listdir(src_dir):
-                if str(self.version) in fname and fname.endswith((".tar.gz", ".tgz")):
-                    return os.path.join(src_dir, fname)
+        if not os.path.isdir(src_dir):
+            return None
+        # Prefer matching the upstream URL filename from conandata.yml
+        sources = self.conan_data.get("sources", {}).get(str(self.version), {})
+        urls = sources.get("url")
+        if isinstance(urls, str):
+            urls = [urls]
+        elif urls is None:
+            urls = []
+        for url in urls:
+            fname = url.rsplit("/", 1)[-1]
+            candidate = os.path.join(src_dir, fname)
+            if os.path.isfile(candidate):
+                return candidate
+        # Fallback: any tarball in src/ (assume single archive)
+        for fname in os.listdir(src_dir):
+            if fname.endswith((".tar.gz", ".tgz")):
+                return os.path.join(src_dir, fname)
         return None
 
     def source(self):
