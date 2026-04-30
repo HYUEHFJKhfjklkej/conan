@@ -62,7 +62,8 @@ class Re2Conan(ConanFile):
 
     def build_requirements(self):
         if Version(self.version) >= "20250805":
-            self.tool_requires("cmake/[>=3.22]")
+            # Offline-патч: exact version вместо range, чтобы матчиться с [platform_tool_requires]
+            self.tool_requires("cmake/3.25.1")
 
     def _offline_source_archive(self):
         """Return path to bundled source archive in export_sources, or None."""

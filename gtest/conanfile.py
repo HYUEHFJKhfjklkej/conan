@@ -81,7 +81,8 @@ class GTestConan(ConanFile):
 
     def build_requirements(self):
         if Version(self.version) >= "1.17.0":
-            self.tool_requires("cmake/[>=3.16]")
+            # Offline-патч: exact version вместо range, чтобы матчиться с [platform_tool_requires]
+            self.tool_requires("cmake/3.25.1")
 
     def build(self):
         cmake = CMake(self)
