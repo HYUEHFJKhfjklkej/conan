@@ -1,0 +1,28 @@
+ARG BASE_IMAGE=gcc:8
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /work/conan-recipes
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-venv python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    || true
+
+COPY test-astra      /work/conan-recipes/test-astra
+COPY packages-linux  /work/conan-recipes/packages-linux
+COPY profiles        /work/conan-recipes/profiles
+COPY extensions      /work/conan-recipes/extensions
+COPY zlib            /work/conan-recipes/zlib
+COPY abseil          /work/conan-recipes/abseil
+COPY c-ares          /work/conan-recipes/c-ares
+COPY re2             /work/conan-recipes/re2
+COPY protobuf        /work/conan-recipes/protobuf
+COPY openssl         /work/conan-recipes/openssl
+COPY grpc            /work/conan-recipes/grpc
+
+RUN ./test-astra/setup.sh
+
+ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
+
+CMD ["bash", "-lc", "source venv/bin/activate && ./test-astra/run_test_grpc.sh"]

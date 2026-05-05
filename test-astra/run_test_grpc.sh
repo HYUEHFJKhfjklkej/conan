@@ -15,7 +15,7 @@ if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
     source "$ROOT_DIR/venv/bin/activate"
 fi
 
-PROFILE="$ROOT_DIR/profiles/astra-gcc"
+PROFILE="${PROFILE:-$ROOT_DIR/profiles/astra-gcc}"
 [ -f "$PROFILE" ] || PROFILE="$ROOT_DIR/profiles/linux-gcc"
 
 echo "[INFO] Profile: $PROFILE"
