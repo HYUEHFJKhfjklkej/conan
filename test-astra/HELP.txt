@@ -1,0 +1,83 @@
+=============================================================
+ grpc-tc-mirror — diagnostic & build commands
+=============================================================
+
+The Dockerfile (`../Dockerfile.grpc-tc-mirror`) takes a base
+image via the BASE_IMAGE build-arg so no internal hostname
+is hard-coded. Set REGISTRY before running the snippets below
+to the internal Docker registry hostname:
+
+    export REGISTRY=<internal-registry>     # e.g. registry.example/main
+
+
+-------------------------------------------------------------
+ 1. Build & run the tc-mirror image
+-------------------------------------------------------------
+
+    cd <repo>/conan-recipes
+    sudo docker build \
+        --build-arg BASE_IMAGE=$REGISTRY/library/gcc84-build-x86_64:latest \
+        -f Dockerfile.grpc-tc-mirror \
+        -t grpc-tc-mirror .
+
+    mkdir -p output
+    sudo docker run --rm \
+        -v "$(pwd)/output:/work/conan-recipes/output" \
+        grpc-tc-mirror
+
+    ls -la output/*.nupkg
+
+
+-------------------------------------------------------------
+ 2. Diagnostic: what's inside build-tools (parent image)
+-------------------------------------------------------------
+ Reveals Debian release and whether a usable Python is
+ already shipped. Conan 2.x requires Python >= 3.7.
+
+    sudo docker run --rm $REGISTRY/library/build-tools:latest bash -c '
+        echo "=== os-release ===";
+        cat /etc/os-release | head -4;
+        echo "=== python ===";
+        for p in python python3 python3.7 python3.8 python3.9 python3.10 python3.11; do
+            command -v $p && $p --version 2>&1;
+        done;
+        echo "=== /opt ===";
+        ls /opt 2>/dev/null
+    '
+
+
+-------------------------------------------------------------
+ 3. Diagnostic: TC base image apt feeds & external reach
+-------------------------------------------------------------
+ Lists configured apt sources (needed if we want to install
+ a newer python via apt) and probes github (needed if we want
+ to download a precompiled standalone python).
+
+    sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:latest bash -c '
+        echo "=== apt sources ===";
+        cat /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null \
+            | grep -v ^# | grep -v ^$;
+        echo "=== /opt ===";
+        ls /opt 2>/dev/null;
+        echo "=== curl github ===";
+        curl -sI -m 10 https://github.com -o /dev/null \
+            -w "github: %{http_code}\n" 2>&1 || echo "curl absent";
+        echo "=== apt python search ===";
+        apt-get update 2>&1 | tail -3;
+        apt-cache search "^python3" 2>/dev/null | head -10
+    '
+
+
+-------------------------------------------------------------
+ 4. Docker registry TLS — if pull fails on x509 errors
+-------------------------------------------------------------
+ Quick (insecure, dev-only):
+    sudo tee /etc/docker/daemon.json >/dev/null <<EOF
+    {"insecure-registries": ["<internal-registry-hostname>"]}
+    EOF
+    sudo systemctl restart docker
+
+ Proper:
+    sudo mkdir -p /etc/docker/certs.d/<internal-registry-hostname>
+    sudo cp <ca>.crt /etc/docker/certs.d/<internal-registry-hostname>/ca.crt
+    sudo systemctl restart docker
