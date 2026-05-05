@@ -1,38 +1,16 @@
-=============================================================
- grpc-tc-mirror — diagnostic & build commands
-=============================================================
+grpc-tc-mirror — runbook
+========================
 
-The Dockerfile (`../Dockerfile.grpc-tc-mirror`) takes a base
-image via the BASE_IMAGE build-arg so no internal hostname
-is hard-coded. Set REGISTRY before running the snippets below
-to the internal Docker registry hostname:
-
-    export REGISTRY=<internal-registry>     # e.g. registry.example/main
+Run these blocks one by one. Copy the output of each diagnostic
+step and send it back so the next step can be picked.
 
 
--------------------------------------------------------------
- 1. Build & run the tc-mirror image
--------------------------------------------------------------
+[0] Set the internal registry hostname (do this once per shell):
 
-    cd <repo>/conan-recipes
-    sudo docker build \
-        --build-arg BASE_IMAGE=$REGISTRY/library/gcc84-build-x86_64:latest \
-        -f Dockerfile.grpc-tc-mirror \
-        -t grpc-tc-mirror .
-
-    mkdir -p output
-    sudo docker run --rm \
-        -v "$(pwd)/output:/work/conan-recipes/output" \
-        grpc-tc-mirror
-
-    ls -la output/*.nupkg
+    export REGISTRY=<internal-registry>/main     # e.g. registry.example/main
 
 
--------------------------------------------------------------
- 2. Diagnostic: what's inside build-tools (parent image)
--------------------------------------------------------------
- Reveals Debian release and whether a usable Python is
- already shipped. Conan 2.x requires Python >= 3.7.
+[1] Diagnostic — what's inside build-tools (Debian + Python):
 
     sudo docker run --rm $REGISTRY/library/build-tools:latest bash -c '
         echo "=== os-release ===";
@@ -46,12 +24,7 @@ to the internal Docker registry hostname:
     '
 
 
--------------------------------------------------------------
- 3. Diagnostic: TC base image apt feeds & external reach
--------------------------------------------------------------
- Lists configured apt sources (needed if we want to install
- a newer python via apt) and probes github (needed if we want
- to download a precompiled standalone python).
+[2] Diagnostic — TC base image apt feeds & external reach:
 
     sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:latest bash -c '
         echo "=== apt sources ===";
@@ -68,16 +41,34 @@ to the internal Docker registry hostname:
     '
 
 
--------------------------------------------------------------
- 4. Docker registry TLS — if pull fails on x509 errors
--------------------------------------------------------------
- Quick (insecure, dev-only):
-    sudo tee /etc/docker/daemon.json >/dev/null <<EOF
-    {"insecure-registries": ["<internal-registry-hostname>"]}
-    EOF
-    sudo systemctl restart docker
+[3] Build the tc-mirror image (run after the path is decided):
 
- Proper:
-    sudo mkdir -p /etc/docker/certs.d/<internal-registry-hostname>
-    sudo cp <ca>.crt /etc/docker/certs.d/<internal-registry-hostname>/ca.crt
-    sudo systemctl restart docker
+    cd <repo>/conan-recipes
+    sudo docker build \
+        --build-arg BASE_IMAGE=$REGISTRY/library/gcc84-build-x86_64:latest \
+        -f Dockerfile.grpc-tc-mirror \
+        -t grpc-tc-mirror .
+
+
+[4] Run the build and collect artefacts:
+
+    mkdir -p output
+    sudo docker run --rm \
+        -v "$(pwd)/output:/work/conan-recipes/output" \
+        grpc-tc-mirror
+
+    ls -la output/*.nupkg
+
+
+[X] Troubleshooting — docker pull fails on x509:
+
+    Quick (insecure, dev only):
+        sudo tee /etc/docker/daemon.json >/dev/null <<EOF
+        {"insecure-registries": ["<internal-registry-hostname>"]}
+        EOF
+        sudo systemctl restart docker
+
+    Proper (CA cert):
+        sudo mkdir -p /etc/docker/certs.d/<internal-registry-hostname>
+        sudo cp <ca>.crt /etc/docker/certs.d/<internal-registry-hostname>/ca.crt
+        sudo systemctl restart docker
