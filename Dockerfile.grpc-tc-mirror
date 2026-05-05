@@ -28,8 +28,23 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && ln -sf /opt/python/bin/pip3    /usr/local/bin/pip     \
     && python3 --version
 
-RUN chmod +x test-astra/*.sh && ./test-astra/setup.sh
+RUN chmod +x test-astra/*.sh
+
+# Install Conan and its build deps directly into the standalone /opt/python.
+# We deliberately skip test-astra/setup.sh and its venv: ensurepip is broken
+# in python-build-standalone "install_only" tarballs (the venv create step
+# fails in stretch-based images), and the docker container is isolation
+# enough on its own. The conan entrypoint is symlinked into /usr/local/bin
+# so run_test_grpc.sh finds it on PATH.
+RUN /opt/python/bin/python3 -m pip install --no-index \
+        --find-links=packages-linux \
+        pip setuptools wheel \
+    && /opt/python/bin/python3 -m pip install --no-index \
+        --find-links=packages-linux \
+        conan \
+    && ln -sf /opt/python/bin/conan /usr/local/bin/conan \
+    && conan --version
 
 ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
 
-CMD ["bash", "-lc", "source venv/bin/activate && ./test-astra/run_test_grpc.sh"]
+CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]
