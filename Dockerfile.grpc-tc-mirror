@@ -4,11 +4,6 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /work/conan-recipes
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-venv python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    || true
-
 COPY test-astra      /work/conan-recipes/test-astra
 COPY packages-linux  /work/conan-recipes/packages-linux
 COPY profiles        /work/conan-recipes/profiles
@@ -20,6 +15,18 @@ COPY re2             /work/conan-recipes/re2
 COPY protobuf        /work/conan-recipes/protobuf
 COPY openssl         /work/conan-recipes/openssl
 COPY grpc            /work/conan-recipes/grpc
+
+# Install Python 3.9 from a precompiled standalone tarball shipped in the repo.
+# Conan 2.x requires Python >= 3.7, but Debian Stretch (the OS inside several
+# legacy CI images) only ships Python 3.5, and Stretch's apt repos no longer
+# carry usable newer python3 packages. The tarball is statically linked
+# against glibc >= 2.17 so it runs unchanged on Stretch and Astra alike.
+RUN tar -xzf packages-linux/cpython-3.9.20+20240909-x86_64-linux-gnu.tar.gz -C /opt \
+    && ln -sf /opt/python/bin/python3 /usr/local/bin/python3 \
+    && ln -sf /opt/python/bin/python3 /usr/local/bin/python  \
+    && ln -sf /opt/python/bin/pip3    /usr/local/bin/pip3    \
+    && ln -sf /opt/python/bin/pip3    /usr/local/bin/pip     \
+    && python3 --version
 
 RUN ./test-astra/setup.sh
 
