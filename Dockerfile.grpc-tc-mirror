@@ -28,7 +28,7 @@ RUN tar -xzf packages-linux/cpython-3.9.20+20240909-x86_64-linux-gnu.tar.gz -C /
     && ln -sf /opt/python/bin/pip3    /usr/local/bin/pip     \
     && python3 --version
 
-RUN ./test-astra/setup.sh
+RUN chmod +x test-astra/*.sh && ./test-astra/setup.sh
 
 ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
 
