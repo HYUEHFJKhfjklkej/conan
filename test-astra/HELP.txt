@@ -67,9 +67,13 @@ step and send it back so the next step can be picked.
       PROFILE       — target architecture (arm / arm64)
       PROFILE_BUILD — native architecture of the docker host (x86_64)
 
+    The ARM base images in ProGet are tagged 0.1.0 (no :latest manifest).
+    test_arm_cross.sh respects $BASE_IMAGE_TAG (default 0.1.0); use the
+    same tag here when invoking docker build directly.
+
     arm (32-bit, hard-float, gcc 7.5 linaro):
         sudo docker build \
-            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:latest \
+            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
             -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
 
         sudo docker run --rm \
@@ -80,7 +84,7 @@ step and send it back so the next step can be picked.
 
     arm64 (gcc 7.5 linaro):
         sudo docker build \
-            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:latest \
+            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:0.1.0 \
             -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm64 .
 
         sudo docker run --rm \
@@ -113,6 +117,29 @@ step and send it back so the next step can be picked.
 
     Each block prints PASS/FAIL lines and exits non-zero on failure.
     Logs land in /tmp/{pull,probe,build,run}.log.
+
+
+[7] Diagnostic — ARM cross-image internals (after smoke FAILs):
+
+    Use when test_arm_cross.sh smoke reports "no cross-gcc found in image"
+    or you need to know the real toolchain paths to wire into a profile.
+
+    sudo docker run --rm $REGISTRY/library/gcc75-build-arm:0.1.0 bash -c '
+        echo "=== /opt/linaro-arm-7.5.0 ===";
+        ls /opt/linaro-arm-7.5.0/ 2>/dev/null;
+        echo "=== bin ===";
+        ls /opt/linaro-arm-7.5.0/bin/ 2>/dev/null;
+        echo "=== toolchain.cmake ===";
+        find /opt -maxdepth 6 -name "*toolchain*.cmake" 2>/dev/null;
+        echo "=== any *-gcc ===";
+        find /opt -maxdepth 6 -name "*-gcc" 2>/dev/null;
+        echo "=== PATH ===";
+        echo $PATH
+    '
+
+    For arm64 swap the image and root dir:
+        $REGISTRY/library/gcc75-build-arm64:0.1.0
+        /opt/linaro-aarch64-7.5.0   (best-guess — confirm via ls /opt)
 
 
 [X] Troubleshooting — docker pull fails on x509:
