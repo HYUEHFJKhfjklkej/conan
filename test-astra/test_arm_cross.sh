@@ -103,16 +103,20 @@ sudo docker run --rm "$BASE_IMAGE" bash -c '
     grep -E "^(PRETTY_NAME|VERSION_ID)=" /etc/os-release | head -3
     echo "--- /opt"
     ls /opt 2>/dev/null
-    echo "--- cross gcc"
+    echo "--- cross gcc on PATH"
     for g in arm-linux-gnueabihf-gcc arm-linaro-linux-gnueabihf-gcc \
              aarch64-linux-gnu-gcc aarch64-linaro-linux-gnu-gcc \
              arm-none-linux-gnueabihf-gcc; do
         if command -v $g >/dev/null; then
-            echo "$g: $($g --version | head -1)"
+            echo "PATH:$g: $($g --version | head -1)"
         fi
     done
-    echo "--- toolchain.cmake locations"
-    find /opt -maxdepth 4 -name "*toolchain*.cmake" 2>/dev/null | head -10
+    echo "--- cross gcc under /opt"
+    find /opt -maxdepth 6 -name "*-gcc" 2>/dev/null | grep -E "(arm|aarch64)" | head -5
+    echo "--- toolchain.cmake under /opt"
+    find /opt -maxdepth 6 -name "*toolchain*.cmake" 2>/dev/null | head -10
+    echo "--- sysroot under /opt"
+    find /opt -maxdepth 6 -type d -name "sysroot*" 2>/dev/null | head -5
     echo "--- cmake"
     command -v cmake && cmake --version | head -1
 ' | tee /tmp/probe.log
@@ -123,16 +127,24 @@ else
     fail "image is NOT x86_64 — bundled python tarball won't run"
 fi
 
-if grep -qE "(arm|aarch64).*-gcc" /tmp/probe.log; then
-    pass "cross-gcc detected"
+if grep -qE "^/opt/.*(arm|aarch64).*-gcc$" /tmp/probe.log; then
+    pass "cross-gcc detected under /opt"
+elif grep -qE "^PATH:.*(arm|aarch64).*-gcc:" /tmp/probe.log; then
+    pass "cross-gcc detected on PATH"
 else
     fail "no cross-gcc found in image"
 fi
 
-if grep -qE "toolchain.cmake" /tmp/probe.log; then
+if grep -qE "^/opt/.*toolchain.*\.cmake$" /tmp/probe.log; then
     pass "toolchain.cmake present in /opt"
 else
-    fail "no toolchain.cmake under /opt — profile [conf] path may not exist"
+    fail "no toolchain.cmake under /opt — profile must wire compiler_executables directly, not toolchain_file"
+fi
+
+if grep -qE "^/opt/.*sysroot" /tmp/probe.log; then
+    pass "sysroot present in /opt"
+else
+    fail "no sysroot under /opt — cross-link will not find libc"
 fi
 
 # ----- 3. mirror docker build --------------------------------------------

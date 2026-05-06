@@ -12,4 +12,5 @@ cmake/3.25.1
 perl/5.36.0
 
 [conf]
-tools.cmake.cmaketoolchain:toolchain_file=/opt/linaro/toolchain.cmake
+tools.build:compiler_executables={"c": "/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc", "cpp": "/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-g++"}
+tools.build:sysroot=/opt/linaro-arm-7.5.0/sysroot-glibc-linaro-2.25-2019.12-rc1-arm-linux-gnueabihf
