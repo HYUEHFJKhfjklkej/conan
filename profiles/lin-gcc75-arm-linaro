@@ -11,6 +11,17 @@ build_type=Release
 cmake/3.25.1
 perl/5.36.0
 
+[buildenv]
+PATH=+(path)/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin
+CC=arm-linux-gnueabihf-gcc
+CXX=arm-linux-gnueabihf-g++
+AR=arm-linux-gnueabihf-ar
+AS=arm-linux-gnueabihf-as
+LD=arm-linux-gnueabihf-ld
+NM=arm-linux-gnueabihf-nm
+RANLIB=arm-linux-gnueabihf-ranlib
+STRIP=arm-linux-gnueabihf-strip
+
 [conf]
 tools.build:compiler_executables={"c": "/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc", "cpp": "/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-g++"}
 tools.build:sysroot=/opt/linaro-arm-7.5.0/sysroot-glibc-linaro-2.25-2019.12-rc1-arm-linux-gnueabihf
