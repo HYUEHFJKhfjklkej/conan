@@ -174,15 +174,17 @@ step and send it back so the next step can be picked.
 
     [d] Show what Conan actually writes into conan_toolchain.cmake
         (the only file CMake reads to pick CMAKE_C_COMPILER etc).
-        If CMAKE_C_COMPILER / CMAKE_CXX_COMPILER are missing, neither
-        [conf] tools.build:compiler_executables nor user_toolchain are
-        propagating, and we know exactly where to look:
+        Uses a minimal conanfile.txt — no third-party packages, no
+        network. If CMAKE_C_COMPILER / CMAKE_CXX_COMPILER are missing
+        in the output, neither [conf] tools.build:compiler_executables
+        nor user_toolchain are propagating:
         sudo docker run --rm grpc-tc-mirror-arm bash -c '
             mkdir -p /tmp/probe && cd /tmp/probe;
-            conan install --requires=abseil/20250127.0 \
+            printf "[generators]\nCMakeToolchain\n" > conanfile.txt;
+            conan install . \
                 -pr:h /work/conan-recipes/profiles/lin-gcc75-arm-linaro \
                 -pr:b /work/conan-recipes/profiles/lin-gcc84-x86_64 \
-                -g CMakeToolchain --build=never 2>&1 | tail -10;
+                --no-remote 2>&1 | tail -10;
             echo "=== conan_toolchain.cmake ===";
             cat /tmp/probe/conan_toolchain.cmake
         '
