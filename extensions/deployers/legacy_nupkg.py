@@ -23,6 +23,7 @@ LEGACY_NAME_MAP = {"gtest": "googletest"}
 
 # Маппинг ОС: Conan settings.os → legacy os-короткое
 OS_SHORT = {"Linux": "lin", "Windows": "win", "Macos": "mac"}
+ARCH_SHORT = {"x86_64": "x64", "x86": "x86", "armv8": "arm64", "armv7hf": "arm"}
 
 KEEPDIR_CONTENT = (
     "#\n"
@@ -34,9 +35,18 @@ KEEPDIR_CONTENT = (
 
 
 def _short_compiler(compiler, version):
-    """gcc 8.4 -> gcc84, msvc 192 -> v142 (упрощённо)."""
+    """msvc 192 -> v142, gcc -> gcc (no version), other -> compiler+digits.
+
+    The bare 'gcc' form matches the legacy CI naming
+    (<pkg>.lin.gcc.shared.x64.<ver>.nupkg). The CI-side toolchain is fixed
+    per build configuration, so the gcc version isn't encoded in the file
+    name — only in the build-config that produces it. Deviating from this
+    convention would force every consumer's packages.config to change.
+    """
     if compiler == "msvc":
         return f"v{version}"
+    if compiler == "gcc":
+        return "gcc"
     ver = str(version).replace(".", "").replace("_", "")
     return f"{compiler}{ver}"
 
@@ -218,7 +228,7 @@ def deploy(graph, output_folder, **kwargs):
         os_name = str(s.os)
         compiler = str(s.compiler)
         compiler_version = str(s.compiler.version)
-        arch = str(s.arch)
+        arch = ARCH_SHORT.get(str(s.arch), str(s.arch))
         build_type = str(s.build_type)
 
         try:
