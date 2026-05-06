@@ -30,14 +30,14 @@ fi
 
 case "$ARCH" in
     arm)
-        BASE_IMAGE="$REGISTRY/library/gcc75-build-arm:latest"
+        BASE_IMAGE="$REGISTRY/library/gcc75-build-arm:${BASE_IMAGE_TAG:-0.1.0}"
         PROFILE="/work/conan-recipes/profiles/lin-gcc75-arm-linaro"
         ARCH_SHORT="arm"
         IMAGE_TAG="grpc-tc-mirror-arm"
         OUTPUT_DIR="output-arm"
         ;;
     arm64)
-        BASE_IMAGE="$REGISTRY/library/gcc75-build-arm64:latest"
+        BASE_IMAGE="$REGISTRY/library/gcc75-build-arm64:${BASE_IMAGE_TAG:-0.1.0}"
         PROFILE="/work/conan-recipes/profiles/lin-gcc-aarch64-linaro"
         ARCH_SHORT="arm64"
         IMAGE_TAG="grpc-tc-mirror-arm64"
