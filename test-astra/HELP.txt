@@ -50,7 +50,7 @@ step and send it back so the next step can be picked.
         -t grpc-tc-mirror .
 
 
-[4] Run the build and collect artefacts:
+[4] Run the build and collect artefacts (x86_64):
 
     mkdir -p output
     sudo docker run --rm \
@@ -58,6 +58,41 @@ step and send it back so the next step can be picked.
         grpc-tc-mirror
 
     ls -la output/*.nupkg
+
+
+[5] Cross-build for arm or arm64:
+
+    Profiles in profiles/ are tuned for the matching CI image.
+    For cross-builds Conan needs separate host and build profiles:
+      PROFILE       — target architecture (arm / arm64)
+      PROFILE_BUILD — native architecture of the docker host (x86_64)
+
+    arm (32-bit, hard-float, gcc 7.5 linaro):
+        sudo docker build \
+            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:latest \
+            -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+
+        sudo docker run --rm \
+            -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+            -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+            -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+            grpc-tc-mirror-arm
+
+    arm64 (gcc 7.5 linaro):
+        sudo docker build \
+            --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:latest \
+            -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm64 .
+
+        sudo docker run --rm \
+            -e PROFILE=/work/conan-recipes/profiles/lin-gcc-aarch64-linaro \
+            -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+            -v "$(pwd)/output-arm64:/work/conan-recipes/output" \
+            grpc-tc-mirror-arm64
+
+    Heads-up: the standalone Python tarball shipped under packages-linux/
+    is x86_64-only. Cross-images run docker natively on x86_64, so the
+    interpreter inside is still x86_64 — that is fine for running Conan;
+    the cross-toolchain inside the image targets arm/arm64 binaries.
 
 
 [X] Troubleshooting — docker pull fails on x509:

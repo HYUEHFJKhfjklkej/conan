@@ -18,7 +18,14 @@ fi
 PROFILE="${PROFILE:-$ROOT_DIR/profiles/astra-gcc}"
 [ -f "$PROFILE" ] || PROFILE="$ROOT_DIR/profiles/linux-gcc"
 
-echo "[INFO] Profile: $PROFILE"
+# For cross-compilation (e.g. arm/arm64 on an x86_64 build host) callers
+# can set PROFILE_BUILD to a native profile so Conan picks the right
+# tooling for build-context dependencies. Defaults to PROFILE for native
+# builds where host == build.
+PROFILE_BUILD="${PROFILE_BUILD:-$PROFILE}"
+
+echo "[INFO] Profile (host):  $PROFILE"
+echo "[INFO] Profile (build): $PROFILE_BUILD"
 echo "[INFO] Conan: $(conan --version)"
 echo ""
 
@@ -49,7 +56,7 @@ SHARED="${SHARED:-True}"
 for BT in Release Debug; do
     echo "[INFO] Building grpc/1.78.1 + 6 deps build_type=$BT shared=$SHARED"
     conan install --requires=grpc/1.78.1 \
-        -pr:h="$PROFILE" -pr:b="$PROFILE" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
         --build=missing --no-remote \
         -s build_type="$BT" \
         -o "*/*:shared=$SHARED"
@@ -66,7 +73,7 @@ rm -f "$ROOT_DIR/output"/{grpc,protobuf,abseil,re2,c-ares,openssl,zlib}.*.nupkg
 
 conan install \
     --requires=grpc/1.78.1 \
-    -pr:h="$PROFILE" -pr:b="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
     --no-remote \
     -o "*/*:shared=$SHARED" \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \
