@@ -95,6 +95,26 @@ step and send it back so the next step can be picked.
     the cross-toolchain inside the image targets arm/arm64 binaries.
 
 
+[6] Automated tests for the cross-build path:
+
+    Driver script: test-astra/test_arm_cross.sh
+    Modes:
+      smoke  pre-flight + image probe + docker build  (~1-2 min)
+      build  full Conan tree + verify 7 .nupkg names  (~15-25 min)
+
+    Run smoke first to catch image / toolchain problems quickly:
+        export REGISTRY=<internal-registry>/main
+        ./test-astra/test_arm_cross.sh smoke arm
+        ./test-astra/test_arm_cross.sh smoke arm64
+
+    If smoke is green, run the full build:
+        ./test-astra/test_arm_cross.sh build arm
+        ./test-astra/test_arm_cross.sh build arm64
+
+    Each block prints PASS/FAIL lines and exits non-zero on failure.
+    Logs land in /tmp/{pull,probe,build,run}.log.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
