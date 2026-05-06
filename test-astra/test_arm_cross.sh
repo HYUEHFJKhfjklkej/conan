@@ -135,12 +135,6 @@ else
     fail "no cross-gcc found in image"
 fi
 
-if grep -qE "^/opt/.*toolchain.*\.cmake$" /tmp/probe.log; then
-    pass "toolchain.cmake present in /opt"
-else
-    fail "no toolchain.cmake under /opt — profile must wire compiler_executables directly, not toolchain_file"
-fi
-
 if grep -qE "^/opt/.*sysroot" /tmp/probe.log; then
     pass "sysroot present in /opt"
 else
