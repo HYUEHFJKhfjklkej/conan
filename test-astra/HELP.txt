@@ -142,6 +142,36 @@ step and send it back so the next step can be picked.
         /opt/linaro-aarch64-7.5.0   (best-guess — confirm via ls /opt)
 
 
+[8] Diagnostic — ARM build mode fails (after step 4):
+
+    When `./test_arm_cross.sh build arm` fails inside the Conan tree
+    (typically abseil or grpc), the visible terminal tail only shows
+    a make caescade — the actual gcc error is higher up in /tmp/run.log.
+    Run these three blocks one by one and share their output.
+
+    [a] First real compiler error (not the make summary):
+        grep -m 3 -B 1 -A 4 "error:" /tmp/run.log | head -50
+
+    [b] How Conan interprets the host + build profiles
+        (verifies that user_toolchain / buildenv / compiler_executables
+        actually got picked up):
+        sudo docker run --rm grpc-tc-mirror-arm bash -c '
+            conan profile show \
+                -pr:h /work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+                -pr:b /work/conan-recipes/profiles/lin-gcc84-x86_64
+        '
+
+    [c] Sanity-check the cross-gcc directly (catches a "GCC 7+ required"
+        failure in seconds without waiting for the 15-min build):
+        sudo docker run --rm grpc-tc-mirror-arm bash -c '
+            /opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc --version;
+            /opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc -dumpversion;
+            echo "int main(){return 0;}" | /opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc \
+                --sysroot=/opt/linaro-arm-7.5.0/sysroot-glibc-linaro-2.25-2019.12-rc1-arm-linux-gnueabihf \
+                -x c - -o /tmp/canary && file /tmp/canary
+        '
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
