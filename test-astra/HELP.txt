@@ -490,6 +490,64 @@ step and send it back so the next step can be picked.
        (.nupkg via deployer Step 3 unchanged).
 
 
+[8i] Verify env-fallback patch (commits de4802b + 8278d55) actually
+     reached the image AND landed in the generated toolchain:
+
+    Symptom: after the env-fallback workaround for transitive
+    user_toolchain (4b.1 + 4b.3 + arch gate) the run still shows
+    `LINARO-ARM-TC count = 0` and the same `policy_checks.h "GCC 7
+    or higher"` on a fresh abseil build folder. Two distinct causes
+    look identical from the run log; this block tells them apart.
+
+    1. Did the patch reach the built image?
+
+           sudo docker run --rm grpc-tc-mirror-arm \
+               grep -n "settings.arch" /work/conan-recipes/abseil/conanfile.py
+
+       Expected (post-8278d55): one line containing
+       `if _user_tc and str(self.settings.arch) in (` near
+       `tc.blocks["user_toolchain"]`.
+
+       - Empty output → image was cached with the OLD recipe layer.
+         Rebuild with `--no-cache`:
+
+             cd ~/conan-master
+             sudo docker build --no-cache \
+                 --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
+                 -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+
+         Then re-run the ARM build (NEXT_STEPS 4b.2). Stop here.
+       - Line is present → patch is in the image. Move to check 2.
+
+    2. Did the override actually land in conan_toolchain.cmake of
+       the transitive abseil?
+
+           sudo find "$(pwd)/conan-cache/p/b" -path '*absei*' \
+               -name conan_toolchain.cmake \
+               -exec grep -E 'include.*linaro' {} +
+
+       Expected: at least one line per build folder of the form
+       `include("/work/conan-recipes/profiles/toolchains/linaro-arm.cmake")`.
+
+       - Has `include(...linaro...)` line → override is taking
+         effect; the failure is NOT this bug. Re-check
+         `CMAKE_C_COMPILER` in CMakeCache (cf. [8h] check 3) — if
+         it's still `/usr/bin/c++`, the user_toolchain.cmake itself
+         doesn't `set(CMAKE_C_COMPILER ...)` early enough, copy the
+         setting before `project()` line.
+       - No `include(...linaro...)` anywhere → API
+         `tc.blocks["user_toolchain"].values["paths"]` is silently
+         ignored by Conan 2.27.1 for this node. Switch to the harder
+         workaround in NEXT_STEPS.md 4b.6: append `include("$_user_tc")`
+         to conan_toolchain.cmake AFTER `tc.generate()` directly via
+         load()/save() in each of the 4 patched conanfile.py.
+
+    Note: run check 2 from the host directory whose `conan-cache`
+    is bind-mounted into the container at `/root/.conan2`. If you
+    used `--rm` without that mount, the build folder no longer
+    exists on the host (cf. [8h] check 2 critical gotcha).
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
