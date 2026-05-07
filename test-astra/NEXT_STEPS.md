@@ -92,23 +92,70 @@ Step 3 (deployer) — оставить как есть, но добавить т
 
 ---
 
-## Шаг 4b (если count < 7) — patch `grpc/conanfile.py` (и `protobuf/`, если та же причина)
+## Шаг 4b (count < 7) — patch рецептов через env-fallback
 
-Conan 2.x не пробрасывает `[conf] user_toolchain` к транзитивным нодам даже из CLI. Тогда — добавить в `generate()` каждого подозрительного рецепта:
+**Подтверждено 2026-05-07 13:49:** даже `--build="*" + -c` дал count = 2.
+Conan 2.27.1 **не** пропагирует `[conf]` (и `-c` на CLI) к транзитивным
+нодам — это баг Conan, не профиль. `self.conf.get(...)` в `generate()`
+транзитивного пакета возвращает пусто.
 
-```python
-def generate(self):
-    tc = CMakeToolchain(self)
-    user_tc = self.conf.get(
-        "tools.cmake.cmaketoolchain:user_toolchain",
-        default=[], check_type=list,
-    )
-    for path in user_tc:
-        tc.user_presets_path = path  # или явный include через preset
-    tc.generate()
+Workaround: читать путь к toolchain из **переменной окружения**, которая
+видна всем процессам в контейнере (включая транзитивные builds), и
+явно вписывать его в CMakeToolchain.
+
+### 4b.1. Добавить в Dockerfile.grpc-tc-mirror
+
+```dockerfile
+# Перед `CMD`:
+ENV CONAN_USER_TOOLCHAIN=""
 ```
 
-Точный код напишу после Шага 3 — нужно увидеть какие рецепты теряют toolchain.
+(значение по-умолчанию пустое — для x86_64 builds; ARM-сборки
+переопределяют через `-e CONAN_USER_TOOLCHAIN=...`)
+
+### 4b.2. Передавать env при запуске для ARM
+
+```bash
+sudo docker run --rm \
+    -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake \
+    -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+    -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+    -v "$(pwd)/conan-cache:/root/.conan2" \
+    -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+    grpc-tc-mirror-arm
+```
+
+Аналогично — в `test_arm_cross.sh` Step 4 добавить `-e CONAN_USER_TOOLCHAIN=$PROFILE_DIR/toolchains/linaro-arm.cmake`.
+
+### 4b.3. Patch `generate()` в каждом из 5 рецептов с зависимостями
+
+Файлы: `abseil/conanfile.py`, `re2/conanfile.py`, `protobuf/conanfile.py`,
+`openssl/conanfile.py`, `grpc/conanfile.py` (zlib и c-ares работают сами,
+их можно не трогать; но для единообразия — тоже патчить).
+
+Шаблон правки — добавить после `tc = CMakeToolchain(self)` и до `tc.generate()`:
+
+```python
+        # Workaround Conan 2.27.1: *:user_toolchain в [conf] не доезжает
+        # до транзитивных deps. Читаем путь из env как fallback.
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
+```
+
+(`os` уже импортируется в каждом рецепте.)
+
+### 4b.4. Проверка
+
+После правки: пересобрать docker image, прогнать `test_arm_cross.sh build arm`,
+проверить count:
+
+```bash
+grep -c "==LINARO-ARM-TC==" /tmp/run.log
+```
+
+Ожидание: count == 7 для нового запуска (по одному маркеру на каждый
+recipe в графе). Если так — должны получиться 7 `.nupkg` в `output-arm/`.
 
 ---
 
