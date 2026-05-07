@@ -23,4 +23,4 @@ RANLIB=arm-linux-gnueabihf-ranlib
 STRIP=arm-linux-gnueabihf-strip
 
 [conf]
-tools.cmake.cmaketoolchain:user_toolchain=["/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"]
+*:tools.cmake.cmaketoolchain:user_toolchain=["/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"]
