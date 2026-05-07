@@ -332,7 +332,8 @@ step and send it back so the next step can be picked.
                    2>/dev/null | head -1)
            echo "$TC"
            sudo cat "$TC" \
-               | grep -E "user_toolchain|linaro|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER" | head -20
+               | grep -E "user_toolchain|linaro|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER|CMAKE_AR|CMAKE_SYSTEM" \
+               | head -30
 
        Quick alternative without re-running (if you have a still-running
        failed container — drop --rm next time, or `docker run` it
