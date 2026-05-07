@@ -205,12 +205,88 @@ sudo find "$(pwd)/conan-cache/p/b" -name CMakeCache.txt \
 - ✅ count >= 7 + 7 .nupkg → задача закрыта. Дальше — поправить
   `test_arm_cross.sh` (auto-set `-e CONAN_USER_TOOLCHAIN`) и почистить
   HELP.txt от диагностики которая больше не нужна.
-- ❌ count всё ещё 2 → API `tc.blocks["user_toolchain"].values["paths"]`
-  не работает в Conan 2.27.1 как ожидалось. Альтернативы:
-  - использовать `tc.cache_variables["CMAKE_PROJECT_INCLUDE"]` с
-    подменой пути на linaro-arm.cmake;
-  - сделать profile-level `[conf]` через python_extension;
-  - ручной patch `conan_toolchain.cmake` после генерации.
+- ❌ count всё ещё 0/2 → перейти к 4b.5 (различить две возможные причины).
+
+### 4b.5. Если count всё ещё 0/2 — две проверки, чтобы понять причину
+
+Подтверждено 2026-05-07 ~14:57: после `de4802b` патч не подействовал
+(count = 0, та же `policy_checks.h "GCC 7 or higher"`, новый build
+folder abseia8915fac5df4c). Возможные причины:
+
+а) **Docker-образ не пересобран** (закешировались слои с старыми
+   рецептами).
+b) **API `tc.blocks["user_toolchain"].values["paths"]` не работает** в
+   Conan 2.27.1 как override (внутри блок перетирает `values` из
+   `context()` при рендере).
+
+#### Проверка 1: попал ли патч в собранный образ
+
+```bash
+sudo docker run --rm grpc-tc-mirror-arm \
+    grep -n CONAN_USER_TOOLCHAIN /work/conan-recipes/abseil/conanfile.py
+```
+
+- Видна строка `_user_tc = os.environ.get(...)` → патч в образе ✅, идём к Проверке 2.
+- Пусто → образ закеширован. Пересобрать с `--no-cache`:
+
+  ```bash
+  cd ~/conan-master
+  sudo docker build --no-cache \
+      --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
+      -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+  ```
+
+  И запускать заново 4b.2.
+
+#### Проверка 2: сработал ли override на уровне generated conan_toolchain.cmake
+
+```bash
+sudo find "$(pwd)/conan-cache/p/b" -path '*absei*' -name conan_toolchain.cmake \
+    -exec grep -B 2 -A 2 "user_toolchain\|linaro" {} +
+```
+
+- После комментария `# Include one or more CMake user toolchain…`
+  идёт строка `include("/work/conan-recipes/profiles/toolchains/linaro-arm.cmake")`
+  → override сработал ✅, но компилятор всё равно `/usr/bin/c++`.
+  Тогда копать `linaro-arm.cmake` — он не выставляет `CMAKE_C_COMPILER`
+  на уровне Conan toolchain phase.
+- Только пустой комментарий, без `include` → API `tc.blocks` не
+  принимает override. Переходим к 4b.6.
+
+### 4b.6. Жёсткий patch: дописывать `include(...)` в conan_toolchain.cmake после tc.generate()
+
+Если 4b.5 показала что override через `tc.blocks` не работает, заменить
+в каждом из 4 рецептов фрагмент:
+
+```python
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
+        tc.generate()
+```
+
+на:
+
+```python
+        tc.generate()
+
+        # Force-include user toolchain at the END of conan_toolchain.cmake.
+        # Conan 2.27.1 ignores tc.blocks["user_toolchain"] override for
+        # transitive deps; we patch the generated file directly. The whole
+        # file is read by CMake BEFORE project(), so set(CMAKE_C_COMPILER ...)
+        # in linaro-arm.cmake still applies.
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            from conan.tools.files import load, save
+            _tc_path = os.path.join(self.generators_folder, "conan_toolchain.cmake")
+            if os.path.exists(_tc_path):
+                _content = load(self, _tc_path)
+                _line = f'include("{_user_tc}")'
+                if _line not in _content:
+                    save(self, _tc_path, _content + f"\n\n{_line}\n")
+```
+
+После правки — пересобрать образ (`--no-cache` для гарантии), перезапустить 4b.2.
 
 ---
 
