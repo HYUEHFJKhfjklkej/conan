@@ -279,6 +279,55 @@ step and send it back so the next step can be picked.
           `compiler.libcxx=libstdc++11`.
 
 
+[8h] Toolchain did not propagate to a transitive dep (after [8g] verdict #3):
+
+    Symptom: `[8e]` count is < 7, and grep shows ==LINARO-ARM-TC== for
+    some packages but not for the failing one (typically abseil, re2,
+    or protobuf — pulled in transitively by grpc).
+
+    The fix in commit e9bdb19 (`*:tools.cmake.cmaketoolchain:user_toolchain`)
+    relies on Conan 2.x propagating the conf to every node of the dep
+    graph. If a single node still misses the toolchain, conan_toolchain.cmake
+    for that node will not include linaro-arm.cmake, and CMake falls back
+    to the system compiler (Stretch g++ 6.3 → policy_checks.h trips with
+    "GCC 7 or higher").
+
+    Three checks (no rebuild, just inspect the failed build folder):
+
+    1. Confirm the host profile has the `*:` prefix on user_toolchain:
+           grep user_toolchain profiles/lin-gcc75-arm-linaro
+       Expected: a single line starting with
+       `*:tools.cmake.cmaketoolchain:user_toolchain=`. Without `*:`,
+       only the consumer node receives it.
+
+    2. Inspect conan_toolchain.cmake for the failing package — this is
+       the only file CMake reads. If it does NOT contain
+       `include(.../linaro-arm.cmake)` near the top, the conf did not
+       propagate for that package, regardless of what the profile says:
+           sudo cat /root/.conan2/p/b/abseid*/b/build/Release/generators/conan_toolchain.cmake \
+               | grep -E "user_toolchain|linaro|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER" | head -20
+
+    3. If the toolchain is missing only for some packages, force it via
+       -c on the CLI (bypasses any [conf] pattern-matching pitfalls).
+       Run a fresh install with -c, count markers, and compare to [8e]:
+           sudo docker run --rm \
+               -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+               -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+               -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+               grpc-tc-mirror-arm bash -lc '
+                   conan install --requires=grpc/1.78.1 \
+                       -pr:h=$PROFILE -pr:b=$PROFILE_BUILD \
+                       --build=missing --no-remote \
+                       -s build_type=Release \
+                       -o "*/*:shared=True" \
+                       -c "*:tools.cmake.cmaketoolchain:user_toolchain=[\"/work/conan-recipes/profiles/toolchains/linaro-arm.cmake\"]" \
+                       2>&1 | tee /tmp/cli-conf.log | grep -c "==LINARO-ARM-TC=="
+               '
+       If the count jumps from 2 → 7 with -c on CLI but stays at 2 with
+       just the profile, the workaround is to inject the same -c into
+       run_test_grpc.sh Step 2 (and Step 3 for the deployer install).
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
