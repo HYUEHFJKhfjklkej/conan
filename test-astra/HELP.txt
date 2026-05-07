@@ -221,6 +221,64 @@ step and send it back so the next step can be picked.
         "
 
 
+    [g] abseil-specific failure (int128.cc.o + cctz/time_zone_*.cc.o):
+        This is the classic "host profile leaked x86 flags" or "cppstd/libcxx
+        wrong" signature. Run these in order and stop on the first FAIL.
+
+        1. The first real compiler error (not the make Error 1 cascade):
+              grep -m 1 -B 2 -A 6 "error:" /tmp/run.log
+
+        2. Confirm the host profile is the ARM one and has no x86 leftovers
+           (no -m64, no -march=core2, libcxx=libstdc++11, cppstd=17):
+              sudo docker run --rm grpc-tc-mirror-arm bash -c '
+                  conan profile show \
+                      -pr:h /work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+                      -pr:b /work/conan-recipes/profiles/lin-gcc84-x86_64
+              ' | grep -E "arch=|compiler=|libcxx=|cppstd=|cflags|cxxflags"
+
+        3. Sanity-check that the cross-gcc actually supports __int128
+           (this is what int128.cc.o needs; if it does not, abseil falls
+           back to a soft impl — but only if HAVE_INTRINSIC_INT128 is
+           detected correctly):
+              sudo docker run --rm grpc-tc-mirror-arm bash -c '
+                  GCC=/opt/linaro-arm-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc;
+                  SYSROOT=/opt/linaro-arm-7.5.0/sysroot-glibc-linaro-2.25-2019.12-rc1-arm-linux-gnueabihf;
+                  echo "__SIZEOF_INT128__:";
+                  echo "" | $GCC --sysroot=$SYSROOT -dM -E -x c - | grep INT128;
+                  echo "C++17 chrono compile test:";
+                  echo "#include <chrono>
+                  int main(){ return std::chrono::seconds(1).count();}" \
+                      | $GCC --sysroot=$SYSROOT -std=c++17 -x c++ - -o /tmp/chr 2>&1 | head -20
+              '
+
+        4. Replay just abseil with -j1 to get a clean, sequential error log
+           (parallel make hides the first failure under noise):
+              sudo docker run --rm grpc-tc-mirror-arm bash -lc "
+                  conan create /work/conan-recipes/abseil --version=20250127.0 \
+                      -pr:h /work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+                      -pr:b /work/conan-recipes/profiles/lin-gcc84-x86_64 \
+                      --build=missing --no-remote \
+                      -s build_type=Release \
+                      -o '*/*:shared=True' \
+                      -c tools.build:jobs=1 2>&1 | tee /tmp/abseil-arm.log | tail -40
+              "
+              # Then: grep -m 1 -B 2 -A 6 "error:" /tmp/abseil-arm.log
+
+        Common verdicts:
+        - "unrecognized command line option '-m64'" / "-march=core2" →
+          host profile copied from x86_64 without scrubbing flags.
+          Fix: edit profiles/lin-gcc75-arm-linaro, drop the x86 cflags.
+        - "fatal error: bits/c++config.h" / "no such file" →
+          sysroot path missing or wrong in user_toolchain. See [8d].
+        - "'__int128' is not supported on this target" →
+          armv7hf gcc 7.5 should have it; if missing, the toolchain is
+          mis-detected. Re-run [c] in step [8] and verify -dumpversion
+          prints 7.5.0, not the host gcc.
+        - "C++17 not supported" / "<filesystem>: No such file" →
+          host profile lacks `compiler.cppstd=17` or
+          `compiler.libcxx=libstdc++11`.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
