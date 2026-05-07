@@ -190,6 +190,18 @@ step and send it back so the next step can be picked.
         '
 
 
+    [e] After a build run, check whether linaro-arm.cmake actually
+        loaded for each package. The toolchain prints a unique marker
+        "==LINARO-ARM-TC==" when CMake includes it. Count occurrences
+        and look for which packages did NOT load it:
+        grep -c "==LINARO-ARM-TC==" /tmp/run.log
+        grep -B 1 "Building CXX" /tmp/run.log | grep -E "Building CXX|LINARO-ARM-TC" | head -40
+
+        If the marker is missing right before the abseil build banner,
+        Conan generated a conan_toolchain.cmake without our user_toolchain
+        for that package — even though the host profile says it should.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
