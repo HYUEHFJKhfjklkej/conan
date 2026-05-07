@@ -361,23 +361,57 @@ step and send it back so the next step can be picked.
 
     3. If the toolchain is missing only for some packages, force it via
        -c on the CLI (bypasses any [conf] pattern-matching pitfalls).
-       Run a fresh install with -c, count markers, and compare to [8e]:
+
+       Three traps to avoid (learned the hard way 2026-05-07):
+
+       a) `--build=missing` only rebuilds packages whose binary is
+          missing. After a previous failed run, abseil's binary is
+          ALSO missing, BUT Conan may consider the source-export and
+          recipe up-to-date and skip CMake configure. To guarantee a
+          fresh CMake run for the failing package, remove it first:
+              conan remove "abseil/*" -c
+
+       b) `tee /tmp/cli-conf.log` writes inside the --rm container —
+          gone the moment the build exits. Bind-mount a host dir
+          (-v "$(pwd):/host") and write the log there.
+
+       c) `bash -lc '...'` opens a login shell which prints
+          `mesg: ttyname failed: Inappropriate ioctl for device`.
+          Use `bash -c '...'`.
+
+       Final form:
+           mkdir -p "$(pwd)/conan-cache" "$(pwd)/output-arm"
            sudo docker run --rm \
+               -v "$(pwd)/conan-cache:/root/.conan2" \
                -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+               -v "$(pwd):/host" \
                -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
                -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
-               grpc-tc-mirror-arm bash -lc '
+               grpc-tc-mirror-arm bash -c '
+                   conan remove "abseil/*" -c 2>&1 | tail -3;
                    conan install --requires=grpc/1.78.1 \
                        -pr:h=$PROFILE -pr:b=$PROFILE_BUILD \
                        --build=missing --no-remote \
                        -s build_type=Release \
                        -o "*/*:shared=True" \
                        -c "*:tools.cmake.cmaketoolchain:user_toolchain=[\"/work/conan-recipes/profiles/toolchains/linaro-arm.cmake\"]" \
-                       2>&1 | tee /tmp/cli-conf.log | grep -c "==LINARO-ARM-TC=="
+                       2>&1 | tee /host/cli-conf.log | tail -40;
+                   echo "=== LINARO-ARM-TC count ===";
+                   grep -c "==LINARO-ARM-TC==" /host/cli-conf.log
                '
-       If the count jumps from 2 → 7 with -c on CLI but stays at 2 with
-       just the profile, the workaround is to inject the same -c into
-       run_test_grpc.sh Step 2 (and Step 3 for the deployer install).
+
+       Interpreting the count:
+       - count >= 3 (abseil + c-ares + zlib at minimum) → -c on CLI
+         pushes the toolchain to the transitive abseil. Workaround:
+         inject the same -c into run_test_grpc.sh Step 2 and Step 3.
+       - count == 2 (still only c-ares + zlib) → CLI -c does NOT
+         help either. The bug is deeper than [conf] pattern parsing
+         (Conan 2.27.1 strips user_toolchain from a transitive node
+         under `--requires=grpc/...` regardless of where it comes
+         from). Move on to step 4.
+       - count == 0 → conan remove did not actually remove (check
+         `tail -3` of the remove output) OR build crashed before
+         CMake configure (check `tail -40` of cli-conf.log).
 
 
 [X] Troubleshooting — docker pull fails on x509:
