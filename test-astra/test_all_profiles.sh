@@ -161,21 +161,29 @@ echo "[INFO] platform:   ${PLATFORM_FLAG:-<host native>}"
 if ! command -v docker >/dev/null; then
     fail "docker not on PATH"; exit 2
 fi
-if ! sudo docker info >/dev/null 2>&1; then
-    fail "sudo docker info failed"; exit 2
+# Auto-detect whether docker needs sudo (Astra: yes, Mac: usually no).
+if docker info >/dev/null 2>&1; then
+    DOCKER="docker"
+elif sudo -n docker info >/dev/null 2>&1; then
+    DOCKER="sudo docker"
+else
+    fail "docker daemon not reachable as user nor via passwordless sudo"
+    fail "  → on Astra: run with sudo, or configure passwordless sudo for docker"
+    fail "  → on Mac: ensure Docker Desktop is running and user can call docker"
+    exit 2
 fi
-pass "docker daemon reachable"
+pass "docker daemon reachable (via: $DOCKER)"
 
 # Pull base image (skip silently when LOCAL_BASE is a local image).
 hdr "1. Base image $BASE_IMAGE"
 if [[ -n "${LOCAL_BASE:-}" ]]; then
-    if sudo docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+    if $DOCKER image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
         pass "local base image present"
     else
         fail "LOCAL_BASE='$LOCAL_BASE' not found locally"; exit 1
     fi
 else
-    if sudo docker pull $PLATFORM_FLAG "$BASE_IMAGE" >/tmp/pull-$ARCH.log 2>&1; then
+    if $DOCKER pull $PLATFORM_FLAG "$BASE_IMAGE" >/tmp/pull-$ARCH.log 2>&1; then
         pass "pulled"
     else
         fail "pull failed; see /tmp/pull-$ARCH.log"
@@ -187,7 +195,7 @@ fi
 # Build the grpc-tc-mirror image on top of the base.
 hdr "2. docker build $IMAGE_TAG"
 cd "$ROOT_DIR"
-if sudo docker build $PLATFORM_FLAG \
+if $DOCKER build $PLATFORM_FLAG \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
         -f Dockerfile.grpc-tc-mirror \
         -t "$IMAGE_TAG" \
@@ -239,7 +247,7 @@ if [[ -n "$TC_PATH" ]]; then
     DOCKER_ARGS+=(-e "CONAN_USER_TOOLCHAIN=$TC_PATH")
 fi
 
-if sudo docker run "${DOCKER_ARGS[@]}" "$IMAGE_TAG" bash -c '
+if $DOCKER run "${DOCKER_ARGS[@]}" "$IMAGE_TAG" bash -c '
         ./test-astra/run_test_grpc.sh 2>&1 | tee /host/run.log
         rc=$?
         echo ""
