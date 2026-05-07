@@ -1,3 +1,6 @@
+ sudo docker run --rm grpc-tc-mirror-armv7hf:latest \                                                                                         
+      grep -n "settings.arch" /work/conan-recipes/abseil/conanfile.py
+                                                                          
 grpc-tc-mirror — runbook
 ========================
 
