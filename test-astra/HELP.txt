@@ -365,11 +365,15 @@ step and send it back so the next step can be picked.
        Three traps to avoid (learned the hard way 2026-05-07):
 
        a) `--build=missing` only rebuilds packages whose binary is
-          missing. After a previous failed run, abseil's binary is
-          ALSO missing, BUT Conan may consider the source-export and
-          recipe up-to-date and skip CMake configure. To guarantee a
-          fresh CMake run for the failing package, remove it first:
-              conan remove "abseil/*" -c
+          missing. After a previous failed run, Conan may consider
+          the source-export and recipe up-to-date and skip CMake
+          configure. To guarantee a fresh CMake run for the failing
+          package, ADD an explicit `--build=abseil*` (Conan accepts
+          multiple --build patterns).
+          DO NOT use `conan remove "abseil/*" -c` — that nukes the
+          recipe too, and with --no-remote the version range
+          `abseil/[>=20230802.1 <=20250127.0]` then fails to
+          resolve, killing the whole graph before any CMake runs.
 
        b) `tee /tmp/cli-conf.log` writes inside the --rm container —
           gone the moment the build exits. Bind-mount a host dir
@@ -388,10 +392,9 @@ step and send it back so the next step can be picked.
                -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
                -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
                grpc-tc-mirror-arm bash -c '
-                   conan remove "abseil/*" -c 2>&1 | tail -3;
                    conan install --requires=grpc/1.78.1 \
                        -pr:h=$PROFILE -pr:b=$PROFILE_BUILD \
-                       --build=missing --no-remote \
+                       --build=missing --build="abseil*" --no-remote \
                        -s build_type=Release \
                        -o "*/*:shared=True" \
                        -c "*:tools.cmake.cmaketoolchain:user_toolchain=[\"/work/conan-recipes/profiles/toolchains/linaro-arm.cmake\"]" \
