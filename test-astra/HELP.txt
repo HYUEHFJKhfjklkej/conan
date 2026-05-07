@@ -324,10 +324,14 @@ step and send it back so the next step can be picked.
        The trailing `|| true` lets the build fail without aborting
        the script; the bind-mounted cache survives. Then on host:
 
-           sudo find "$(pwd)/conan-cache/p/b" -name 'conan_toolchain.cmake' \
-               -path '*absei*' 2>/dev/null
-           # plug the path that find prints:
-           sudo cat "$(pwd)/conan-cache/p/b/abseid<hash>/b/build/Release/generators/conan_toolchain.cmake" \
+           # Capture the path from find (works regardless of the
+           # actual hash — the abseil prefix may be abseidNNN, abseiZNNN,
+           # absei2NNN, etc., depending on Conan settings):
+           TC=$(sudo find "$(pwd)/conan-cache/p/b" \
+                   -name 'conan_toolchain.cmake' -path '*absei*' \
+                   2>/dev/null | head -1)
+           echo "$TC"
+           sudo cat "$TC" \
                | grep -E "user_toolchain|linaro|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER" | head -20
 
        Quick alternative without re-running (if you have a still-running
