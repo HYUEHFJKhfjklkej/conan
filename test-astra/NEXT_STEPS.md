@@ -99,9 +99,17 @@ Conan 2.27.1 **не** пропагирует `[conf]` (и `-c` на CLI) к тр
 нодам — это баг Conan, не профиль. `self.conf.get(...)` в `generate()`
 транзитивного пакета возвращает пусто.
 
+**4b.0 подтвердил это эмпирически (2026-05-07 ~14:00):** из 6 build
+folder'ов abseil только один (top-level) имел `CMAKE_C_COMPILER` ==
+linaro-gcc, остальные 5 — `/usr/bin/c++` (Stretch g++ 6.3 → policy_checks.h).
+
 Workaround: читать путь к toolchain из **переменной окружения**, которая
 видна всем процессам в контейнере (включая транзитивные builds), и
 явно вписывать его в CMakeToolchain.
+
+**Статус: 4b.1 + 4b.3 уже сделаны в коммите `de4802b`** (5 файлов:
+Dockerfile.grpc-tc-mirror, abseil/protobuf/re2/grpc conanfile.py).
+Осталось: 4b.2 (запуск с env) + 4b.4 (verify).
 
 ### 4b.0. Pre-flight: какой компилятор CMake реально подцепил для упавшей abseil
 
@@ -126,59 +134,83 @@ sudo find "$(pwd)/conan-cache/p/b" -path '*absei*' -name CMakeCache.txt \
   макрос). Иной патч — копаем сам `policy_checks.h:59` в abseil
   source, проверяем `__GNUC__` evaluation.
 
-### 4b.1. Добавить в Dockerfile.grpc-tc-mirror
+### 4b.1. ✅ Сделано (`de4802b`) — Dockerfile
 
-```dockerfile
-# Перед `CMD`:
-ENV CONAN_USER_TOOLCHAIN=""
-```
+Добавлен `ENV CONAN_USER_TOOLCHAIN=""` в `Dockerfile.grpc-tc-mirror`.
+По-умолчанию пусто — x86_64 native builds не затронуты.
 
-(значение по-умолчанию пустое — для x86_64 builds; ARM-сборки
-переопределяют через `-e CONAN_USER_TOOLCHAIN=...`)
-
-### 4b.2. Передавать env при запуске для ARM
+### 4b.2. Пересобрать docker image и запустить с env для ARM
 
 ```bash
+cd ~/conan-master
+git pull
+
+# Пересобираем образ — он подхватит и новый ENV, и патчи рецептов.
+sudo docker build \
+    --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
+    -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+
+# Запускаем с CONAN_USER_TOOLCHAIN — тогда env-fallback в generate() сработает.
+cd test-astra
 sudo docker run --rm \
+    -v "$(pwd)/conan-cache:/root/.conan2" \
+    -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+    -v "$(pwd):/host" \
     -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake \
     -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
     -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
-    -v "$(pwd)/conan-cache:/root/.conan2" \
-    -v "$(pwd)/output-arm:/work/conan-recipes/output" \
-    grpc-tc-mirror-arm
+    grpc-tc-mirror-arm bash -c '
+        ./test-astra/run_test_grpc.sh 2>&1 | tee /host/run-final.log;
+        echo "=== LINARO-ARM-TC count ===";
+        grep -c "==LINARO-ARM-TC==" /host/run-final.log
+    '
 ```
 
-Аналогично — в `test_arm_cross.sh` Step 4 добавить `-e CONAN_USER_TOOLCHAIN=$PROFILE_DIR/toolchains/linaro-arm.cmake`.
+При успехе — ещё подкрутить `test-astra/test_arm_cross.sh` чтобы
+проброс `-e CONAN_USER_TOOLCHAIN=...` шёл автоматически из `case ARCH=arm`.
 
-### 4b.3. Patch `generate()` в каждом из 5 рецептов с зависимостями
+### 4b.3. ✅ Сделано (`de4802b`) — patch `generate()` в рецептах
 
-Файлы: `abseil/conanfile.py`, `re2/conanfile.py`, `protobuf/conanfile.py`,
-`openssl/conanfile.py`, `grpc/conanfile.py` (zlib и c-ares работают сами,
-их можно не трогать; но для единообразия — тоже патчить).
-
-Шаблон правки — добавить после `tc = CMakeToolchain(self)` и до `tc.generate()`:
+Файлы: `abseil/conanfile.py`, `re2/conanfile.py`,
+`protobuf/conanfile.py`, `grpc/conanfile.py`.
+Шаблон правки (вставлен перед `tc.generate()`):
 
 ```python
-        # Workaround Conan 2.27.1: *:user_toolchain в [conf] не доезжает
-        # до транзитивных deps. Читаем путь из env как fallback.
         _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
         if _user_tc:
             tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
 ```
 
-(`os` уже импортируется в каждом рецепте.)
+`openssl/` использует `AutotoolsToolchain` (не CMakeToolchain) и читает
+`CC`/`CXX` из `[buildenv]` — не патчился. Если транзитивный openssl-под-grpc
+позже сломается на той же причине — патчим отдельно.
 
-### 4b.4. Проверка
+### 4b.4. Проверка (после 4b.2)
 
-После правки: пересобрать docker image, прогнать `test_arm_cross.sh build arm`,
-проверить count:
+После запуска:
 
 ```bash
-grep -c "==LINARO-ARM-TC==" /tmp/run.log
+# count маркеров (ожидаем >= 7 — по одному на каждый recipe в графе):
+grep -c "==LINARO-ARM-TC==" run-final.log
+
+# Артефакты:
+ls -la output-arm/*.nupkg     # ожидаем 7 файлов
+
+# Если что-то упало — компилятор по факту в каждом build:
+sudo find "$(pwd)/conan-cache/p/b" -name CMakeCache.txt \
+    -exec grep -E "CMAKE_C_COMPILER:" {} + | sort -u
 ```
 
-Ожидание: count == 7 для нового запуска (по одному маркеру на каждый
-recipe в графе). Если так — должны получиться 7 `.nupkg` в `output-arm/`.
+Развилка:
+- ✅ count >= 7 + 7 .nupkg → задача закрыта. Дальше — поправить
+  `test_arm_cross.sh` (auto-set `-e CONAN_USER_TOOLCHAIN`) и почистить
+  HELP.txt от диагностики которая больше не нужна.
+- ❌ count всё ещё 2 → API `tc.blocks["user_toolchain"].values["paths"]`
+  не работает в Conan 2.27.1 как ожидалось. Альтернативы:
+  - использовать `tc.cache_variables["CMAKE_PROJECT_INCLUDE"]` с
+    подменой пути на linaro-arm.cmake;
+  - сделать profile-level `[conf]` через python_extension;
+  - ручной patch `conan_toolchain.cmake` после генерации.
 
 ---
 
