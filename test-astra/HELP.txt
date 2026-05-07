@@ -417,14 +417,77 @@ step and send it back so the next step can be picked.
        - count >= 3 (abseil + c-ares + zlib at minimum) → -c on CLI
          pushes the toolchain to the transitive abseil. Workaround:
          inject the same -c into run_test_grpc.sh Step 2 and Step 3.
-       - count == 2 (still only c-ares + zlib) → CLI -c does NOT
-         help either. The bug is deeper than [conf] pattern parsing
-         (Conan 2.27.1 strips user_toolchain from a transitive node
-         under `--requires=grpc/...` regardless of where it comes
-         from). Move on to step 4.
-       - count == 0 → conan remove did not actually remove (check
-         `tail -3` of the remove output) OR build crashed before
-         CMake configure (check `tail -40` of cli-conf.log).
+       - count == 2 (still only c-ares + zlib) OR count == 0 with
+         abseil clearly being rebuilt (new hash in the policy_checks
+         error) → CLI -c does NOT help either. The bug is deeper
+         than [conf] pattern parsing (Conan 2.27.1 strips
+         user_toolchain from a transitive node under
+         `--requires=grpc/...` regardless of where conf comes from).
+         Move on to step 4.
+
+    4. Last resort — build each package as a TOP-LEVEL requires.
+       The consumer node always receives [conf]/`-c` correctly
+       (that's what commit e9bdb19 proved with [8f]). So instead of
+       one `--requires=grpc/...` that hides 6 nodes as transitive,
+       build all 7 as separate consumer installs in dep-tree order.
+       Each gets the toolchain → all binaries land in the cache →
+       a final `--requires=grpc/...` then finds everything ready
+       and does not rebuild anything.
+
+           sudo docker run --rm \
+               -v "$(pwd)/conan-cache:/root/.conan2" \
+               -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+               -v "$(pwd):/host" \
+               -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+               -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+               grpc-tc-mirror-arm bash -c '
+                   for p in zlib abseil c-ares re2 protobuf openssl grpc; do
+                       case "$p" in
+                           zlib) v=1.3.1 ;; abseil) v=20250127.0 ;;
+                           c-ares) v=1.34.6 ;; re2) v=20251105 ;;
+                           protobuf) v=5.29.6 ;; openssl) v=3.4.5 ;;
+                           grpc) v=1.78.1 ;;
+                       esac
+                       conan export /work/conan-recipes/$p --version=$v 2>&1 | tail -1;
+                   done;
+                   : > /host/cli-conf.log;
+                   for ref in zlib/1.3.1 abseil/20250127.0 c-ares/1.34.6 \
+                              re2/20251105 protobuf/5.29.6 openssl/3.4.5 \
+                              grpc/1.78.1; do
+                       echo "=== Building $ref as top-level ===" | tee -a /host/cli-conf.log;
+                       conan install --requires="$ref" \
+                           -pr:h=$PROFILE -pr:b=$PROFILE_BUILD \
+                           --build=missing --no-remote \
+                           -s build_type=Release \
+                           -o "*/*:shared=True" \
+                           2>&1 | tee -a /host/cli-conf.log | tail -5;
+                   done;
+                   echo "=== LINARO-ARM-TC count ===";
+                   grep -c "==LINARO-ARM-TC==" /host/cli-conf.log
+               '
+
+       Expected: count == 7 (each top-level install runs CMake
+       configure once, prints the marker once). If yes, follow up
+       with the deployer install to produce .nupkg:
+
+           sudo docker run --rm \
+               -v "$(pwd)/conan-cache:/root/.conan2" \
+               -v "$(pwd)/output-arm:/work/conan-recipes/output" \
+               -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+               -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+               grpc-tc-mirror-arm bash -c '
+                   conan install --requires=grpc/1.78.1 \
+                       -pr:h=$PROFILE -pr:b=$PROFILE_BUILD \
+                       --no-remote -o "*/*:shared=True" \
+                       --deployer=/work/conan-recipes/extensions/deployers/legacy_nupkg.py \
+                       --deployer-folder=/work/conan-recipes/output
+               '
+           ls -la output-arm/*.nupkg     # expect 7 files
+
+       If the top-level loop builds all 7 successfully, the proper
+       fix is to rewrite run_test_grpc.sh Step 2 to do exactly this
+       loop instead of one --requires=grpc install — same output
+       (.nupkg via deployer Step 3 unchanged).
 
 
 [X] Troubleshooting — docker pull fails on x509:
