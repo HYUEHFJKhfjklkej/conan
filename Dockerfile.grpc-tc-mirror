@@ -47,4 +47,12 @@ RUN /opt/python/bin/python3 -m pip install --no-index \
 
 ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
 
+# WORKAROUND for Conan 2.27.1 bug: *:tools.cmake.cmaketoolchain:user_toolchain
+# in [conf] does not propagate to transitive deps under --requires=grpc/...
+# Recipes (abseil, re2, protobuf, grpc) read this env var in generate() and
+# inject the toolchain path into tc.blocks["user_toolchain"]. Empty by
+# default so x86_64 native builds are unaffected; ARM cross-builds set
+# this via -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake
+ENV CONAN_USER_TOOLCHAIN=""
+
 CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]

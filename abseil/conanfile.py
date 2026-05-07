@@ -106,6 +106,9 @@ class AbseilConan(ConanFile):
         if self.settings.os == "Windows" and self.settings.compiler in ["msvc", "clang"] and self.settings.get_safe("compiler.runtime"):
             runtime = str(self.settings.compiler.runtime)
             tc.cache_variables["ABSL_MSVC_STATIC_RUNTIME"] = runtime == "static"
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
         tc.generate()
 
     def build(self):

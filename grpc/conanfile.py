@@ -248,6 +248,9 @@ class GrpcConan(ConanFile):
         if self._supports_libsystemd:
             tc.cache_variables["gRPC_USE_SYSTEMD"] = self.options.with_libsystemd
 
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
         tc.generate()
 
         cmake_deps = CMakeDeps(self)

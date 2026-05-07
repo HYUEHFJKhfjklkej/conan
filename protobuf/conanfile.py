@@ -179,6 +179,9 @@ class ProtobufConan(ConanFile):
             tc.extra_exelinkflags.append("-Wl,--disable-new-dtags")
             tc.extra_sharedlinkflags.append("-Wl,--disable-new-dtags")
 
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
         tc.generate()
 
         deps = CMakeDeps(self)

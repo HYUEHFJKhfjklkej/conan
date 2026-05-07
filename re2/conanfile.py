@@ -100,6 +100,9 @@ class Re2Conan(ConanFile):
     def generate(self):
         tc = CMakeToolchain(self)
         tc.variables["RE2_BUILD_TESTING"] = False
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc:
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
         tc.generate()
 
         deps = CMakeDeps(self)
