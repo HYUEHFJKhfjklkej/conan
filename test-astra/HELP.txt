@@ -202,6 +202,25 @@ step and send it back so the next step can be picked.
         for that package — even though the host profile says it should.
 
 
+    [f] Show what CMake actually wrote into CMakeCache.txt as the
+        compiler (the only place make/ninja read it from). If the
+        toolchain runs but build still fails, this is the deciding
+        evidence.
+        sudo docker run --rm grpc-tc-mirror-arm bash -lc "
+            cd /work/conan-recipes;
+            conan export abseil --version=20250127.0 2>&1 | tail -3;
+            conan install --requires=abseil/20250127.0 \
+                -pr:h /work/conan-recipes/profiles/lin-gcc75-arm-linaro \
+                -pr:b /work/conan-recipes/profiles/lin-gcc84-x86_64 \
+                --build=missing --no-remote \
+                -s build_type=Release \
+                -o '*/*:shared=True' 2>&1 | tail -15 || true;
+            echo '=== CMakeCache.txt compiler vars ===';
+            find /root/.conan2/p/b -path '*absei*' -name CMakeCache.txt \
+                -exec grep -E 'CMAKE_C_COMPILER:|CMAKE_CXX_COMPILER:|CMAKE_AR:|CMAKE_SYSROOT:' {} +
+        "
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
