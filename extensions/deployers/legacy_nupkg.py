@@ -23,7 +23,24 @@ LEGACY_NAME_MAP = {"gtest": "googletest"}
 
 # Маппинг ОС: Conan settings.os → legacy os-короткое
 OS_SHORT = {"Linux": "lin", "Windows": "win", "Macos": "mac"}
-ARCH_SHORT = {"x86_64": "x64", "x86": "x86", "armv8": "arm64", "armv7hf": "arm"}
+
+# Arch shorthand differs per OS — derived from real CI artifact naming
+# observed in TeamCity (see photo_index.md, photo_2026-04-27_17-31-50.jpg):
+#   googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg          (Linux: full arch)
+#   googletest.lin.gcc84.shared.i686.1.15.2.nupkg            (Linux: x86 → i686)
+#   googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg      (Linux: armv7hf → arm)
+#   googletest.lin.gcc75.shared.arm64-linaro.1.15.2.nupkg    (Linux: armv8   → arm64)
+#   googletest.win.v142.shared.x64.1.15.2.nupkg              (Windows: x86_64 → x64)
+#   googletest.win.v142.shared.x86.1.15.2.nupkg              (Windows: x86)
+ARCH_SHORT_LINUX   = {"x86_64": "x86_64", "x86": "i686", "armv7hf": "arm", "armv8": "arm64"}
+ARCH_SHORT_WINDOWS = {"x86_64": "x64",    "x86": "x86"}
+
+
+def _arch_short(arch, os_name):
+    arch = str(arch)
+    if os_name == "Windows":
+        return ARCH_SHORT_WINDOWS.get(arch, arch)
+    return ARCH_SHORT_LINUX.get(arch, arch)
 
 KEEPDIR_CONTENT = (
     "#\n"
@@ -35,20 +52,54 @@ KEEPDIR_CONTENT = (
 
 
 def _short_compiler(compiler, version):
-    """msvc 192 -> v142, gcc -> gcc (no version), other -> compiler+digits.
+    """Map (compiler, version) → CI-style short form.
 
-    The bare 'gcc' form matches the legacy CI naming
-    (<pkg>.lin.gcc.shared.x64.<ver>.nupkg). The CI-side toolchain is fixed
-    per build configuration, so the gcc version isn't encoded in the file
-    name — only in the build-config that produces it. Deviating from this
-    convention would force every consumer's packages.config to change.
+    Real CI artifact names from TeamCity (see photo_index.md):
+      gcc 8   → 'gcc8'    (e.g. abseil.lin.gcc8.static.x86_64.20250127.0.nupkg)
+      gcc 8.4 → 'gcc84'   (e.g. googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg)
+      gcc 7.5 → 'gcc75'   (e.g. googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg)
+      gcc 9.3 → 'gcc93'   (e.g. googletest.lin.gcc93.shared.x64-e3300.1.15.2.nupkg)
+      msvc 142 → 'v142'   (e.g. googletest.win.v142.shared.x64.1.15.2.nupkg)
+
+    Astra is handled separately — see _resolve_os_short(): the Astra CI
+    artifact (googletest.astra.gcc.static.x86_64) drops the gcc version
+    entirely. Caller must pass LEGACY_OS_SHORT=astra env to opt in.
     """
     if compiler == "msvc":
         return f"v{version}"
-    if compiler == "gcc":
-        return "gcc"
     ver = str(version).replace(".", "").replace("_", "")
+    if compiler == "gcc":
+        return f"gcc{ver}" if ver else "gcc"
     return f"{compiler}{ver}"
+
+
+def _resolve_os_short(os_name):
+    """Resolve OS shortname, allowing env override for Astra (and similar).
+
+    Conan doesn't natively distinguish AstraLinux from generic Linux, so the
+    orchestrator script (test_all_profiles.sh) sets LEGACY_OS_SHORT=astra
+    when building with the astra-gcc profile. Without override, falls back
+    to standard Linux/Windows/Macos mapping.
+    """
+    override = os.environ.get("LEGACY_OS_SHORT", "").strip().lower()
+    if override:
+        return override
+    return OS_SHORT.get(os_name, os_name.lower())
+
+
+def _resolve_arch_with_toolchain(arch, os_name):
+    """Append '-linaro' suffix when the user_toolchain points to a Linaro
+    cmake file — matches CI naming for cross-compiled builds:
+      googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg
+      googletest.lin.gcc75.shared.arm64-linaro.1.15.2.nupkg
+    Detection is by env CONAN_USER_TOOLCHAIN (set per-arch by the
+    orchestrator script), so native x86_64/i686 builds are unaffected.
+    """
+    base = _arch_short(arch, os_name)
+    user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "")
+    if user_tc and "linaro" in user_tc.lower():
+        return f"{base}-linaro"
+    return base
 
 
 def _find_debug_package_path(name, version):
@@ -228,7 +279,7 @@ def deploy(graph, output_folder, **kwargs):
         os_name = str(s.os)
         compiler = str(s.compiler)
         compiler_version = str(s.compiler.version)
-        arch = ARCH_SHORT.get(str(s.arch), str(s.arch))
+        arch = _resolve_arch_with_toolchain(s.arch, os_name)
         build_type = str(s.build_type)
 
         try:
@@ -237,8 +288,12 @@ def deploy(graph, output_folder, **kwargs):
             shared = False
         linkage = "shared" if shared else "static"
 
-        os_short = OS_SHORT.get(os_name, os_name.lower())
-        compiler_short = _short_compiler(compiler, compiler_version)
+        os_short = _resolve_os_short(os_name)
+        # Astra CI convention: drop gcc version (astra.gcc.static.x86_64).
+        if os_short == "astra" and compiler == "gcc":
+            compiler_short = "gcc"
+        else:
+            compiler_short = _short_compiler(compiler, compiler_version)
         lib_suffix = f"{os_short}-{compiler_short}-{linkage}-{arch}"
         variant_dir = f"{os_short}.{compiler_short}.{linkage}.{arch}"
         targets_name = f"{legacy_name}.{os_short}.{compiler_short}.{linkage}.{arch}"

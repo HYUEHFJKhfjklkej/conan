@@ -11,5 +11,16 @@ build_type=Release
 cmake/3.25.1
 perl/5.36.0
 
+[buildenv]
+PATH=+(path)/opt/linaro-aarch64-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_aarch64-linux-gnu/bin
+CC=aarch64-linux-gnu-gcc
+CXX=aarch64-linux-gnu-g++
+AR=aarch64-linux-gnu-ar
+AS=aarch64-linux-gnu-as
+LD=aarch64-linux-gnu-ld
+NM=aarch64-linux-gnu-nm
+RANLIB=aarch64-linux-gnu-ranlib
+STRIP=aarch64-linux-gnu-strip
+
 [conf]
-tools.cmake.cmaketoolchain:toolchain_file=/opt/linaro/aarch64-toolchain.cmake
+*:tools.cmake.cmaketoolchain:user_toolchain=["/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake"]
