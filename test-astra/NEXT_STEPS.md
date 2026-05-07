@@ -253,6 +253,37 @@ sudo find "$(pwd)/conan-cache/p/b" -path '*absei*' -name conan_toolchain.cmake \
 - Только пустой комментарий, без `include` → API `tc.blocks` не
   принимает override. Переходим к 4b.6.
 
+### 4b.5b. Если 4b.5 проверка 2 показала include(linaro) ✅, но `-m64` ломает ARM build
+
+Подтверждено 2026-05-07 ~15:00: `==LINARO-ARM-TC==` появилось,
+`The CXX compiler identification is GNU 7.5.0`, но build упал на
+```
+-- Conan toolchain: Defining architecture flag: -m64
+arm-linux-gnueabihf-g++: error: unrecognized command line option '-m64'
+```
+
+Причина: env-fallback из 4b.3 пробрасывал linaro-toolchain
+**универсально**, в т.ч. в build-context abseil (нужен для protoc как
+build-tool на x86_64). В build-context `settings.arch=x86_64` →
+ArchitectureBlock вписывает `-m64` → `CMAKE_C_COMPILER` мы перебили
+на ARM-cross → `arm-linux-gnueabihf-g++ -m64` → fail.
+
+**Fix:** применять env-fallback только когда target arch — ARM.
+Сделано в коммите после `de4802b`: добавлен `arch` check в условие
+во всех 4 recipes:
+
+```python
+        _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
+        if _user_tc and str(self.settings.arch) in (
+                "armv7", "armv7hf", "armv7s",
+                "armv8", "armv8_32", "armv8.3", "arm64ec"):
+            tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
+```
+
+После: пересобрать образ (на этот раз можно без `--no-cache`,
+потому что патч новых строк в `*/conanfile.py` ломает кеш слоя
+`COPY <pkg>`), запустить 4b.2 заново.
+
 ### 4b.6. Жёсткий patch: дописывать `include(...)` в conan_toolchain.cmake после tc.generate()
 
 Если 4b.5 показала что override через `tc.blocks` не работает, заменить

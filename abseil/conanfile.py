@@ -107,7 +107,7 @@ class AbseilConan(ConanFile):
             runtime = str(self.settings.compiler.runtime)
             tc.cache_variables["ABSL_MSVC_STATIC_RUNTIME"] = runtime == "static"
         _user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "").strip()
-        if _user_tc:
+        if _user_tc and str(self.settings.arch) in ("armv7", "armv7hf", "armv7s", "armv8", "armv8_32", "armv8.3", "arm64ec"):
             tc.blocks["user_toolchain"].values["paths"] = [_user_tc]
         tc.generate()
 
