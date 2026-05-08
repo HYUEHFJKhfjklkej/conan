@@ -1,4 +1,12 @@
- sudo docker run --rm grpc-tc-mirror-armv7hf:latest \                                                                                         
+ sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
+      bash -c '                                                                                                                                
+          ls -la /opt/linaro-arm64-7.5.0/                                                                                                      
+          echo "---"                                                                                                                           
+          GCC=/opt/linaro-arm64-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-gcc                        
+          $GCC -print-sysroot                                                                                                                  
+          $GCC --version | head -1                                                                                                             
+      '       
+sudo docker run --rm grpc-tc-mirror-armv7hf:latest \                                                                                         
       grep -n "settings.arch" /work/conan-recipes/abseil/conanfile.py
                                                                           
 grpc-tc-mirror — runbook
