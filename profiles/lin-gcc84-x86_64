@@ -17,12 +17,23 @@ perl/5.36.0
 # profile that exports arm-linux-gnueabihf-* via [buildenv], those
 # values otherwise leak into the build context — protoc would link
 # with arm-ld and fail. Pin native toolchain explicitly.
+#
+# We point at /usr/local/gcc-8.4/bin/gcc instead of plain `gcc` because
+# the arm/arm64 base images (gcc75-build-arm:0.1.0,
+# gcc75-build-arm64:0.1.0) ship Debian Stretch system gcc 6.3 as the
+# default `gcc` on PATH, and abseil 20250127 hard-rejects gcc < 7 via
+# policy_checks.h. Dockerfile.grpc-tc-mirror copies gcc-8.4 from the
+# x86_64 CI image into /usr/local/gcc-8.4, so this absolute path
+# resolves the same way in arm and x86_64 mirrors.
 [buildenv]
-CC=gcc
-CXX=g++
+CC=/usr/local/gcc-8.4/bin/gcc
+CXX=/usr/local/gcc-8.4/bin/g++
 AR=ar
 AS=as
 LD=ld
 NM=nm
 RANLIB=ranlib
 STRIP=strip
+
+[conf]
+tools.build:compiler_executables={"c": "/usr/local/gcc-8.4/bin/gcc", "cpp": "/usr/local/gcc-8.4/bin/g++"}
