@@ -1,6 +1,6 @@
-sudo docker run --rm $REGISTRY/library/gcc75-build-arm:0.1.0 bash -c 'echo system-gcc; gcc --version | head -1; echo ---; echo /usr/local; ls
-   /usr/local 2>/dev/null; echo ---; echo find-newer-gcc; find /opt /usr/local -name "g++-*" -o -name "gcc-[7-9]*" -o -name "gcc-1[0-2]*"
-  2>/dev/null | head; echo ---; echo clang; ls /opt/clang* 2>/dev/null; clang --version 2>/dev/null | head -1'
+ sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:0.1.0 bash -c 'find / -maxdepth 6 -type f -name "gcc-[7-9]" 2>/dev/null | head;
+  echo ---; find / -maxdepth 6 -type d -name "gcc-8*" 2>/dev/null | head; echo ---; ls /opt 2>/dev/null; echo ---; update-alternatives
+  --display gcc 2>&1 | head'
 
  sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
       bash -c '                                                                                                                                
