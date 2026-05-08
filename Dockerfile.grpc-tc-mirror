@@ -28,8 +28,21 @@ RUN set -e; \
     fi; \
     mkdir -p /opt/x64-native-gcc; \
     cp -aL /usr/local/gcc-8.4/. /opt/x64-native-gcc/; \
+    # gcc84-devel-elara names binaries gcc-8.4 / g++-8.4 / etc; create
+    # the unsuffixed aliases so callers pointing at bin/gcc, bin/g++,
+    # bin/cc, bin/c++ resolve.
+    cd /opt/x64-native-gcc/bin; \
+    [ -e gcc ]   || ln -sf gcc-8.4   gcc; \
+    [ -e g++ ]   || ln -sf g++-8.4   g++; \
+    [ -e cc ]    || ln -sf gcc-8.4   cc;  \
+    [ -e c++ ]   || ln -sf g++-8.4   c++; \
+    [ -e cpp ]   || ln -sf cpp-8.4   cpp; \
+    [ -e gcc-ar ]     || ln -sf gcc-ar-8.4     gcc-ar; \
+    [ -e gcc-nm ]     || ln -sf gcc-nm-8.4     gcc-nm; \
+    [ -e gcc-ranlib ] || ln -sf gcc-ranlib-8.4 gcc-ranlib; \
+    cd -; \
     echo "[stage1] /opt/x64-native-gcc/bin contents:"; \
-    ls /opt/x64-native-gcc/bin/ | head; \
+    ls /opt/x64-native-gcc/bin/ | head -20; \
     /opt/x64-native-gcc/bin/gcc --version | head -1
 
 # Stage 2 — actual mirror.
