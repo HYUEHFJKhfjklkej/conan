@@ -1,28 +1,6 @@
-sudo docker run --rm -v conan-cache-arm:/root/.conan2 -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake       
-  grpc-tc-mirror-arm bash -c 'echo "ENV=[$CONAN_USER_TOOLCHAIN]"; cd /work/conan-recipes; conan export abseil/ --version=20250127.0 2>&1 | tail
-   -2; conan install --requires=abseil/20250127.0 -pr:h=profiles/lin-gcc75-arm-linaro -pr:b=profiles/lin-gcc84-x86_64 --build=missing 
-  --no-remote -o "*/*:shared=True" 2>&1 | tail -40'                                                                                            
-                                                     sudo docker run --rm grpc-tc-mirror-arm grep -c CONAN_USER_TOOLCHAIN /work/conan-recipes/abseil/conanfile.py  
- grep -m 5 -B 2 -A 6 "error:" /tmp/run.log                                                                                                    
-                                                                                                                                               
-  grep -m 3 "internal compiler error" /tmp/run.log   sudo docker build --no-cache --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 -f Dockerfile.grpc-tc-mirror -t                  
-  grpc-tc-mirror-arm .                                                                                                                         
-                                                                                                                                               
-  sudo docker build --no-cache --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:0.1.0 -f Dockerfile.grpc-tc-mirror -t                
-  grpc-tc-mirror-arm64 .                                                                                                                       
-  
-  После того как обе соберутся:                                                                                                                
-                                                                                                                                             
-  ./test-astra/test_arm_cross.sh smoke arm                                                                                                     
-                                                                                                                                               
-  ./test-astra/test_arm_cross.sh smoke arm64
-                                                                                                                                               
-  Если smoke зелёный — full build:                                                                                                             
-  
-  ./test-astra/test_arm_cross.sh build arm                                                                                                     
-                                                                                                                                             
-  ./test-astra/test_arm_cross.sh build arm64                                                                           
-                                                 
+sudo docker run --rm $REGISTRY/library/gcc75-build-arm:0.1.0 bash -c 'echo system-gcc; gcc --version | head -1; echo ---; echo /usr/local; ls
+   /usr/local 2>/dev/null; echo ---; echo find-newer-gcc; find /opt /usr/local -name "g++-*" -o -name "gcc-[7-9]*" -o -name "gcc-1[0-2]*"
+  2>/dev/null | head; echo ---; echo clang; ls /opt/clang* 2>/dev/null; clang --version 2>/dev/null | head -1'
 
  sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
       bash -c '                                                                                                                                
