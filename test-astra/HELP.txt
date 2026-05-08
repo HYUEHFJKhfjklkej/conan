@@ -1,3 +1,20 @@
+  sudo docker build --no-cache \                                                                                                               
+      --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \                                                                         
+      -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .                                                                                     
+                                                                                                                                               
+  sudo docker build --no-cache \                                                                                                               
+      --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:0.1.0 \                                                                       
+      -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm64 .                                                                                   
+                                                                                                                                               
+  # 4) Smoke на обеих arch (~1-2 мин каждая)                                                                                                   
+  ./test-astra/test_arm_cross.sh smoke arm                                                                                                     
+  ./test-astra/test_arm_cross.sh smoke arm64                                                                                                   
+                                                                                                                                             
+  # 5) Если smoke зелёный — full build                                                                                                         
+  ./test-astra/test_arm_cross.sh build arm        # ~15-25 мин                                                                               
+  ./test-astra/test_arm_cross.sh build arm64      # ~15-25 мин                                                                                 
+                                                 
+
  sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
       bash -c '                                                                                                                                
           ls -la /opt/linaro-arm64-7.5.0/                                                                                                      
