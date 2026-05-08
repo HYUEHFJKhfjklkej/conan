@@ -12,6 +12,16 @@ set(CMAKE_AR           ${_LINARO}/bin/arm-linux-gnueabihf-ar    CACHE FILEPATH "
 set(CMAKE_RANLIB       ${_LINARO}/bin/arm-linux-gnueabihf-ranlib CACHE FILEPATH "linaro arm ranlib" FORCE)
 set(CMAKE_STRIP        ${_LINARO}/bin/arm-linux-gnueabihf-strip CACHE FILEPATH "linaro arm strip" FORCE)
 
+# Workaround for linaro 7.5 BFD-ld (binutils 2.32): when cross-linking
+# shared libraries with debug info (e.g. libabsl_cordz_*.so), the BFD
+# linker corrupts .strtab and the next link step fails with
+# "invalid string offset >= ... for section '.strtab'". Switch to the
+# gold linker which is shipped alongside (arm-linux-gnueabihf-ld.gold)
+# and does not have this bug.
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-fuse-ld=gold")
+set(CMAKE_EXE_LINKER_FLAGS_INIT    "-fuse-ld=gold")
+set(CMAKE_MODULE_LINKER_FLAGS_INIT "-fuse-ld=gold")
+
 set(CMAKE_SYSROOT ${_SYSROOT})
 set(CMAKE_FIND_ROOT_PATH ${_SYSROOT})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

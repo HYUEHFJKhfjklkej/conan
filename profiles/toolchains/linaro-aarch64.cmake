@@ -12,6 +12,13 @@ set(CMAKE_AR           ${_LINARO}/bin/aarch64-linux-gnu-ar     CACHE FILEPATH "l
 set(CMAKE_RANLIB       ${_LINARO}/bin/aarch64-linux-gnu-ranlib CACHE FILEPATH "linaro aarch64 ranlib" FORCE)
 set(CMAKE_STRIP        ${_LINARO}/bin/aarch64-linux-gnu-strip  CACHE FILEPATH "linaro aarch64 strip"  FORCE)
 
+# Workaround for linaro 7.5 BFD-ld (binutils 2.32): when cross-linking
+# shared libraries with debug info, the BFD linker corrupts .strtab.
+# Switch to the gold linker shipped alongside (aarch64-linux-gnu-ld.gold).
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-fuse-ld=gold")
+set(CMAKE_EXE_LINKER_FLAGS_INIT    "-fuse-ld=gold")
+set(CMAKE_MODULE_LINKER_FLAGS_INIT "-fuse-ld=gold")
+
 set(CMAKE_SYSROOT ${_SYSROOT})
 set(CMAKE_FIND_ROOT_PATH ${_SYSROOT})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
