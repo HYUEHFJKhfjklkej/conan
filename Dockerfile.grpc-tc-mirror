@@ -2,9 +2,13 @@
 # native build-context compiler when this mirror is built on top of an
 # arm/arm64 base whose system gcc is Debian Stretch 6.3 (< 7) and
 # rejects abseil 20250127 with "policy_checks: GCC 7 or higher".
-# The X64_BASE_IMAGE arg defaults to the production CI x86_64 image;
-# override it if your registry path differs.
-ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:latest
+#
+# X64_BASE_IMAGE is expected to be set by the caller via --build-arg.
+# test-astra/test_arm_cross.sh passes
+#   $REGISTRY/library/gcc84-build-x86_64:${X64_BASE_IMAGE_TAG:-0.1.0}
+# automatically. The default below is a fallback and matches the public
+# x86_64 phase tag scheme; override if your tag differs.
+ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 FROM ${X64_BASE_IMAGE} AS x64_native_tc
 
 # Stage 2 — actual mirror.

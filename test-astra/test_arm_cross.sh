@@ -146,8 +146,15 @@ fi
 # ----- 3. mirror docker build --------------------------------------------
 hdr "3. docker build grpc-tc-mirror for $ARCH"
 cd "$ROOT_DIR"
+# Pass X64_BASE_IMAGE for the multi-stage build (stage 1 carries
+# /usr/local/gcc-8.4 from the x86_64 CI image). $REGISTRY/library tag
+# scheme is the same one the arm/arm64 base images use; tag defaults
+# to 0.1.0 (avoid :latest because some ProGet feeds do not publish it).
+X64_BASE_IMAGE_TAG="${X64_BASE_IMAGE_TAG:-0.1.0}"
+X64_BASE_IMAGE="${X64_BASE_IMAGE:-$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG}"
 if sudo docker build \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
+        --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
         -f Dockerfile.grpc-tc-mirror \
         -t "$IMAGE_TAG" \
         . 2>&1 | tee /tmp/build.log | tail -20
