@@ -13,29 +13,23 @@
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=gcc:8
 
-# Stage 1 — discover gcc 7+ in the x86_64 image (regardless of where
-# `gcc84-devel-elara` puts it: /usr/local/gcc-8.4, /usr/bin/gcc-8,
-# update-alternatives, ...) and re-pack it into a stable, dereferenced
-# tree at /opt/x64-native-gcc. cp -aL turns symlinks into real files,
-# so the COPY into Stage 2 cannot end up dangling.
+# Stage 1 — copy /usr/local/gcc-8.4 (gcc84-devel-elara install layout)
+# into a stable, dereferenced tree at /opt/x64-native-gcc. cp -aL turns
+# symlinks into real files so the COPY into Stage 2 cannot end up
+# dangling. The directory is always present in production CI image
+# (confirmed via probe: find / -type d -name "gcc-8*" -> /usr/local/gcc-8.4).
 FROM ${X64_BASE_IMAGE} AS x64_native_tc
 RUN set -e; \
-    REAL_GCC=$(command -v gcc-8 || command -v gcc); \
-    REAL_GCC=$(readlink -f "$REAL_GCC"); \
-    if [ -x /usr/local/gcc-8.4/bin/gcc ]; then \
-        REAL_GCC=/usr/local/gcc-8.4/bin/gcc; \
+    if [ ! -d /usr/local/gcc-8.4 ]; then \
+        echo "[stage1] FATAL: /usr/local/gcc-8.4 not present in $X64_BASE_IMAGE"; \
+        echo "[stage1] check gcc84-devel-elara is installed in this image"; \
+        ls /usr/local 2>/dev/null; \
+        exit 1; \
     fi; \
-    PREFIX=$(dirname "$(dirname "$REAL_GCC")"); \
-    echo "[stage1] gcc binary: $REAL_GCC"; \
-    echo "[stage1] gcc prefix: $PREFIX"; \
-    "$REAL_GCC" --version | head -1; \
     mkdir -p /opt/x64-native-gcc; \
-    for d in bin lib lib64 libexec include share; do \
-        if [ -d "$PREFIX/$d" ]; then \
-            cp -aL "$PREFIX/$d" /opt/x64-native-gcc/ 2>/dev/null \
-                || cp -a  "$PREFIX/$d" /opt/x64-native-gcc/; \
-        fi; \
-    done; \
+    cp -aL /usr/local/gcc-8.4/. /opt/x64-native-gcc/; \
+    echo "[stage1] /opt/x64-native-gcc/bin contents:"; \
+    ls /opt/x64-native-gcc/bin/ | head; \
     /opt/x64-native-gcc/bin/gcc --version | head -1
 
 # Stage 2 — actual mirror.
