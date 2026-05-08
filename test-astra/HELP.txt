@@ -1,6 +1,4 @@
-  sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:0.1.0 bash -c 'ls -la /usr/local/gcc-8.4/; echo ---bin---; ls -la                  
-  /usr/local/gcc-8.4/bin/ 2>/dev/null; echo ---find-gcc---; find /usr/local/gcc-8.4 -name "gcc" -o -name "gcc-8*" -o -name                     
-  "x86_64-linux-gnu-gcc*" 2>/dev/null | head' 
+sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:0.1.0 ls -la /usr/local/gcc-8.4/bin/
 
  sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
       bash -c '                                                                                                                                
