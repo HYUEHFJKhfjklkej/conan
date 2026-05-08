@@ -26,8 +26,8 @@ perl/5.36.0
 # x86_64 CI image into /usr/local/gcc-8.4, so this absolute path
 # resolves the same way in arm and x86_64 mirrors.
 [buildenv]
-CC=/usr/local/gcc-8.4/bin/gcc
-CXX=/usr/local/gcc-8.4/bin/g++
+CC=/opt/x64-native-gcc/bin/gcc
+CXX=/opt/x64-native-gcc/bin/g++
 AR=ar
 AS=as
 LD=ld
@@ -36,4 +36,4 @@ RANLIB=ranlib
 STRIP=strip
 
 [conf]
-tools.build:compiler_executables={"c": "/usr/local/gcc-8.4/bin/gcc", "cpp": "/usr/local/gcc-8.4/bin/g++"}
+tools.build:compiler_executables={"c": "/opt/x64-native-gcc/bin/gcc", "cpp": "/opt/x64-native-gcc/bin/g++"}
