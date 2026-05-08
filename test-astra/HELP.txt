@@ -1,4 +1,4 @@
-
+ sudo docker run --rm grpc-tc-mirror-arm grep -c CONAN_USER_TOOLCHAIN /work/conan-recipes/abseil/conanfile.py  
  grep -m 5 -B 2 -A 6 "error:" /tmp/run.log                                                                                                    
                                                                                                                                                
   grep -m 3 "internal compiler error" /tmp/run.log   sudo docker build --no-cache --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 -f Dockerfile.grpc-tc-mirror -t                  
