@@ -1,18 +1,22 @@
-# Stage 1 — pull GCC 8.4 binaries from the x86_64 CI image. Used as
-# native build-context compiler when this mirror is built on top of an
-# arm/arm64 base whose system gcc is Debian Stretch 6.3 (< 7) and
-# rejects abseil 20250127 with "policy_checks: GCC 7 or higher".
+# Globals — both ARGs declared before the first FROM so they are
+# visible inside every FROM line of this Dockerfile (Docker scoping
+# rule: ARGs between stages belong to the preceding stage and do
+# NOT propagate to the next FROM unless redeclared globally).
 #
-# X64_BASE_IMAGE is expected to be set by the caller via --build-arg.
-# test-astra/test_arm_cross.sh passes
-#   $REGISTRY/library/gcc84-build-x86_64:${X64_BASE_IMAGE_TAG:-0.1.0}
-# automatically. The default below is a fallback and matches the public
-# x86_64 phase tag scheme; override if your tag differs.
+# X64_BASE_IMAGE: x86_64 CI image carrying /usr/local/gcc-8.4 (used
+# as the native build-context compiler when BASE_IMAGE is an arm/arm64
+# image whose system gcc is Debian Stretch 6.3 < 7 — abseil 20250127
+# rejects that with "policy_checks: GCC 7 or higher").
+# BASE_IMAGE: actual mirror base (gcc75-build-arm:0.1.0 etc).
+#
+# test-astra/test_arm_cross.sh sets both via --build-arg.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
+ARG BASE_IMAGE=gcc:8
+
+# Stage 1 — source for /usr/local/gcc-8.4.
 FROM ${X64_BASE_IMAGE} AS x64_native_tc
 
 # Stage 2 — actual mirror.
-ARG BASE_IMAGE=gcc:8
 FROM ${BASE_IMAGE}
 
 # Carry GCC 8.4 over for the native (x86_64) build context. Profile
