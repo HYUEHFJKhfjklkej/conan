@@ -212,9 +212,11 @@ else
     fail "expected $expected_count files, got $actual_count"
 fi
 
-# Each name must contain '.lin.gcc.shared.<ARCH_SHORT>.'
+# Each name must look like '<pkg>.lin.<compiler><ver>.shared.<arch>[-linaro].<ver>.nupkg'
+# Glob covers both the original x86_64-phase scheme (lin.gcc.shared.x64.) and
+# the current ARM cross-build scheme (lin.gcc75.shared.arm-linaro.).
 for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
-    f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc.shared."$ARCH_SHORT".*.nupkg 2>/dev/null | head -1)
+    f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc*.shared."$ARCH_SHORT"*.nupkg 2>/dev/null | head -1)
     if [[ -n "$f" ]]; then
         size=$(du -h "$f" | cut -f1)
         pass "$(basename "$f") ($size)"
