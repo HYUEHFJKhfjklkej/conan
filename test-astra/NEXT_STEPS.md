@@ -340,3 +340,85 @@ ls -la output-arm/*.nupkg     # ожидаем 7 файлов
 ```
 
 Имена должны быть `<pkg>.lin.gcc.shared.arm.<ver>.nupkg` (см. `legacy_nupkg.py`).
+
+---
+
+## Финальный runbook ARM-фазы (актуально с 2026-05-10)
+
+После применения локального патча `test-astra/test_arm_cross.sh` (env+volume passthrough,
+см. блок [8k] в HELP.txt) ручные шаги 4b.* выше становятся не нужны для типового прогона.
+Стандартная цепочка для закрытия ARM-фазы:
+
+### 1. Один раз — выставить REGISTRY и Docker insecure-registry если нужно
+
+```bash
+export REGISTRY=<internal-registry-hostname>     # cf. HELP.txt [0]
+# при ошибке x509 — см. HELP.txt [X]
+```
+
+### 2. Pre-flight для обоих ARM-target'ов
+
+```bash
+cd ~/conan-master       # или где лежит репо
+./test-astra/test_arm_cross.sh smoke arm
+./test-astra/test_arm_cross.sh smoke arm64
+```
+
+`smoke` (~1-2 мин на каждый) проверит pull базового образа, build mirror'а и
+пробросит диагностические команды из HELP.txt блоки `[7]`/`[8]` если что не так.
+
+### 3. (Только для arm64, один раз) — inventory base image
+
+`profiles/toolchains/linaro-aarch64.cmake` хардкодит пути
+`/opt/linaro-aarch64-7.5.0/...` по аналогии с armv7hf. Перед первым полным
+build'ом arm64 прогнать probes из HELP.txt блок **`[8j]`** и сверить:
+
+- `find /opt -name "aarch64-*-gcc"` → путь и triplet совпадают с
+  `linaro-aarch64.cmake` (`_LINARO`, `_SYSROOT`, prefix `aarch64-linux-gnu-`)?
+- canary-сборка hello-world даёт `ELF 64-bit LSB ... ARM aarch64`?
+
+Если триплет/путь отличаются — патчим `linaro-aarch64.cmake` под реальный layout.
+
+### 4. Полная сборка обоих arch
+
+```bash
+./test-astra/test_arm_cross.sh build arm     # 15-25 мин
+./test-astra/test_arm_cross.sh build arm64   # 15-25 мин
+```
+
+После фикса `test_arm_cross.sh` оба автоматически пробрасывают
+`-e CONAN_USER_TOOLCHAIN=...` и кешируют через named volume
+`conan-cache-${ARCH}`, поэтому второй прогон того же arch — минуты,
+а не 25 мин.
+
+### 5. Acceptance criteria
+
+```bash
+ls -1 output-arm/*.nupkg   | wc -l    # → 7
+ls -1 output-arm64/*.nupkg | wc -l    # → 7
+```
+
+Имена 14 артефактов:
+
+```
+output-arm/{grpc,protobuf,abseil,openssl,re2,c-ares,zlib}.lin.gcc.shared.arm.<ver>.nupkg
+output-arm64/{grpc,protobuf,abseil,openssl,re2,c-ares,zlib}.lin.gcc.shared.arm64.<ver>.nupkg
+```
+
+Версии — те же, что в x86_64-фазе:
+`grpc 1.78.1`, `protobuf 5.29.6`, `abseil 20250127.0`, `openssl 3.4.5`,
+`re2 20251105`, `c-ares 1.34.6`, `zlib 1.3.1`.
+
+Любое несовпадение `count == 7` или строки `policy_checks.h "GCC 7+"`
+в логе → откат к диагностическим блокам HELP.txt `[8h]`/`[8i]`/`[8k]` —
+они различают «образ не пересобран», «env-var не доехал в контейнер»,
+«Conan API игнорирует override».
+
+### 6. После закрытия ARM-фазы
+
+- Снести "TODO" коммент в `test_arm_cross.sh:169-170` (про auto-set
+  `-e CONAN_USER_TOOLCHAIN`) — фикс уже сделан.
+- Удалить `output-arm/` и `output-arm64/` из `.gitignore` если они там
+  оказались (артефакты сборки, не должны быть в git).
+- Свернуть в HELP.txt блоки 4b.5..4b.6 — они нужны только для
+  диагностики, основной runbook теперь это секция выше.

@@ -32,6 +32,7 @@ case "$ARCH" in
     arm)
         BASE_IMAGE="$REGISTRY/library/gcc75-build-arm:${BASE_IMAGE_TAG:-0.1.0}"
         PROFILE="/work/conan-recipes/profiles/lin-gcc75-arm-linaro"
+        USER_TC="/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"
         ARCH_SHORT="arm"
         IMAGE_TAG="grpc-tc-mirror-arm"
         OUTPUT_DIR="output-arm"
@@ -39,6 +40,7 @@ case "$ARCH" in
     arm64)
         BASE_IMAGE="$REGISTRY/library/gcc75-build-arm64:${BASE_IMAGE_TAG:-0.1.0}"
         PROFILE="/work/conan-recipes/profiles/lin-gcc-aarch64-linaro"
+        USER_TC="/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake"
         ARCH_SHORT="arm64"
         IMAGE_TAG="grpc-tc-mirror-arm64"
         OUTPUT_DIR="output-arm64"
@@ -182,7 +184,9 @@ rm -f "$ROOT_DIR/$OUTPUT_DIR"/*.nupkg
 if sudo docker run --rm \
         -e PROFILE="$PROFILE" \
         -e PROFILE_BUILD="$PROFILE_BUILD" \
+        -e CONAN_USER_TOOLCHAIN="$USER_TC" \
         -v "$ROOT_DIR/$OUTPUT_DIR:/work/conan-recipes/output" \
+        -v "conan-cache-${ARCH}:/root/.conan2" \
         "$IMAGE_TAG" 2>&1 | tee /tmp/run.log | tail -30
 then
     if [[ "${PIPESTATUS[0]}" -ne 0 ]]; then

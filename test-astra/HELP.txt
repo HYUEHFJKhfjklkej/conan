@@ -551,6 +551,131 @@ step and send it back so the next step can be picked.
     exists on the host (cf. [8h] check 2 critical gotcha).
 
 
+[8j] Inventory the gcc75-build-arm64 base image — pre-flight before
+     trusting the best-guess /opt/linaro-aarch64-7.5.0/... paths in
+     profiles/toolchains/linaro-aarch64.cmake:
+
+    Why: linaro-aarch64.cmake mirrors linaro-arm.cmake 1-to-1 and
+    hard-codes /opt/linaro-aarch64-7.5.0/gcc-linaro-...-aarch64-linux-gnu/.
+    Those paths are a guess by analogy with the arm/32-bit image
+    (cf. [8c]); the arm64 image may use a different linaro release dir
+    or triplet (aarch64-none-linux-gnu, aarch64-linaro-linux-gnu, ...).
+    Run probes 1-7 below and paste the output back BEFORE you spend
+    20 min on a full `./test_arm_cross.sh build arm64` that may fail
+    on a missing /opt path.
+
+    1. Top-level /opt layout:
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'ls -la /opt; echo ---; ls -la /opt/linaro* 2>/dev/null'
+
+    2. Locate aarch64 cross binaries (covers all triplet variants):
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'find /opt -maxdepth 6 -type f \
+                   \( -name "aarch64-*-gcc"    -o -name "aarch64-*-g++" \
+                      -o -name "aarch64-*-ar"  -o -name "aarch64-*-strip" \
+                      -o -name "aarch64-*-ranlib" \) 2>/dev/null | sort'
+
+    3. gcc version, default sysroot, target triplet:
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'GCC=$(find /opt -name "aarch64-*-gcc" -type f | head -1); \
+                   echo "GCC=$GCC"; \
+                   "$GCC" --version; \
+                   "$GCC" -dumpmachine; \
+                   "$GCC" -print-sysroot; \
+                   echo ---; ls -la "$(dirname "$GCC")"'
+
+    4. Pre-existing toolchain.cmake files anywhere in /opt:
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'find /opt /usr/share /usr/local -name "*.cmake" \
+                   2>/dev/null | xargs grep -l -E \
+                       "CMAKE_SYSTEM_PROCESSOR.*aarch64|aarch64-.*-gnu" \
+                   2>/dev/null'
+
+    5. Host-tools versions (cmake, protoc, perl, make):
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'for t in cmake conan protoc make ninja \
+                       pkg-config autoconf automake libtool python3 perl; do \
+                   command -v "$t" >/dev/null 2>&1 \
+                       && printf "%-12s %s\n" "$t" "$($t --version 2>&1 | head -1)" \
+                       || echo "$t NOT FOUND"; \
+               done'
+
+    6. Distro / glibc / locale:
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'cat /etc/os-release; echo ---; ldd --version | head -1; \
+                   echo ---; uname -a'
+
+    7. End-to-end canary — compile aarch64 hello-world inside the image:
+           sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \
+               bash -c 'GCC=$(find /opt -name "aarch64-*-gcc" -type f | head -1); \
+                   SR=$("$GCC" -print-sysroot); \
+                   echo "int main(){return 0;}" \
+                       | "$GCC" ${SR:+--sysroot=$SR} -x c - -o /tmp/canary \
+                   && file /tmp/canary'
+
+    Common verdicts (compare with /opt/linaro-arm-7.5.0/... in [8c]):
+
+    - Probe 2 finds the binaries under EXACTLY
+      /opt/linaro-aarch64-7.5.0/gcc-linaro-7.5.0-2019.12-rc1-x86_64_aarch64-linux-gnu/bin/
+      and the triplet is `aarch64-linux-gnu` →
+      profiles/toolchains/linaro-aarch64.cmake is correct as-is, GO.
+    - Probe 2 finds them under a different release dir or triplet →
+      patch profiles/toolchains/linaro-aarch64.cmake (`_LINARO`,
+      `_SYSROOT`, the 5 binary names) before running build.
+    - Probe 7 prints "ELF 64-bit LSB ... ARM aarch64" → end-to-end
+      cross-compile works inside the image; profile + toolchain are
+      consistent with what gcc finds.
+    - Anything else (probe 7 fails, gcc reports x86_64, sysroot empty
+      AND no headers in /usr/include) → STOP and escalate to CI team
+      before running the full grpc cross-build.
+
+
+[8k] Run the ARM full-build with env-fallback turned on (after fix to
+     test-astra/test_arm_cross.sh that adds -e CONAN_USER_TOOLCHAIN):
+
+    Context: before that fix, `./test_arm_cross.sh build arm` was
+    silently producing `count = 0` because env CONAN_USER_TOOLCHAIN
+    was never propagated into the container, so the env-fallback in
+    abseil/re2/protobuf/grpc conanfile.py.generate() saw an empty
+    string and skipped tc.blocks override. Transitive abseil-under-grpc
+    fell back to system /usr/bin/c++ → policy_checks.h "GCC 7+" abort.
+
+    The fix sets USER_TC per-arch in the case-block and adds:
+        -e CONAN_USER_TOOLCHAIN="$USER_TC"
+        -v "conan-cache-${ARCH}:/root/.conan2"
+    to the docker run line. Re-run after the fix lands:
+
+        export REGISTRY=<internal-registry-hostname>
+        cd conan-recipes
+        ./test-astra/test_arm_cross.sh build arm     # 15-25 min
+        # then:
+        ./test-astra/test_arm_cross.sh build arm64
+
+    Verify the fix actually took effect:
+        # 1) docker inspect of the running command (use during build):
+        sudo docker ps --no-trunc --format '{{.Command}}' | head -3
+        # expect to see CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake
+        # in the env-list of the running container.
+
+        # 2) inside the build container, before tc.generate() runs:
+        sudo docker run --rm \
+            -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake \
+            grpc-tc-mirror-arm \
+            bash -c 'echo $CONAN_USER_TOOLCHAIN'
+        # expect the path back; empty = fix did NOT apply, image is stale,
+        # rebuild the mirror image (sudo docker build ... -t grpc-tc-mirror-arm).
+
+        # 3) after the run finishes — check that 7 .nupkg landed:
+        ls -la output-arm/*.nupkg | wc -l    # expect 7
+        ls -la output-arm64/*.nupkg | wc -l  # expect 7
+
+    If count != 7 OR the build aborts on policy_checks.h "GCC 7+" — the
+    transitive abseil compile still missed user_toolchain. Drop down to
+    [8h] check 3 (CMakeCache.txt CMAKE_C_COMPILER) and [8i] check 2
+    (conan_toolchain.cmake include linaro). The two probes there
+    distinguish: stale image vs image-OK-but-Conan-API-ignored.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):

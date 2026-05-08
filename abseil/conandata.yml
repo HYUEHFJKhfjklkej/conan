@@ -32,6 +32,10 @@ sources:
 patches:
   "20260107.1":
     - patch_file: "patches/20260107.1-0001-fix-heterogeneous_lookup-flag.patch"
+  "20250127.0":
+    - patch_file: "patches/20250127.0-0001-stacktrace-aarch64-binutils232.patch"
+      patch_description: "Replace xpaclri inline asm with hint #7 (NOP-equivalent) for binutils 2.32 (linaro 7.5) compatibility on aarch64 cross-builds"
+      patch_type: "portability"
   "20240722.1":
     - patch_file: "patches/0003-absl-string-libm-20240116.patch"
       patch_description: "link libm to absl string"

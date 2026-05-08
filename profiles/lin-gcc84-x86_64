@@ -12,3 +12,17 @@ build_type=Release
 # Required because we operate in --no-remote mode (no Conan-built cmake/perl available).
 cmake/3.25.1
 perl/5.36.0
+
+# When this profile is used as PROFILE_BUILD for an ARM cross (host)
+# profile that exports arm-linux-gnueabihf-* via [buildenv], those
+# values otherwise leak into the build context — protoc would link
+# with arm-ld and fail. Pin native toolchain explicitly.
+[buildenv]
+CC=gcc
+CXX=g++
+AR=ar
+AS=as
+LD=ld
+NM=nm
+RANLIB=ranlib
+STRIP=strip

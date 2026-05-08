@@ -1,0 +1,19 @@
+From: local emulation
+Subject: stacktrace: replace xpaclri with backwards-compatible hint #7
+
+Linaro 7.5-2019.12 ships binutils 2.32 whose aarch64 assembler does not
+yet recognize the ARMv8.3-A `xpaclri` mnemonic; the same instruction is
+encoded as the NOP `hint #7` on ARMv8.0+, which both the older binutils
+and a PAuth-enabled CPU handle correctly.
+
+--- a/absl/debugging/internal/stacktrace_aarch64-inl.inc
++++ b/absl/debugging/internal/stacktrace_aarch64-inl.inc
+@@ -188,7 +188,7 @@ inline void* ClearPacBits(void* ptr) {
+   // compatibility with ARM platforms that do not support pointer
+   // authentication, we use the hint space instruction XPACLRI instead. Hint
+   // space instructions behave as NOPs on unsupported platforms.
+-  asm("xpaclri" : "+r"(x30));
++  asm("hint #7" : "+r"(x30));
+   return x30;
+ }
+
