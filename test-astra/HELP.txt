@@ -771,7 +771,11 @@ step and send it back so the next step can be picked.
     Sizes much smaller (e.g. grpc < 50 MB) — shared .so not packed
     or recipe built `shared=False`; check `run_test_grpc.sh` env.
 
-    ELF content check — the actual test of "did we cross-compile":
+    ELF content check — the actual test of "did we cross-compile".
+    Note: paths inside .nupkg start with the variant_dir prefix
+    (e.g. lin.gcc75.shared.arm64-linaro/lib/native/...), so the glob
+    needs a leading `*/` — `lib/native/*/libgrpc.so*` won't match,
+    `*/lib/native/*/libgrpc.so*` will.
 
         cd ~/conan-master
         TMP=$(mktemp -d)
@@ -779,7 +783,7 @@ step and send it back so the next step can be picked.
             PKG=$(ls -1 output-$ARCH/grpc.lin.gcc*.shared.${ARCH}*.nupkg 2>/dev/null | head -1)
             [[ -z "$PKG" ]] && { echo "[SKIP $ARCH] no grpc nupkg"; continue; }
             mkdir -p "$TMP/$ARCH"
-            unzip -q -j "$PKG" 'lib/native/*/libgrpc.so*' -d "$TMP/$ARCH" 2>/dev/null
+            unzip -q -j "$PKG" '*/lib/native/*/libgrpc.so*' -d "$TMP/$ARCH" 2>/dev/null
             S=$(ls -1 "$TMP/$ARCH"/libgrpc.so* 2>/dev/null | head -1)
             [[ -z "$S" ]] && { echo "[FAIL $ARCH] libgrpc.so not in nupkg"; continue; }
             echo "=== $ARCH: $(basename "$S") ==="
@@ -807,14 +811,19 @@ step and send it back so the next step can be picked.
          (`conan list <pkg>/<ver>:*` and check `settings.arch` for
          each package_id).
 
-    Same check for the other 6 libs (run after grpc passes):
+    Same check for the other 6 libs (run after grpc passes). Prefer
+    .so over .a — `file` on a .a archive reads only the first member
+    and can mis-report the ABI (`ELF 64-bit ... ARM, EABI5` instead
+    of `aarch64`), which looks like a broken build when it's really
+    a quirk of how `file` introspects static archives.
 
         for ARCH in arm arm64; do
             for pkg in protobuf abseil openssl re2 c-ares zlib; do
                 PKG=$(ls -1 output-$ARCH/$pkg.lin.gcc*.shared.${ARCH}*.nupkg 2>/dev/null | head -1)
                 [[ -z "$PKG" ]] && continue
-                # take whichever .so/.a is the canonical artefact:
-                SO=$(unzip -l "$PKG" | awk '/lib\/native\// && /\.(so|a)/ {print $4; exit}')
+                # Prefer a .so; only fall back to .a if no .so exists.
+                SO=$(unzip -l "$PKG" | awk '/lib\/native\// && /\.so($|\.)/ {print $4; exit}')
+                [[ -z "$SO" ]] && SO=$(unzip -l "$PKG" | awk '/lib\/native\// && /\.a$/  {print $4; exit}')
                 [[ -z "$SO" ]] && { echo "[$ARCH/$pkg] no lib found"; continue; }
                 TMP=$(mktemp -d)
                 unzip -q -j "$PKG" "$SO" -d "$TMP" 2>/dev/null
@@ -827,6 +836,35 @@ step and send it back so the next step can be picked.
     Each line should mention ARM (for arm) or aarch64 (for arm64).
     Any line with "x86-64" → that package needs to be rebuilt from a
     clean Conan cache for the right arch.
+
+
+[9a] If protobuf arm64 still reports `ARM, EABI5` (not aarch64) after
+     using the .so-preferred glob in [9], drill down on it:
+
+        cd ~/conan-master
+        PKG=$(ls -1 output-arm64/protobuf.lin.gcc*.shared.arm64*.nupkg | head -1)
+        echo "=== contents (.so/.a only) ==="
+        unzip -l "$PKG" | grep -E '\.(so|a)([0-9.]*)?$' | sort -k1,1n
+        TMP=$(mktemp -d)
+        unzip -q -j "$PKG" '*/lib/native/*/libprotobuf*.so*' \
+                          '*/lib/native/*/libprotoc*.so*'    \
+                          -d "$TMP" 2>/dev/null
+        echo "=== file on each extracted artefact ==="
+        for f in "$TMP"/*; do
+            printf "%-30s %s\n" "$(basename "$f")" "$(file -b "$f" | cut -c1-80)"
+        done
+        rm -rf "$TMP"
+
+    Expected: every extracted .so reports `ARM aarch64`. If even one
+    .so says `x86-64` or `ARM, EABI5` → that file is genuinely the
+    wrong arch (NOT a `file`-quirk on .a, since .so introspection is
+    deterministic). Then:
+      - `conan list protobuf/5.29.6:*` and find the package_id whose
+        settings.arch=armv8 + check the user_toolchain in
+        `conan cache path protobuf/5.29.6:<pkg_id>/build/.../conan_toolchain.cmake`.
+      - If that file's CMAKE_C_COMPILER is /usr/bin/cc (not linaro)
+        → env-fallback in protobuf/conanfile.py.generate() didn't fire
+        for this transitive node; same class of bug as [8h] for abseil.
 
 
 [X] Troubleshooting — docker pull fails on x509:
