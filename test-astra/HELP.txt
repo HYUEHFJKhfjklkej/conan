@@ -837,9 +837,25 @@ step and send it back so the next step can be picked.
     Any line with "x86-64" → that package needs to be rebuilt from a
     clean Conan cache for the right arch.
 
+    Note on `ARM, EABI5` on arm64 (real result, 2026-05-12 protobuf):
+    older `file` (e.g. file 1:5.x on Stretch) sometimes labels a
+    genuine aarch64 .so as `ELF 64-bit LSB shared object, ARM, EABI5`
+    instead of `... ARM aarch64`. The class is still 64-bit and the
+    nupkg size matches the x86_64/arm-cross peers — this is a `file`
+    magic-database quirk, NOT a broken build. To confirm: `readelf
+    -h` (block [9a]) prints `Machine: AArch64` on the same file. Only
+    treat this as a real fault if [9a] also reports `Machine: ARM`.
+
 
 [9a] If protobuf arm64 still reports `ARM, EABI5` (not aarch64) after
-     using the .so-preferred glob in [9], drill down on it:
+     using the .so-preferred glob in [9], drill down on it.
+
+     `file` and `readelf` disagree more often than people expect: an
+     older `file` on Stretch can mis-report aarch64 .so as
+     `ARM, EABI5` because its magic-database conflates EM_ARM (40)
+     and EM_AARCH64 (183) when only the EABI flag is set. `readelf
+     -h` is authoritative — it prints the raw `Machine:` field from
+     the ELF header.
 
         cd ~/conan-master
         PKG=$(ls -1 output-arm64/protobuf.lin.gcc*.shared.arm64*.nupkg | head -1)
@@ -849,22 +865,41 @@ step and send it back so the next step can be picked.
         unzip -q -j "$PKG" '*/lib/native/*/libprotobuf*.so*' \
                           '*/lib/native/*/libprotoc*.so*'    \
                           -d "$TMP" 2>/dev/null
-        echo "=== file on each extracted artefact ==="
+        echo "=== file + readelf -h on each extracted .so ==="
         for f in "$TMP"/*; do
-            printf "%-30s %s\n" "$(basename "$f")" "$(file -b "$f" | cut -c1-80)"
+            printf "\n--- %s ---\n" "$(basename "$f")"
+            file -b "$f" | cut -c1-120
+            readelf -h "$f" 2>/dev/null | grep -E 'Class|Machine|Flags:' | sed 's/^/    /'
         done
         rm -rf "$TMP"
 
-    Expected: every extracted .so reports `ARM aarch64`. If even one
-    .so says `x86-64` or `ARM, EABI5` → that file is genuinely the
-    wrong arch (NOT a `file`-quirk on .a, since .so introspection is
-    deterministic). Then:
-      - `conan list protobuf/5.29.6:*` and find the package_id whose
-        settings.arch=armv8 + check the user_toolchain in
-        `conan cache path protobuf/5.29.6:<pkg_id>/build/.../conan_toolchain.cmake`.
-      - If that file's CMAKE_C_COMPILER is /usr/bin/cc (not linaro)
-        → env-fallback in protobuf/conanfile.py.generate() didn't fire
-        for this transitive node; same class of bug as [8h] for abseil.
+     Interpreting `readelf -h Machine:`:
+       - `AArch64`           → genuinely arm64 ✓ (file may mis-label
+                                as `ARM, EABI5` — that's the quirk;
+                                the build is OK).
+       - `ARM`               → genuinely 32-bit ARM in a 64-bit ELF
+                                container; broken build, drop to the
+                                package_id check below.
+       - `Advanced Micro …`  → x86-64; build packed host libraries.
+
+     If `readelf` confirms a real wrong-arch bug (not just a `file`
+     quirk):
+
+        conan list protobuf/5.29.6:* --format=json | \
+            jq -r '.["Local Cache"]."protobuf/5.29.6".revisions[].packages |
+                   to_entries[] | "\(.key) arch=\(.value.info.settings.arch)"'
+        # Find the package_id whose arch=armv8, then:
+        CID=<that-package-id>
+        conan cache path protobuf/5.29.6:$CID
+        grep -nE 'CMAKE_C_COMPILER|user_toolchain' \
+            $(conan cache path protobuf/5.29.6:$CID --folder=build)/conan_toolchain.cmake
+
+     If CMAKE_C_COMPILER is /usr/bin/cc (not linaro aarch64) → the
+     env-fallback in `protobuf/conanfile.py.generate()` did NOT fire
+     for this node. Same class of bug as [8h] for transitive abseil,
+     fix the same way (verify the arch-gate in generate() actually
+     covers `armv8`, and that CONAN_USER_TOOLCHAIN was set when this
+     package was built).
 
 
 [X] Troubleshooting — docker pull fails on x509:
