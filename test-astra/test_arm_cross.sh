@@ -221,7 +221,7 @@ for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
         size=$(du -h "$f" | cut -f1)
         pass "$(basename "$f") ($size)"
     else
-        fail "$pkg.lin.gcc.shared.$ARCH_SHORT.*.nupkg missing"
+        fail "$pkg.lin.gcc*.shared.$ARCH_SHORT*.nupkg missing (glob in $ROOT_DIR/$OUTPUT_DIR/)"
     fi
 done
 

@@ -686,6 +686,68 @@ step and send it back so the next step can be picked.
     distinguish: stale image vs image-OK-but-Conan-API-ignored.
 
 
+[8l] Verify step 5 "*.nupkg missing" — almost always a stale checkout.
+
+    Symptom (real, observed 2026-05-12 on arm64):
+        == 5. Verify output-arm64/*.nupkg ==
+        [PASS] 7 .nupkg files
+        [FAIL] grpc.lin.gcc.shared.arm64.*.nupkg missing
+        [FAIL] protobuf.lin.gcc.shared.arm64.*.nupkg missing
+        ... (×7) ...
+        BUILD SUMMARY: pass=9 fail=7
+
+    The build itself succeeded — the 7 files DO exist with the correct
+    legacy-CI names `<pkg>.lin.gcc75.shared.arm64-linaro.<ver>.nupkg`.
+    The pass=9 includes "[PASS] 7 .nupkg files", confirming the count.
+    Only the per-package glob in step 5 fails.
+
+    The fail text is literally `lin.gcc.shared.<arch>.*.nupkg` — the
+    OLD pre-29104025 pattern (8 May, "test_arm_cross.sh: relax .nupkg
+    name pattern for new deployer scheme"). On a fresh checkout that
+    commit changed the glob to `lin.gcc*.shared.<arch>*.nupkg`, which
+    matches both x86_64 (`gcc.shared.x64`) and ARM (`gcc75.shared.arm64
+    -linaro`). The fail-line text was updated in a follow-up to spell
+    the new glob, so an updated tree reports the actual pattern
+    (`lin.gcc*.shared.arm64*.nupkg missing`) — different wording, easy
+    to distinguish at a glance.
+
+    One-shot check before re-running anything:
+
+        cd ~/conan-master
+        git log --oneline -1 -- test-astra/test_arm_cross.sh
+        # if hash != 29104025 (or newer) — pull first:
+        git pull --ff-only
+        grep -n 'gcc\*\.shared' test-astra/test_arm_cross.sh
+        # expect a line with "lin.gcc*.shared.\"\$ARCH_SHORT\"*.nupkg"
+
+    After pulling, no need to rebuild — the artifacts are already on
+    disk. Just re-run the verify portion:
+
+        ARCH=arm64                       # or arm
+        ARCH_SHORT=$ARCH                 # script sets ARCH_SHORT=arm for arm, arm64 for arm64
+        OUTPUT_DIR=output-$ARCH
+        ROOT_DIR=$(pwd)
+        for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
+            f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc*.shared."$ARCH_SHORT"*.nupkg 2>/dev/null | head -1)
+            [[ -n "$f" ]] && echo "OK  $(basename "$f")" || echo "MISS $pkg"
+        done
+
+    Expect all 7 lines to start with "OK". If any still say "MISS"
+    AFTER `git pull`, then the cause is something else (sh-instead-
+    of-bash, weird permissions on output-arm*/, files not where you
+    think) — drop to:
+
+        sudo ls -la "$ROOT_DIR/$OUTPUT_DIR/"
+        bash -c 'shopt | grep -E "nullglob|failglob"'
+        head -1 "$ROOT_DIR/test-astra/test_arm_cross.sh"   # must be #!/bin/bash
+
+    If the names use a DIFFERENT scheme (no `-linaro`, missing the
+    gcc-version digits, or arch != arm/arm64) — root cause is the
+    deployer, NOT the verify glob. See extensions/deployers/
+    legacy_nupkg.py `_resolve_arch_with_toolchain` and `_short_compiler`,
+    and confirm CONAN_USER_TOOLCHAIN is actually being read by it.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
