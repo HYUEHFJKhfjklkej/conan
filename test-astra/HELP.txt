@@ -748,6 +748,87 @@ step and send it back so the next step can be picked.
     and confirm CONAN_USER_TOOLCHAIN is actually being read by it.
 
 
+[9] Acceptance — content check (ELF arch inside .nupkg).
+
+    test_arm_cross.sh verifies file *names*, not that the .so inside
+    the .nupkg is actually ARM. A successful Conan build with the
+    wrong `pr:b`/`pr:h` mix-up has been observed to silently pack
+    x86_64 .so into a file named `*.arm64-linaro.nupkg`. Catch this
+    BEFORE shipping artifacts to product teams.
+
+    Snapshot — what's on disk for both arches:
+
+        cd ~/conan-master
+        for D in output-arm output-arm64; do
+            echo "=== $D ==="
+            ls -1 "$D"/*.nupkg 2>/dev/null | wc -l | xargs -I{} echo "  count: {}"
+            ls -la "$D"/*.nupkg 2>/dev/null | awk '{printf "  %10s %s\n", $5, $9}'
+        done
+
+    Expected: 7 .nupkg in each, sizes in the ballpark of the closed
+    x86_64 phase (grpc ≥ 400 MB, protobuf ≥ 65 MB, openssl ≥ 8 MB,
+    abseil ≥ 12 MB, re2 ≥ 3 MB, c-ares ≥ 0.4 MB, zlib ≥ 0.15 MB).
+    Sizes much smaller (e.g. grpc < 50 MB) — shared .so not packed
+    or recipe built `shared=False`; check `run_test_grpc.sh` env.
+
+    ELF content check — the actual test of "did we cross-compile":
+
+        cd ~/conan-master
+        TMP=$(mktemp -d)
+        for ARCH in arm arm64; do
+            PKG=$(ls -1 output-$ARCH/grpc.lin.gcc*.shared.${ARCH}*.nupkg 2>/dev/null | head -1)
+            [[ -z "$PKG" ]] && { echo "[SKIP $ARCH] no grpc nupkg"; continue; }
+            mkdir -p "$TMP/$ARCH"
+            unzip -q -j "$PKG" 'lib/native/*/libgrpc.so*' -d "$TMP/$ARCH" 2>/dev/null
+            S=$(ls -1 "$TMP/$ARCH"/libgrpc.so* 2>/dev/null | head -1)
+            [[ -z "$S" ]] && { echo "[FAIL $ARCH] libgrpc.so not in nupkg"; continue; }
+            echo "=== $ARCH: $(basename "$S") ==="
+            file "$S"
+            # show ARM build attributes if readelf supports -A:
+            readelf -A "$S" 2>/dev/null | grep -E "CPU_arch|FP_arch|CPU_name" | head -5
+        done
+        rm -rf "$TMP"
+
+    Expected for arm (armv7hf):
+        ... ELF 32-bit LSB shared object, ARM, EABI5 ...
+        Tag_CPU_arch: v7
+        Tag_FP_arch: VFPv3-D16
+    Expected for arm64 (armv8):
+        ... ELF 64-bit LSB shared object, ARM aarch64 ...
+        (readelf -A may be empty for aarch64 — that's normal)
+
+    If `file` reports `x86-64` for either — the build packed host
+    libraries. Root cause:
+      1. CONAN_USER_TOOLCHAIN did not propagate to the recipe (see
+         [8h]/[8i]),
+      2. or the recipe never read it (env-fallback patch missing in
+         abseil/re2/protobuf/grpc generate()),
+      3. or the deployer pulled lib/ from the wrong package_id
+         (`conan list <pkg>/<ver>:*` and check `settings.arch` for
+         each package_id).
+
+    Same check for the other 6 libs (run after grpc passes):
+
+        for ARCH in arm arm64; do
+            for pkg in protobuf abseil openssl re2 c-ares zlib; do
+                PKG=$(ls -1 output-$ARCH/$pkg.lin.gcc*.shared.${ARCH}*.nupkg 2>/dev/null | head -1)
+                [[ -z "$PKG" ]] && continue
+                # take whichever .so/.a is the canonical artefact:
+                SO=$(unzip -l "$PKG" | awk '/lib\/native\// && /\.(so|a)/ {print $4; exit}')
+                [[ -z "$SO" ]] && { echo "[$ARCH/$pkg] no lib found"; continue; }
+                TMP=$(mktemp -d)
+                unzip -q -j "$PKG" "$SO" -d "$TMP" 2>/dev/null
+                F=$(ls "$TMP" | head -1)
+                printf "%-10s %-10s %s\n" "$ARCH" "$pkg" "$(file -b "$TMP/$F" | cut -c1-80)"
+                rm -rf "$TMP"
+            done
+        done
+
+    Each line should mention ARM (for arm) or aarch64 (for arm64).
+    Any line with "x86-64" → that package needs to be rebuilt from a
+    clean Conan cache for the right arch.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
