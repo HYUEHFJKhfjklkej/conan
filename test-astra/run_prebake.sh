@@ -67,6 +67,28 @@ hdr() { printf "\n=== %s ===\n" "$1"; }
 pass() { printf "[PASS] %s\n" "$1"; }
 fail() { printf "[FAIL] %s\n" "$1" >&2; exit 1; }
 
+# Decide how to invoke docker. dev-astra has passwordless sudo; CI build
+# agents usually don't, but the build user is often in the `docker` group
+# (or runs as root). Try direct, then sudo -n; fail loudly if neither works.
+if docker info >/dev/null 2>&1; then
+    DOCKER=(docker)
+elif sudo -n docker info >/dev/null 2>&1; then
+    DOCKER=(sudo -n docker)
+else
+    cat >&2 <<EOF
+[FAIL] cannot reach the Docker daemon. Options to fix on this host:
+   1) Add the build user to the docker group (recommended for CI agents):
+          sudo usermod -aG docker \$USER
+          # log out + back in, or: newgrp docker
+   2) Or grant passwordless sudo for docker:
+          echo "\$USER ALL=(root) NOPASSWD: /usr/bin/docker" \\
+              | sudo tee /etc/sudoers.d/\$USER-docker
+   3) Or run this script as root (not advised).
+EOF
+    exit 1
+fi
+echo "docker invocation: ${DOCKER[*]}"
+
 hdr "config"
 echo "ARCH          = $ARCH"
 echo "REGISTRY      = $REGISTRY"
@@ -82,7 +104,7 @@ echo "MIN_FREE_GB   = $MIN_FREE_GB"
 hdr "1. disk-space pre-flight"
 # The mirror writes ~5 GB of conan-cache + ~2 GB of compiler temporaries
 # into the docker storage partition. Bail out early if there isn't room.
-DOCKER_DIR="$(sudo docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
+DOCKER_DIR="$("${DOCKER[@]}" info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
 FREE_KB=$(df --output=avail -k "$DOCKER_DIR" 2>/dev/null | tail -1 | tr -d ' ')
 FREE_GB=$(( FREE_KB / 1024 / 1024 ))
 echo "free on $DOCKER_DIR: ${FREE_GB} GB"
@@ -107,9 +129,9 @@ pass "${FREE_GB} GB free (>= ${MIN_FREE_GB} GB)"
 hdr "2. fresh pull from ProGet"
 # Drop any local copy first — we want to exercise the actual ProGet
 # round-trip, not a stale layer cache.
-sudo docker image rm "$IMAGE" >/dev/null 2>&1 || true
-if ! sudo docker pull "$IMAGE"; then
-    fail "docker pull $IMAGE — did the push complete?"
+"${DOCKER[@]}" image rm "$IMAGE" >/dev/null 2>&1 || true
+if ! "${DOCKER[@]}" pull "$IMAGE"; then
+    fail "docker pull $IMAGE — did the push complete, and is this host logged in to ProGet? Try: ${DOCKER[*]} login ${REGISTRY%%/*}"
 fi
 pass "pulled $IMAGE"
 
@@ -118,7 +140,7 @@ mkdir -p "$OUTPUT_DIR"
 echo "log → $OUTPUT_DIR/build.log"
 echo "starting at $(date +%H:%M:%S), expect 15-25 min"
 
-if sudo docker run --rm \
+if "${DOCKER[@]}" run --rm \
         -v "$ROOT_DIR":/work/conan-recipes \
         -v "$OUTPUT_DIR":/work/conan-recipes/output \
         -v "$CACHE_VOLUME":/root/.conan2 \
