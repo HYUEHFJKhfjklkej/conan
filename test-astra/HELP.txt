@@ -902,6 +902,119 @@ step and send it back so the next step can be picked.
      package was built).
 
 
+[10] One-time pre-bake of grpc-tc-mirror images to ProGet (TC handoff prep).
+
+     Context: today the mirror image is rebuilt at-call-time by
+     test_arm_cross.sh on every run (docker build → docker run, ~3-5 min
+     of overhead per CI build). For the TeamCity handoff we want
+     `grpc-tc-mirror-arm:0.1.0` and `grpc-tc-mirror-arm64:0.1.0`
+     pre-baked and published to ProGet so TC can `docker pull` an
+     immutable image. Local `./test_arm_cross.sh build arm{,64}` keeps
+     working unchanged (it rebuilds from Dockerfile at-call-time and
+     ignores the published image).
+
+     Requires: docker login credentials to `proget.inc.elara.local`
+     with push rights to `main/library/*`. Admin account works.
+     Service account with `Feed Administrator` on the `main` feed is
+     enough — global admin is not required.
+
+     0. Login (one-time per shell):
+        sudo docker login proget.inc.elara.local
+        # paste admin (or service-account) credentials
+
+     1. Build both mirror images on dev-astra (or any host with the
+        base images already pulled). Run from repo root:
+        cd ~/conan-master
+        export REGISTRY=proget.inc.elara.local/main
+        export X64_BASE_IMAGE_TAG=0.1.0
+        export ARM_BASE_IMAGE_TAG=0.1.0     # adjust per ProGet inventory
+        export ARM64_BASE_IMAGE_TAG=0.1.0   # adjust per ProGet inventory
+        export MIRROR_VER=0.1.0
+
+        # armv7hf mirror
+        sudo docker build \
+            --build-arg X64_BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
+            --build-arg BASE_IMAGE="$REGISTRY/library/gcc75-build-arm:$ARM_BASE_IMAGE_TAG" \
+            -f Dockerfile.grpc-tc-mirror \
+            -t "$REGISTRY/library/grpc-tc-mirror-arm:$MIRROR_VER" \
+            .
+
+        # arm64 mirror
+        sudo docker build \
+            --build-arg X64_BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
+            --build-arg BASE_IMAGE="$REGISTRY/library/gcc75-build-arm64:$ARM64_BASE_IMAGE_TAG" \
+            -f Dockerfile.grpc-tc-mirror \
+            -t "$REGISTRY/library/grpc-tc-mirror-arm64:$MIRROR_VER" \
+            .
+
+     2. Smoke-check both images locally before push (catches the
+        usual breakage where /opt/x64-native-gcc didn't land in stage 2,
+        or python3 in /opt/python is missing):
+        for ARCH in arm arm64; do
+            echo "=== grpc-tc-mirror-$ARCH:$MIRROR_VER ==="
+            sudo docker run --rm "$REGISTRY/library/grpc-tc-mirror-$ARCH:$MIRROR_VER" bash -c '
+                echo "-- python3 --"; /opt/python/bin/python3 --version
+                echo "-- conan --"; conan --version
+                echo "-- x64 native gcc --"; /opt/x64-native-gcc/bin/gcc --version | head -1
+                echo "-- target gcc --"; ls /opt/linaro-*/*/bin/*-gcc 2>/dev/null | head -3
+                echo "-- CONAN_USER_TOOLCHAIN env --"; echo "[$CONAN_USER_TOOLCHAIN]"
+                echo "-- PROFILE env --"; echo "[$PROFILE]"
+            '
+        done
+
+     3. Push to ProGet:
+        sudo docker push "$REGISTRY/library/grpc-tc-mirror-arm:$MIRROR_VER"
+        sudo docker push "$REGISTRY/library/grpc-tc-mirror-arm64:$MIRROR_VER"
+
+     4. Verify the image is reachable from a clean docker daemon
+        (simulates a fresh TC agent — drops the local layer cache,
+        pulls back from ProGet):
+        for ARCH in arm arm64; do
+            sudo docker image rm "$REGISTRY/library/grpc-tc-mirror-$ARCH:$MIRROR_VER" || true
+            sudo docker pull "$REGISTRY/library/grpc-tc-mirror-$ARCH:$MIRROR_VER"
+        done
+
+     5. End-to-end build inside the published image (sanity that the
+        baked image still produces 7 .nupkg without test_arm_cross.sh's
+        scaffolding around it):
+        ARCH=arm64    # or arm
+        sudo docker run --rm \
+            -v "$(pwd)":/work/conan-recipes \
+            -v "$(pwd)/output-${ARCH}-prebake":/work/conan-recipes/output \
+            -e PROFILE="/work/conan-recipes/profiles/$([ "$ARCH" = arm ] \
+                    && echo lin-gcc75-arm-linaro \
+                    || echo lin-gcc-aarch64-linaro)" \
+            -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \
+            -e CONAN_USER_TOOLCHAIN="/work/conan-recipes/profiles/toolchains/$([ "$ARCH" = arm ] \
+                    && echo linaro-arm.cmake \
+                    || echo linaro-aarch64.cmake)" \
+            "$REGISTRY/library/grpc-tc-mirror-${ARCH}:$MIRROR_VER" \
+            bash /work/conan-recipes/test-astra/run_test_grpc.sh
+        ls -lh "output-${ARCH}-prebake"/*.nupkg | wc -l   # expect 7
+
+     Common verdicts:
+       - 7 .nupkg in output-arm-prebake / output-arm64-prebake
+         with `<pkg>.lin.gcc75.shared.{arm,arm64}-linaro.<ver>.nupkg`
+         → image is good, hand off to TC.
+       - 0 .nupkg + transient deps recompile with `/usr/bin/cc`
+         → env-fallback didn't fire. Check that CONAN_USER_TOOLCHAIN
+         was set in the docker run (step 5). Don't blame the image.
+       - `docker push` fails with `denied: requested access ...`
+         → wrong credentials or missing push rights on the feed.
+         Re-`docker login`, or ask for `Feed Administrator` on `main`.
+       - Stage 2 build fails on `COPY --from=x64_native_tc
+         /opt/x64-native-gcc` → x86_64 base image tag mismatch. Pull
+         the actual `gcc84-build-x86_64:<tag>` ProGet has and pass
+         it via `--build-arg X64_BASE_IMAGE_TAG=<tag>`.
+
+     If updating later (new Dockerfile.grpc-tc-mirror, new linaro
+     toolchain version, new Conan pin): bump MIRROR_VER (`0.2.0`,
+     `0.3.0`, …) — do not overwrite `0.1.0`. Old TC build runs that
+     pinned a specific tag stay reproducible. Retention rules in
+     ProGet (Settings → Retention) can later prune old tags once
+     enough sandbox runs prove a new one is stable.
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
