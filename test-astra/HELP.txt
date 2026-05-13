@@ -1,4 +1,14 @@
+sudo docker run --rm \
+      -v "$(pwd)":/work/conan-recipes \                                                                                                                                
+      -v "$(pwd)/output-arm64-prebake":/work/conan-recipes/output \                                                                                                  
+      -e PROFILE=/work/conan-recipes/profiles/lin-gcc-aarch64-linaro \                                                                                                 
+      -e PROFILE_BUILD=/work/conan-recipes/profiles/lin-gcc84-x86_64 \                                                                                                 
+      -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake \                                                                           
+      proget.inc.elara.local/main/library/grpc-tc-mirror-arm64:0.1.0 \                                                                                                 
+      bash /work/conan-recipes/test-astra/run_test_grpc.sh   
+
 sudo docker run --rm $REGISTRY/library/gcc84-build-x86_64:0.1.0 ls -la /usr/local/gcc-8.4/bin/
+
 
  sudo docker run --rm "$REGISTRY/library/gcc75-build-arm64:0.1.0" \                                                                           
       bash -c '                                                                                                                                
