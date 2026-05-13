@@ -986,11 +986,39 @@ step and send it back so the next step can be picked.
 
      5. End-to-end build inside the published image (sanity that the
         baked image still produces 7 .nupkg without test_arm_cross.sh's
-        scaffolding around it):
+        scaffolding around it).
+
+        Pre-flight: a full grpc tree builds ~5 GB of Debug/Release
+        artefacts in conan-cache. Without a named volume for
+        /root/.conan2 all of that lands in the container's writable
+        layer (overlay2), and on top of that the compiler writes
+        intermediate .s files into /tmp inside the same layer. On a
+        host with <20 GB free in /var/lib/docker this dies with
+        "No space left on device" at the grpc compile step. Two
+        countermeasures, applied in order:
+        a) check headroom — `df -h /var/lib/docker`. Expect ≥30 GB
+           free before launching the e2e. If less, prune:
+              sudo docker image prune -f
+              sudo docker builder prune -f
+              # plus optionally drop old :latest mirror tags from
+              # earlier test_arm_cross.sh runs (no longer needed
+              # once 0.1.0 is pinned in ProGet):
+              sudo docker image rm \
+                  grpc-tc-mirror grpc-tc-mirror-arm \
+                  grpc-tc-mirror-arm64 grpc-tc-mirror-armv7hf \
+                  2>/dev/null
+        b) mount a named volume for /root/.conan2 — keeps build
+           artefacts out of overlay2. Use a *separate* name from
+           the one test_arm_cross.sh uses (`conan-cache-${ARCH}`)
+           so prebake-verify runs do not contaminate the local
+           dev-cache.
+
+        Then:
         ARCH=arm64    # or arm
         sudo docker run --rm \
             -v "$(pwd)":/work/conan-recipes \
             -v "$(pwd)/output-${ARCH}-prebake":/work/conan-recipes/output \
+            -v "conan-cache-${ARCH}-prebake:/root/.conan2" \
             -e PROFILE="/work/conan-recipes/profiles/$([ "$ARCH" = arm ] \
                     && echo lin-gcc75-arm-linaro \
                     || echo lin-gcc-aarch64-linaro)" \
@@ -1002,6 +1030,14 @@ step and send it back so the next step can be picked.
             bash /work/conan-recipes/test-astra/run_test_grpc.sh
         ls -lh "output-${ARCH}-prebake"/*.nupkg | wc -l   # expect 7
 
+        Note on shell paste: this command set uses line continuations
+        (`\` + newline). Some terminals / editors strip the
+        continuation when copy-pasted, leaving each line to execute
+        as its own command (`-v: command not found`, `docker:
+        invalid reference format`). If that happens, write the
+        command into a `.sh` file via a heredoc (`bash <<'EOF' ...`)
+        and run that — heredocs preserve backslashes verbatim.
+
      Common verdicts:
        - 7 .nupkg in output-arm-prebake / output-arm64-prebake
          with `<pkg>.lin.gcc75.shared.{arm,arm64}-linaro.<ver>.nupkg`
@@ -1009,6 +1045,11 @@ step and send it back so the next step can be picked.
        - 0 .nupkg + transient deps recompile with `/usr/bin/cc`
          → env-fallback didn't fire. Check that CONAN_USER_TOOLCHAIN
          was set in the docker run (step 5). Don't blame the image.
+       - grpc compile dies with `fatal error: error writing to
+         /tmp/cc*.s: No space left on device` or `can't close
+         ...promise_based_filter.cc.o: No space left on device` →
+         overlay2 layer ran out of room. Drop the run, apply the
+         step-5 pre-flight (a) + (b) above, re-launch.
        - `docker push` fails with `denied: requested access ...`
          → wrong credentials or missing push rights on the feed.
          Re-`docker login`, or ask for `Feed Administrator` on `main`.
