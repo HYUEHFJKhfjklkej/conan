@@ -42,7 +42,7 @@
    повседневной работы: вместо TC Parameters / Build Step UI, флаги
    живут **в git-репо** — в Conan profile (`[settings]`, `[options]`,
    `[conf]`, `[buildenv]`) или в `profiles/toolchains/*.cmake`. Каждый
-   тип флага имеет одно канонiчное место. Подробная карта legacy → Conan
+   тип флага имеет одно каноничное место. Подробная карта legacy → Conan
    соответствий, примеры (compiler flags, hardening, defines, per-package
    options, ad-hoc override из TC) и анти-паттерны — §4.
 
@@ -287,9 +287,9 @@ Step, Parameters tab, и `linux_x86_64.cmake` из bitbucket — три разн
 
 ### 4.2 Где флаги живут в Conan-флоу
 
-Каждый тип «настройки» имеет **одно** канонiчное место:
+Каждый тип «настройки» имеет **одно** каноничное место:
 
-| Тип | Канонiчное место | Влияет на `package_id`? |
+| Тип | Каноничное место | Влияет на `package_id`? |
 |---|---|---|
 | **`[settings]`** — дискриминаторы build'а (compiler, version, arch, build_type, cppstd) | Conan profile (`profiles/lin-gcc-aarch64-linaro` etc.) | ✅ Да |
 | **`[options]`** — per-package toggles (`shared`, `fPIC`, `with_tests`) | Conan profile `[options]` или `recipe default_options`, override через CLI `-o "<pkg>/*:<opt>=<val>"` | ✅ Да |
