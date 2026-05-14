@@ -27,7 +27,7 @@
 
 3. **Сколько ещё работы.** Сборочно — фактически закрыто; осталось
    формальное: arm-арка в TC, согласование с лидом layout'а
-   прод-конфигов (3 варианта в §6.2), Confluence-статья. **Опционально**
+   прод-конфигов (3 варианта в §7.1), Confluence-статья. **Опционально**
    — Conan-feed в ProGet (cross-agent cache, ~5-10 мин вместо 4 часов
    cold-build) и push наших ARM-`.nupkg` в боевой NuGet feed.
 
@@ -37,6 +37,14 @@
    расширенный NuGet feed под arm/arm64 outputs, retention policies,
    service accounts. ProGet — единственный внешний registry, всё
    остальное (Git, TC, агенты) остаётся как есть.
+
+5. **Где живут флаги сборки.** Это самое неочевидное изменение для
+   повседневной работы: вместо TC Parameters / Build Step UI, флаги
+   живут **в git-репо** — в Conan profile (`[settings]`, `[options]`,
+   `[conf]`, `[buildenv]`) или в `profiles/toolchains/*.cmake`. Каждый
+   тип флага имеет одно канонiчное место. Подробная карта legacy → Conan
+   соответствий, примеры (compiler flags, hardening, defines, per-package
+   options, ad-hoc override из TC) и анти-паттерны — §4.
 
 ---
 
@@ -151,7 +159,7 @@
 │  │ │   │   :0.1.0  ← pre-bake │  ┌─────────────────────────────────┐  │
 │  │ │   └── grpc-tc-mirror-arm64                                       │
 │  │ │       :0.1.0  ← pre-bake │  │ Conan feed `conan-internal`     │  │
-│  │ └── ...                    │  │ (ещё НЕ создан, см. §7.1)       │  │
+│  │ └── ...                    │  │ (ещё НЕ создан, см. §6.2)       │  │
 │  └────────────────────────────┘  └─────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────────┘
                               ▼  docker pull от TC агента
@@ -178,7 +186,7 @@
 │  ЦЕЛЬ: автоматический `nuget push` в ProGet NuGet feed →              │
 │         downstream продукты тянут через `nuget restore` как и         │
 │         сейчас. Имя feed'а и согласование с лидом — open question     │
-│         (§7.2).                                                       │
+│         (§7.3).                                                       │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -198,10 +206,10 @@
 | Задача | Зависит от |
 |---|---|
 | TC sandbox **arm** (armv7hf-linaro) | Копирование/параметризация существующего конфига; cold-build ~2h:20m |
-| Прод TC-конфиг — куда положить (replace GR121/122 / parallel / отдельный раздел) | Решение лида, §6.2 |
+| Прод TC-конфиг — куда положить (replace GR121/122 / parallel / отдельный раздел) | Решение лида, §7.1 |
 | Confluence-статья | После прод-handoff'а |
-| **Опционально:** Conan-feed в ProGet | Создание feed'а в ProGet, обновление профилей в `conan-recipes`, §7.1 |
-| **Опционально:** push `.nupkg` в существующий NuGet feed | Согласование с лидом (имя feed'а, версионирование, потенциальные коллизии), §7.2 |
+| **Опционально:** Conan-feed в ProGet | Создание feed'а в ProGet, обновление профилей в `conan-recipes`, §6.2 |
+| **Опционально:** push `.nupkg` в существующий NuGet feed | Согласование с лидом (имя feed'а, версионирование, потенциальные коллизии), §7.3 |
 
 ---
 
@@ -215,7 +223,7 @@
 | **Dependency resolution** | Ручной — сначала собери protobuf, потом grpc, версии вручную | Автоматический граф (Conan строит DAG, заказывает порядок) | Невозможно собрать grpc с несовместимым protobuf — Conan сразу ругнётся |
 | **Per-build deterministicность** | Build number + дата | `package_id` (SHA1 от settings+options+deps+recipe_revision) | Точное «этот бинарь = тот бинарь» по hash'у |
 | **Cache between builds** | Нет, CleanUp перед каждым | Conan local cache (`/root/.conan2/p/...`) + named volume для контейнера | Inkrementальный билд после изменения одного recipe = 5-15 мин против 4 часов |
-| **Cross-agent cache** | Нет (каждый агент собирает с нуля) | Опционально через Conan remote (ProGet Conan feed) — pull готовых package_id | Cold-агент: 5-10 мин (pull) vs 4 часа (full build), §7.1 |
+| **Cross-agent cache** | Нет (каждый агент собирает с нуля) | Опционально через Conan remote (ProGet Conan feed) — pull готовых package_id | Cold-агент: 5-10 мин (pull) vs 4 часа (full build), §6.2 |
 | **Добавить новую либу** | 1-2 дня devops (новый Bitbucket-репо, обёртка CMakeLists, toolchain, TC-проект, Build Steps, параметры) | ~30 мин (copy recipe из conan-center-index, добавить 2 offline-патча, положить tarball, проверить profile) | На roadmap'е IN-353: curl, boost — для них **уже** дешевле сделать Conan-флоу с нуля чем TC |
 | **Обновить версию существующей либы** | Переписать обёртку CMakeLists.txt, проверить toolchain, обновить TC-параметры | Bump `conandata.yml` (url + sha256), при необходимости передёрнуть `patches/` | Часы → минуты |
 | **Перенос на новую платформу** | Новые TC-конфиги (per-arch, per-OS, per-compiler) | Новый profile + (опционально) новый toolchain.cmake | Часы → ~30 мин |
@@ -254,9 +262,253 @@
 
 ---
 
-## 4. Что можно ещё улучшить (roadmap)
+## 4. Где живут флаги, опции и settings (карта legacy TC → Conan)
 
-### 4.1 Краткосрочное (1-4 недели)
+Главное изменение для девопса/билд-инженера в повседневной работе:
+**флаги теперь живут в git-репо, а не в TC UI.** Это плюс
+(code-review, diff, rollback), но требует другого workflow. Этот
+раздел — карта «было → стало» с примерами.
+
+### 4.1 Где флаги жили в legacy TC
+
+| Что | Где | Кто видел |
+|---|---|---|
+| `-march=core2 -fPIC -static-libgcc -static-libstdc++` (compiler) | `cmake/toolchains/linux_x86_64.cmake` в Bitbucket-обёртке (`<lib>` репо) | Любой через git clone обёртки |
+| `-DCMAKE_BUILD_TYPE=Release`, `-DBUILD_SHARED_LIBS=ON` | TC Build Step (Release/Debug — отдельные шаги) | TC UI и Build Log |
+| `-DCUSTOM_DEFINES="%CustomDefines%"`, `-DGENERATE_MAP=${GENERATE_MAP}` | TC Build Step + TC Parameter `%CustomDefines%` | TC UI Parameters tab |
+| `update-alternatives --auto` для GCC 5.3 vs 8.4 | TC Build Step + TC Parameter `useUpgradedBuild` | TC UI |
+| Опции пакета (включить TLS, отключить tests) | В CMakeLists.txt обёртки `option(...)` или через `-D<OPTION>=...` в TC Build Step | TC UI + Bitbucket |
+| Per-version поведение (`PrereleaseSuffix`) | TC Parameter | TC UI |
+
+Проблема legacy: один тип «настройки» жил в нескольких местах. Чтобы
+понять «какой `-D` дойдёт до cmake», нужно было прочитать TC Build
+Step, Parameters tab, и `linux_x86_64.cmake` из bitbucket — три разных
+источника.
+
+### 4.2 Где флаги живут в Conan-флоу
+
+Каждый тип «настройки» имеет **одно** канонiчное место:
+
+| Тип | Канонiчное место | Влияет на `package_id`? |
+|---|---|---|
+| **`[settings]`** — дискриминаторы build'а (compiler, version, arch, build_type, cppstd) | Conan profile (`profiles/lin-gcc-aarch64-linaro` etc.) | ✅ Да |
+| **`[options]`** — per-package toggles (`shared`, `fPIC`, `with_tests`) | Conan profile `[options]` или `recipe default_options`, override через CLI `-o "<pkg>/*:<opt>=<val>"` | ✅ Да |
+| **`[conf]`** ad-hoc compiler/linker flags (`cflags`, `cxxflags`, `sharedlinkflags`, `defines`) | Conan profile `[conf]` section | ❌ Нет (по умолчанию). Можно явно включить, но обычно нежелательно |
+| **`[buildenv]`** env-style flags (`CFLAGS`, `CXXFLAGS`, `LDFLAGS`, `CC`, `CXX`) | Conan profile `[buildenv]` section | ❌ Нет |
+| **`platform_tool_requires`** — build tools (cmake, perl, ninja) | Conan profile `[platform_tool_requires]` | ✅ Косвенно (через recipe revision) |
+| **CMake-only низкоуровневые флаги** (`add_compile_options(-fXYZ)` без видимости Conan'у) | `profiles/toolchains/<arch>.cmake` | ❌ Нет (опасно — кеш не инвалидируется при правке) |
+
+«Один тип = одно место» означает: чтобы понять «какой `-D` дойдёт до
+gcc», читаешь **один** профиль + (опционально) `linaro-<arch>.cmake`,
+если флаг низкоуровневый.
+
+### 4.3 Прямое соответствие legacy → Conan
+
+| Я хочу… | Legacy TC | Conan |
+|---|---|---|
+| Поменять compiler version (gcc 5.3 vs 8.4) | TC Parameter `useUpgradedBuild` + update-alternatives | Edit profile `[settings] compiler.version=8.4` или создать `lin-gcc53-x86_64` второй profile |
+| Поменять build type (Release vs Debug) | Отдельные TC Build Steps `Build Release` / `Build Debug` | `-s build_type=Release` или edit profile `[settings] build_type=Release`. `run_test_grpc.sh` собирает оба и пакует в один `.nupkg` |
+| Static vs shared | TC Parameter + `-DBUILD_SHARED_LIBS=ON` в Build Step | `-o "*/*:shared=True"` (CLI) или profile `[options] *:shared=True`. `run_test_grpc.sh` дефолтит True |
+| Включить тесты grpc | `-DgRPC_BUILD_TESTS=ON` в TC Build Step | Опция в `grpc/conanfile.py`: `options = {"with_tests": [True, False]}`, → `-o "grpc/*:with_tests=True"` |
+| Добавить custom define (`-DENABLE_FOO=1`) для всех либ | TC Parameter `%CustomDefines%` + `-DCUSTOM_DEFINES=...` в Build Step | `[conf] *:tools.build:defines=["ENABLE_FOO=1"]` в profile |
+| То же, но только для grpc | То же, но в TC только GR113 | `[conf] grpc/*:tools.build:defines=["ENABLE_FOO=1"]` |
+| Hardening flags (`-fstack-protector`, `-Wl,-z,now`) | Edit `cmake/toolchains/linux_x86_64.cmake` в Bitbucket-обёртке | `[conf] *:tools.build:cxxflags=["-fstack-protector-strong"]` + `*:tools.build:sharedlinkflags=["-Wl,-z,now"]` |
+| Cross-compile с linaro toolchain | TC переключал на arm-агент + другая обёртка с `linux_arm-linaro.cmake` | profile `lin-gcc75-arm-linaro` + `[conf] user_toolchain="…/linaro-arm.cmake"` + env-fallback патч в 4 рецептах (§8.1) |
+| Override один параметр для одного билда (ad-hoc) | Edit TC Parameter → Run | TC Custom script добавляет к conan install: `-c "user.app:foo=bar"` или `-o "<pkg>/*:opt=val"`, читается из `env.X` TC parameter |
+| Изменить parallelism (`-j N`) | TC Build Step CMake args | `[conf] tools.build:jobs=4` в profile или env `CONAN_CPU_COUNT=4` |
+
+### 4.4 Полный пример: profile с флагами
+
+Базовый `lin-gcc75-arm-linaro` (то что у нас сейчас, без compiler-flags
+— они в toolchain.cmake):
+
+```
+[settings]
+os=Linux
+arch=armv7hf
+compiler=gcc
+compiler.version=7.5
+compiler.libcxx=libstdc++11
+compiler.cppstd=17
+build_type=Release
+
+[platform_tool_requires]
+cmake/3.25.1
+perl/5.36.0
+
+[buildenv]
+PATH=+(path)/opt/linaro-arm-7.5.0/.../bin
+CC=arm-linux-gnueabihf-gcc
+CXX=arm-linux-gnueabihf-g++
+AR=arm-linux-gnueabihf-ar
+…
+
+[conf]
+*:tools.cmake.cmaketoolchain:user_toolchain=["/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"]
+```
+
+Расширенная версия с hardening + custom defines + parallelism +
+per-package options:
+
+```
+[settings]
+os=Linux
+arch=armv7hf
+compiler=gcc
+compiler.version=7.5
+compiler.libcxx=libstdc++11
+compiler.cppstd=17
+build_type=Release
+
+[platform_tool_requires]
+cmake/3.25.1
+perl/5.36.0
+
+[options]
+*:shared=True
+*:fPIC=True
+grpc/*:with_tests=False
+openssl/*:no_deprecated=True
+
+[buildenv]
+PATH=+(path)/opt/linaro-arm-7.5.0/.../bin
+CC=arm-linux-gnueabihf-gcc
+CXX=arm-linux-gnueabihf-g++
+AR=arm-linux-gnueabihf-ar
+AS=arm-linux-gnueabihf-as
+LD=arm-linux-gnueabihf-ld
+NM=arm-linux-gnueabihf-nm
+RANLIB=arm-linux-gnueabihf-ranlib
+STRIP=arm-linux-gnueabihf-strip
+# Дополнительные env-флаги (видны и autotools-пакетам как openssl):
+CFLAGS=-fPIC -fstack-protector-strong
+CXXFLAGS=-fPIC -fstack-protector-strong
+LDFLAGS=-Wl,-z,now -Wl,-z,relro
+
+[conf]
+*:tools.cmake.cmaketoolchain:user_toolchain=["/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"]
+# Hardening для всех CMake-пакетов в графе:
+*:tools.build:cxxflags=["-fstack-protector-strong", "-fPIC"]
+*:tools.build:cflags=["-fstack-protector-strong", "-fPIC"]
+*:tools.build:sharedlinkflags=["-Wl,-z,now", "-Wl,-z,relro"]
+*:tools.build:exelinkflags=["-Wl,-z,now", "-Wl,-z,relro"]
+# Custom defines для всех:
+*:tools.build:defines=["NDEBUG"]
+# Custom defines только для grpc:
+grpc/*:tools.build:defines=["GRPC_ENABLE_CUSTOM_X=1"]
+# Параллелизм:
+tools.build:jobs=4
+```
+
+**Префиксы в `[conf]` и `[options]`:**
+
+| Префикс | Кому применится |
+|---|---|
+| `*:cxxflags=…` | Всем пакетам в графе (host context) |
+| `grpc/*:cxxflags=…` | Только grpc и его сборке, не транзитивным deps |
+| `&:cxxflags=…` | Только consumer-проекту (у нас нет, мы только либы) |
+| Без префикса | Синоним `&:` (только consumer) |
+| `&!`, `*!` префиксы | Реверсивные: к consumer'у с минусом, к всем — наоборот (редкие сценарии) |
+
+### 4.5 Как прокинуть флаг из TC ad-hoc (без правки профиля)
+
+Если нужно **разово** собрать с особым флагом, не плодя профили:
+
+**В TC Build Configuration → Parameters → добавь:**
+```
+env.EXTRA_DEFINES = "-DENABLE_FOO=1 -DDEBUG_X=1"
+```
+
+**В Custom script:**
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Прокидываем env vars в docker run внутри run_prebake.sh
+# Создаём ad-hoc оверрайд через CONAN_*_FLAGS env (читаются профилем
+# через jinja2 templating если у нас на это настроено), или через
+# дополнительный аргумент к conan install (через wrapper).
+export CONAN_EXTRA_CXXFLAGS="${EXTRA_DEFINES:-}"
+
+./test-astra/run_prebake.sh arm64
+```
+
+В `run_test_grpc.sh` (или wrapper-скрипте) подхватываем:
+```bash
+EXTRA_CONF=""
+if [[ -n "${CONAN_EXTRA_CXXFLAGS:-}" ]]; then
+    EXTRA_CONF="-c tools.build:cxxflags+=[\"$CONAN_EXTRA_CXXFLAGS\"]"
+fi
+
+conan install --requires=grpc/1.78.1 \
+    -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
+    $EXTRA_CONF \
+    --build=missing --no-remote \
+    --deployer=extensions/deployers/legacy_nupkg.py
+```
+
+Это **не лучшая практика** (флаг не в git, не воспроизводимо), но
+работает для разовых проб. Для долгого использования — копировать
+профиль и положить флаг туда: `lin-gcc75-arm-linaro-debugfoo`.
+
+### 4.6 Как проверить что флаг реально дошёл до gcc
+
+После добавления флага и пересборки:
+
+```bash
+# 1. Что Conan видит из профиля:
+conan profile show -pr:h=lin-gcc75-arm-linaro -pr:b=lin-gcc84-x86_64
+
+# 2. Что попало в сгенерированный CMakeToolchain:
+ls /root/.conan2/p/b/<pkg-hash>/b/build/Release/generators/
+cat /root/.conan2/p/b/<pkg-hash>/b/build/Release/generators/conan_toolchain.cmake \
+    | grep -iE 'cxxflags|cflags|defines'
+
+# 3. Что попало в сгенерированный AutotoolsToolchain (для autotools пакетов):
+cat /root/.conan2/p/b/<pkg-hash>/b/build/Release/generators/conanbuild.sh \
+    | grep -iE 'CXXFLAGS|CFLAGS|LDFLAGS'
+
+# 4. Что реально передалось компилятору (последняя инстанция истины):
+grep -h 'arm-linux-gnueabihf-g++.*\.cc\.o' \
+    /root/.conan2/p/b/<pkg-hash>/b/build/Release/CMakeFiles/*.dir/*.make \
+    | head -1
+```
+
+Если флаг не появляется в (4), но появляется в (2)/(3) — значит cmake
+его принял, но конкретный target его не использует (`PRIVATE` vs
+`PUBLIC` issue в самом recipe). Если не появляется в (2) — `[conf]`
+ключ не тот, проверь `conan config show <key>` для правильного имени.
+
+### 4.7 Что НЕЛЬЗЯ делать (анти-паттерны)
+
+1. **`add_compile_options(-fXYZ)` в `linaro-<arch>.cmake` для флага влияющего на ABI.**
+   CMake-уровень невидим Conan'у, package_id не пересчитывается. Если
+   ты изменил `-fno-rtti` → `-frtti` в toolchain.cmake — Conan **возьмёт
+   старый кешированный пакет**, ABI поедет, downstream сломается без
+   видимых причин. Такие флаги должны жить в `[conf] tools.build:cxxflags`
+   (тогда они хэшируются в package_id, кеш инвалидируется).
+
+2. **Конфигурация через CLI `-c` без записи в profile.**
+   Делает билд невоспроизводимым (нужно помнить какие именно `-c` были
+   у того release-билда). Для разовой пробы — OK; для постоянного — в
+   профиль.
+
+3. **Дублирование флагов в `[buildenv]` CFLAGS и `[conf] tools.build:cxxflags`.**
+   Они оба применятся, флаг задвоится в командной строке gcc. Обычно
+   не критично (gcc последний `-O3` побеждает первый `-O2`), но
+   некоторые комбинации (`-static-libgcc -static-libgcc`) могут давать
+   warning'и или быть отвергнуты strict линкером.
+
+4. **Override `[settings] compiler.cppstd` для отдельного пакета через `[options]`.**
+   `cppstd` — settings, не options. Можно только глобально в профиле
+   или per-package через `<pkg>/*:compiler.cppstd=20` в `[settings]`
+   (с двоеточием — это работает в Conan 2.x).
+
+---
+
+## 5. Что можно ещё улучшить (roadmap)
+
+### 5.1 Краткосрочное (1-4 недели)
 
 | Улучшение | Что даст | Сложность |
 |---|---|---|
@@ -265,7 +517,7 @@
 | **Cleanup script** для conan-cache volume retention | Контролируемое удаление volume'ов старше N дней — не накапливаются на агентах | Низкая — cron + `docker volume ls --filter` |
 | **Build Mirror Image как отдельный TC config** | Авто-обновление `grpc-tc-mirror-{arm,arm64}:NEXT_VER` при изменении `Dockerfile.grpc-tc-mirror` | Средняя — VCS Trigger + `docker build/push` step + service account для ProGet push |
 
-### 4.2 Среднесрочное (1-3 месяца)
+### 5.2 Среднесрочное (1-3 месяца)
 
 | Улучшение | Что даст | Сложность |
 |---|---|---|
@@ -275,7 +527,7 @@
 | **Retention rules на ProGet Docker feed** | Старые `:0.x.0` теги mirror-образов авточистка → меньше storage burn | Низкая — ProGet UI, Settings → Retention |
 | **Service account** на ProGet | TC агент логинится под scoped acct, не под админкой; меньше blast radius на компрометацию | Низкая — ProGet UI, User Management |
 
-### 4.3 Долгосрочное (3-12 месяцев, Phase 3 IN-353)
+### 5.3 Долгосрочное (3-12 месяцев, Phase 3 IN-353)
 
 | Улучшение | Что даст | Сложность / зависимости |
 |---|---|---|
@@ -285,9 +537,9 @@
 
 ---
 
-## 5. Роль ProGet (детально)
+## 6. Роль ProGet (детально)
 
-### 5.1 Что уже используется
+### 6.1 Что уже используется
 
 ProGet (`proget.inc.elara.local`) — единственный internal registry в
 этой схеме. Все три типа feed'ов, которые мы используем или планируем,
@@ -323,7 +575,7 @@ Push-флоу (что мы хотим добавить):
 - **Open question:** конкретно в какой feed пушить (sandbox-feed для
   валидации vs боевой; согласование с лидом).
 
-### 5.2 Что можно добавить
+### 6.2 Что можно добавить
 
 #### Conan feed `conan-internal` (ещё НЕ создан)
 
@@ -409,7 +661,7 @@ ProGet поддерживает retention rules (`Settings → Retention`):
 
 Это **future work**, пока админка работает — не блокер.
 
-### 5.3 Что ProGet не покрывает
+### 6.3 Что ProGet не покрывает
 
 | Не делает ProGet | Кто делает |
 |---|---|
@@ -424,9 +676,9 @@ ProGet — **только storage + retrieval** для пакетов разны
 
 ---
 
-## 6. Open questions / решения нужны от лида
+## 7. Open questions / решения нужны от лида
 
-### 6.1 Куда положить прод-TC-конфиг (после успешного sandbox)
+### 7.1 Куда положить прод-TC-конфиг (после успешного sandbox)
 
 Три варианта, у каждого свои trade-offs:
 
@@ -439,7 +691,7 @@ ProGet — **только storage + retrieval** для пакетов разны
 **Запрос лиду:** какой вариант, какие потребители GR121/122 нужно
 учесть, deadline.
 
-### 6.2 Конфиг «Build Mirror Image» — нужен ли отдельный
+### 7.2 Конфиг «Build Mirror Image» — нужен ли отдельный
 
 Сейчас pre-bake mirror image (`grpc-tc-mirror-arm{,64}:0.1.0`) делается
 вручную с dev-astra. Когда image обновится (новая версия Conan, новая
@@ -459,7 +711,7 @@ linaro toolchain, новый рецепт что-то ломает) — нужн
 ещё один structural билд-конфиг, его место в TC иерархии — тоже
 вопрос.)
 
-### 6.3 Push `.nupkg` в боевой NuGet feed
+### 7.3 Push `.nupkg` в боевой NuGet feed
 
 Сейчас наши `.nupkg` (arm/arm64) — в TC Artifacts, не в ProGet NuGet.
 Чтобы downstream продукты их получили, нужно их пушнуть в существующий
@@ -474,9 +726,9 @@ NuGet feed где сейчас лежит `grpc.lin.gcc.shared.x64.*` от GR113
   `<pkg>.lin.gcc75.shared.arm64-linaro.<ver>` (если они вообще раньше
   получали arm-артефакты — это надо узнать).
 
-### 6.4 Conan feed — создавать ли сейчас или после прод-handoff'а
+### 7.4 Conan feed — создавать ли сейчас или после прод-handoff'а
 
-ProGet Conan feed — большая фича (см. §5.2), решает cross-agent cache
+ProGet Conan feed — большая фича (см. §6.2), решает cross-agent cache
 проблему. Но:
 
 - Технически независима от прод-handoff'а — можно заводить когда
@@ -489,9 +741,9 @@ ProGet Conan feed — большая фича (см. §5.2), решает cross-
 
 ---
 
-## 7. Известные quirks и их статус
+## 8. Известные quirks и их статус
 
-### 7.1 Conan 2.27.1 — `[conf] *:user_toolchain` не пропагируется на transitive deps
+### 8.1 Conan 2.27.1 — `[conf] *:user_toolchain` не пропагируется на transitive deps
 
 **Симптом:** при cross-build для ARM, `--requires=grpc/...` пересобирает
 abseil как транзитивную, и в этом контексте `tools.cmake.cmaketoolchain:user_toolchain`
@@ -518,7 +770,7 @@ Arch-гейт критичен: без него toolchain leak'ает в build c
 Conan, проверить что без патчей работает, удалить env-fallback из 4
 рецептов.
 
-### 7.2 `[buildenv]` host-profile leak в build context
+### 8.2 `[buildenv]` host-profile leak в build context
 
 **Симптом:** профиль `lin-gcc75-arm-linaro` со своим `[buildenv]` (CC,
 CXX, AR/AS/LD/NM/RANLIB/STRIP с префиксом `arm-linux-gnueabihf-`)
@@ -532,7 +784,7 @@ x86_64 native compiler для protoc).
 (separate buildenv per context). Тогда explicit buildenv в `lin-gcc84-x86_64`
 можно ослабить или удалить.
 
-### 7.3 Linaro 7.5 binutils 2.32 — BFD-ld баг с `.strtab corruption`
+### 8.3 Linaro 7.5 binutils 2.32 — BFD-ld баг с `.strtab corruption`
 
 **Симптом:** cross-link против shared abseil `.so` падает с `invalid
 string offset .strtab`.
@@ -544,7 +796,7 @@ string offset .strtab`.
 power (linaro в CI base image, обновление = новый ProGet tag
 `gcc75-build-arm{,64}:0.2.0` от devops). Не наш scope.
 
-### 7.4 abseil aarch64 — `xpaclri` (ARMv8.3-A inline asm) против binutils 2.32
+### 8.4 abseil aarch64 — `xpaclri` (ARMv8.3-A inline asm) против binutils 2.32
 
 **Симптом:** abseil 20250127 на aarch64 содержит `xpaclri` (ARMv8.3
 pointer-auth hint), но linaro 7.5 binutils 2.32 эту мнемонику не знает.
@@ -556,7 +808,7 @@ pointer-auth hint), но linaro 7.5 binutils 2.32 эту мнемонику не
 **Когда выкинется:** обновление linaro до 2020.* (binutils 2.34+). Не
 наш scope.
 
-### 7.5 `file(1)` на Stretch — quirk на protobuf aarch64 `.so`
+### 8.5 `file(1)` на Stretch — quirk на protobuf aarch64 `.so`
 
 **Симптом:** `file libprotobuf.so.5.29.6` (на arm64 .nupkg) сообщает
 `ELF 64-bit LSB ARM, EABI5` вместо ожидаемого `aarch64`.
@@ -570,7 +822,7 @@ pointer-auth hint), но linaro 7.5 binutils 2.32 эту мнемонику не
 **Документация:** HELP.txt блок `[9a]`. Не workaround в коде, это
 "знать и не пугаться".
 
-### 7.6 ARM base images — путь `/opt/linaro-aarch64-7.5.0/` vs `/opt/linaro-arm64-7.5.0/`
+### 8.6 ARM base images — путь `/opt/linaro-aarch64-7.5.0/` vs `/opt/linaro-arm64-7.5.0/`
 
 **Симптом:** в `gcc75-build-arm64:0.1.0` корень linaro лежит в
 `/opt/linaro-arm64-7.5.0/`, а не в `/opt/linaro-aarch64-7.5.0/` (как
@@ -583,7 +835,7 @@ pointer-auth hint), но linaro 7.5 binutils 2.32 эту мнемонику не
 
 ---
 
-## 8. FAQ
+## 9. FAQ
 
 **Q: «Зачем `legacy_nupkg.py` deployer? Conan native package недостаточно?»**
 A: Downstream-продукты сейчас потребляют `.nupkg` через `nuget restore`
@@ -627,7 +879,7 @@ filesystem, regex, system и т.д. отдельные packages), ~1-2 дня. �
 
 ---
 
-## 9. Ссылки
+## 10. Ссылки
 
 - `test-astra/HELP.txt` — нумерованные диагностические блоки `[0]`…`[10]`
   + `[X]`. Конкретные команды для troubleshooting.
@@ -647,8 +899,9 @@ filesystem, regex, system и т.д. отдельные packages), ~1-2 дня. �
 
 ---
 
-## 10. История изменений
+## 11. История изменений
 
 | Дата | Что |
 |---|---|
 | 2026-05-14 | Создан документ. Описано закрытие TC sandbox arm64. |
+| 2026-05-14 | Добавлен §4 «Где живут флаги, опции и settings» — карта legacy TC → Conan + примеры. Сдвинута нумерация §5-§11; обновлены cross-references; в TL;DR добавлен пункт 5. |
