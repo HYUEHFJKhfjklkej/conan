@@ -315,8 +315,9 @@ def deploy(graph, output_folder, **kwargs):
             )
             debug_pkg = release_pkg
 
-        # Staging
-        staging = os.path.join(output_folder, "staging", variant_dir)
+        # Staging — unique per pkg_id; final archive packs from this dir
+        # so root entries (.nuspec, CMakeLists.var, ...) land at zip root.
+        staging = os.path.join(output_folder, "staging", pkg_id)
         if os.path.isdir(staging):
             shutil.rmtree(staging)
         os.makedirs(staging, exist_ok=True)
@@ -340,10 +341,9 @@ def deploy(graph, output_folder, **kwargs):
                   "w", encoding="utf-8") as f:
             f.write(_generate_targets(legacy_name, os_short, compiler_short, linkage, arch, libs))
 
-        # 4. .nuspec
-        os.makedirs(os.path.join(staging, "nuget"), exist_ok=True)
+        # 4. .nuspec — NuGet/ProGet require it at archive root, not in nuget/
         nuspec_deps = [(d.ref.name, str(d.ref.version)) for _, d in dep.dependencies.host.items()]
-        with open(os.path.join(staging, "nuget", f"{legacy_name}.nuspec"),
+        with open(os.path.join(staging, f"{legacy_name}.nuspec"),
                   "w", encoding="utf-8") as f:
             f.write(_generate_nuspec(legacy_name, version, os_short, compiler_short,
                                      linkage, arch, nuspec_deps))
@@ -381,16 +381,17 @@ def deploy(graph, output_folder, **kwargs):
         if not copied:
             open(dst_lic, "w").close()
 
-        # 8. .nupkg
+        # 8. .nupkg — pack from `staging` so .nuspec lands at archive root
+        # (was packing from parent `staging/`, leaving an extra <variant_dir>/
+        # wrapper that broke ProGet upload and downstream CMakeLists.var resolution).
         nupkg = os.path.join(output_folder, f"{pkg_id}.{version}.nupkg")
-        staging_root = os.path.join(output_folder, "staging")
         with zipfile.ZipFile(nupkg, "w", zipfile.ZIP_DEFLATED) as zf:
-            for root, _, files in os.walk(staging_root):
+            for root, _, files in os.walk(staging):
                 for fname in files:
                     fp = os.path.join(root, fname)
-                    arcname = os.path.relpath(fp, staging_root)
+                    arcname = os.path.relpath(fp, staging)
                     zf.write(fp, arcname)
-        shutil.rmtree(staging_root)
+        shutil.rmtree(os.path.join(output_folder, "staging"))
 
         size_mb = os.path.getsize(nupkg) / (1024 * 1024)
         conanfile.output.success(
