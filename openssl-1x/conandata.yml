@@ -1,0 +1,15 @@
+# Recipe for OpenSSL 1.x branch (legacy support).
+# Used by gsd_parser/mosquitto/sura_proto-style legacy consumers which
+# pin openssl:1.1.11 in their CMakeLists.var. Internally this is
+# OpenSSL 1.1.1w (the last LTS of the 1.1 line, released 2023-09-11).
+sources:
+  "1.1.11":
+    # Elara internal nomenclature "1.1.11" maps to upstream OpenSSL 1.1.1w.
+    # The offline tarball in src/ is the canonical upstream archive.
+    url: "https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w/openssl-1.1.1w.tar.gz"
+    sha256: "cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
+patches:
+  "1.1.11":
+    - patch_file: "patches/1.1.1-tvos-watchos.patch"
+      patch_description: "TVOS and WatchOS don't like fork() — inert on Linux"
+      patch_type: "portability"
