@@ -5,6 +5,10 @@ sources:
   "5.29.6":
     url: "https://github.com/protocolbuffers/protobuf/releases/download/v29.6/protobuf-29.6.tar.gz"
     sha256: "877bf9f880631aa31daf2c09896276985696728137fcd43cc534a28c5566d9ba"
+  "4.25.2":
+    # Legacy version requested by GR113/120 consumers. Upstream tag is "v25.2".
+    url: "https://github.com/protocolbuffers/protobuf/releases/download/v25.2/protobuf-25.2.tar.gz"
+    sha256: "8ff511a64fc46ee792d3fe49a5a1bcad6f7dc50dfbba5a28b0e5b979c17f9871"
 absl_deps:
   # reference: https://github.com/protocolbuffers/protobuf/blob/main/cmake/abseil-cpp.cmake
   "6.33.5":
@@ -66,6 +70,45 @@ absl_deps:
     - absl_layout
     - absl_log_initialize
     - absl_log_globals
+    - absl_log_severity
+    - absl_memory
+    - absl_node_hash_map
+    - absl_node_hash_set
+    - absl_optional
+    - absl_random_distributions
+    - absl_random_random
+    - absl_span
+    - absl_status
+    - absl_statusor
+    - absl_strings
+    - absl_synchronization
+    - absl_time
+    - absl_type_traits
+    - absl_utility
+    - absl_variant
+  "4.25.2":
+    # Mirrors the cmake/abseil-cpp.cmake list for v25.2 in upstream.
+    # Same components as 5.29.6 minus some that landed in later v5.x.
+    - absl_absl_check
+    - absl_absl_log
+    - absl_algorithm
+    - absl_base
+    - absl_bind_front
+    - absl_bits
+    - absl_btree
+    - absl_cleanup
+    - absl_cord
+    - absl_core_headers
+    - absl_debugging
+    - absl_die_if_null
+    - absl_dynamic_annotations
+    - absl_flags
+    - absl_flat_hash_map
+    - absl_flat_hash_set
+    - absl_function_ref
+    - absl_hash
+    - absl_layout
+    - absl_log_initialize
     - absl_log_severity
     - absl_memory
     - absl_node_hash_map
