@@ -110,17 +110,34 @@ class GrpcConan(ConanFile):
             self.requires("protobuf/[>=5.27.0 <7]", transitive_headers=True)
             self.requires("abseil/[*]", transitive_headers=True, transitive_libs=True)
             self.requires("re2/[>=20251105]")
+            self.requires("c-ares/[>=1.19.1 <2]")
+            self.requires("openssl/[>=1.1 <4]")
+            self.requires("zlib/[>=1.2.11 <2]")
         elif grpc_version >= "1.65.0":
             self.requires("protobuf/[>=5.27.0 <6]", transitive_headers=True)
             self.requires("abseil/[>=20240116.1 <=20250127.0]", transitive_headers=True, transitive_libs=True)
             self.requires("re2/20250722")
+            self.requires("c-ares/[>=1.19.1 <2]")
+            self.requires("openssl/[>=1.1 <4]")
+            self.requires("zlib/[>=1.2.11 <2]")
+        elif grpc_version >= "1.60.0":
+            # Legacy GR113/120 parity. Pin every transitive dep to the
+            # exact version Elara already publishes so binary
+            # _dependencies records in CMakeLists.var match in-tree
+            # consumers (el_conf, mosquitto, gsd_parser, sura_proto).
+            self.requires("abseil/20240116.2", transitive_headers=True, transitive_libs=True)
+            self.requires("protobuf/4.25.2", transitive_headers=True)
+            self.requires("re2/20230301")
+            self.requires("c-ares/1.25.0")
+            self.requires("openssl/1.1.11")
+            self.requires("zlib/1.3.0")
         else:
             self.requires("abseil/[>=20230125.3 <=20230802.1]", transitive_headers=True, transitive_libs=True)
             self.requires("protobuf/3.21.12", transitive_headers=True)
             self.requires("re2/20230301")
-        self.requires("c-ares/[>=1.19.1 <2]")
-        self.requires("openssl/[>=1.1 <4]")
-        self.requires("zlib/[>=1.2.11 <2]")
+            self.requires("c-ares/[>=1.19.1 <2]")
+            self.requires("openssl/[>=1.1 <4]")
+            self.requires("zlib/[>=1.2.11 <2]")
         if self.options.get_safe("with_libsystemd"):
             if Version(self.version) >= "1.67.0":
                 self.requires("libsystemd/255.10")

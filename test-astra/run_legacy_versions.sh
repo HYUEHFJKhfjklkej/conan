@@ -1,17 +1,24 @@
 #!/bin/bash
 #
 # run_legacy_versions.sh
-# Сборка legacy-версий transitive deps через Conan + упаковка в legacy nupkg.
+# Сборка полного legacy-стека grpc 1.60.1 через Conan + упаковка в legacy nupkg.
+# IN-658: drop-in replacement для GR113/120 TC билдов через Conan.
 #
-# Версии: zlib 1.3.0, protobuf 4.25.2, openssl 1.1.11 (= openssl 1.1.1w upstream).
-# Все три — drop-in replacement для соответствующих legacy nupkg в ProGet
-# (используются mosquitto, gsd_parser, sura_proto и т.д.).
+# Версии:
+#   grpc:1.60.1        — replaces legacy GR113 grpc
+#   protobuf:4.25.2    — upstream v25.2 (legacy nomenclature)
+#   abseil:20240116.2  — pinned to grpc 1.60.1 transitive
+#   re2:20230301       — pinned to grpc 1.60.1 transitive
+#   c-ares:1.25.0      — pinned to grpc 1.60.1 transitive
+#   openssl:1.1.11     — Elara nomenclature = upstream OpenSSL 1.1.1w (recipe in openssl-1x/)
+#   zlib:1.3.0         — upstream v1.3 (legacy nomenclature)
 #
 # Использование:
-#   ./test-astra/run_legacy_versions.sh                 # Release + Debug всё
+#   ./test-astra/run_legacy_versions.sh                 # полный стек (Release + Debug)
 #   ./test-astra/run_legacy_versions.sh zlib            # только zlib
 #   ./test-astra/run_legacy_versions.sh protobuf        # только protobuf
 #   ./test-astra/run_legacy_versions.sh openssl         # только openssl
+#   ./test-astra/run_legacy_versions.sh grpc            # только grpc (+ автоматом abseil/re2/c-ares)
 #   ./test-astra/run_legacy_versions.sh pack            # только deployer (после create'ов)
 #
 # Перед запуском:
@@ -65,14 +72,22 @@ build_openssl() {
     create_one openssl-1x 1.1.11 Debug
 }
 
+build_grpc() {
+    # Pulls abseil/20240116.2 + re2/20230301 + c-ares/1.25.0
+    # automatically via grpc/conanfile.py's "elif >= 1.60.0" branch.
+    create_one grpc 1.60.1 Release
+    create_one grpc 1.60.1 Debug
+}
+
 pack_all() {
     echo "=========================================="
     echo "Deployer: упаковка legacy nupkg в $OUTPUT_DIR"
     echo "=========================================="
+    # Pulling grpc/1.60.1 brings the entire legacy graph through
+    # transitive requires (abseil/protobuf/openssl/re2/c-ares/zlib),
+    # the deployer then packs each as its own legacy .nupkg.
     conan install \
-        --requires=zlib/1.3.0 \
-        --requires=protobuf/4.25.2 \
-        --requires=openssl/1.1.11 \
+        --requires=grpc/1.60.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
@@ -106,6 +121,7 @@ case "$cmd" in
         build_zlib
         build_protobuf
         build_openssl
+        build_grpc
         pack_all
         ;;
     zlib)
@@ -117,11 +133,14 @@ case "$cmd" in
     openssl)
         build_openssl
         ;;
+    grpc)
+        build_grpc
+        ;;
     pack)
         pack_all
         ;;
     *)
-        echo "Usage: $0 [all|zlib|protobuf|openssl|pack]" >&2
+        echo "Usage: $0 [all|zlib|protobuf|openssl|grpc|pack]" >&2
         exit 1
         ;;
 esac

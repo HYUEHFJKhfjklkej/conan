@@ -5,6 +5,9 @@ sources:
   "1.69.0": # this is the last version that supports C++14
     url: "https://github.com/grpc/grpc/archive/v1.69.0.tar.gz"
     sha256: "cd256d91781911d46a57506978b3979bfee45d5086a1b6668a3ae19c5e77f8dc"
+  "1.60.1": # legacy GR113/120 parity, paired with protobuf:4.25.2 + openssl:1.1.11
+    url: "https://github.com/grpc/grpc/archive/refs/tags/v1.60.1.tar.gz"
+    sha256: "30f97253703d0070fa755cc9a3f3770c4c743e78beb7005344e63e16607a35d9"
   "1.54.3": # this is still referenced explicitly by other recipes
     url: "https://github.com/grpc/grpc/archive/v1.54.3.tar.gz"
     sha256: "17e4e1b100657b88027721220cbfb694d86c4b807e9257eaf2fb2d273b41b1b1"
