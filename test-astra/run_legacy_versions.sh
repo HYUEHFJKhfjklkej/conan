@@ -75,8 +75,11 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     fi
 
     # Передаём cmd-line обратно нашему же скрипту внутри контейнера.
+    # ВАЖНО: bind-mount всего репо (не только output-legacy) — иначе
+    # контейнер использует копию скриптов из образа (та что была на
+    # момент docker build), и git pull на host'е не отражается внутри.
     exec docker run --rm \
-        -v "$ROOT_DIR/$OUTPUT_DIR:/work/conan-recipes/$OUTPUT_DIR" \
+        -v "$ROOT_DIR:/work/conan-recipes" \
         -v "$CACHE_VOLUME:/root/.conan2" \
         -e IN_MIRROR=1 \
         --entrypoint bash \
