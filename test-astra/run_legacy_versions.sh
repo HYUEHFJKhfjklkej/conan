@@ -32,7 +32,9 @@ cd "$ROOT_DIR"
 PROFILE="profiles/lin-gcc84-x86_64"
 OUTPUT_DIR="output-legacy"
 MIRROR_IMAGE="${MIRROR_IMAGE:-grpc-tc-mirror}"
-BASE_IMAGE="${BASE_IMAGE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:latest}"
+# Stage 1 of Dockerfile.grpc-tc-mirror — base with gcc 8.4 in /usr/local/gcc-8.4/.
+# Stage 2 base is Dockerfile's own default (gcc:8); we don't override it.
+X64_BASE_IMAGE="${X64_BASE_IMAGE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-legacy-x86_64}"
 
 mkdir -p "$OUTPUT_DIR"
@@ -58,7 +60,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
         echo "[INFO] Образ $MIRROR_IMAGE отсутствует — собираю..."
         docker build \
-            --build-arg BASE_IMAGE="$BASE_IMAGE" \
+            --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
             -f Dockerfile.grpc-tc-mirror \
             -t "$MIRROR_IMAGE" \
             .
