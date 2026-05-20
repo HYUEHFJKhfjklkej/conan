@@ -118,6 +118,111 @@ export_one() {
     conan export "$recipe_dir/" --version="$version" --no-remote
 }
 
+# Auto-patch legacy/<pkg>/conanfile.py с тем что Elara legacy CMake требует.
+# Идемпотентно — если patches уже на месте, не трогает.
+AUTO_PATCH_DONE=0
+auto_patch_legacy_recipes() {
+    [ "$AUTO_PATCH_DONE" = "1" ] && return
+    [ -d legacy ] || { AUTO_PATCH_DONE=1; return; }
+
+    echo "=========================================="
+    echo "Auto-patch legacy/<pkg>/conanfile.py"
+    echo "=========================================="
+
+    python3 - <<'PYAPPLY'
+import re
+import sys
+from pathlib import Path
+
+LEGACY = Path("legacy")
+if not LEGACY.is_dir():
+    sys.exit(0)
+
+NEW_GENERATE = '''    def generate(self):
+        tc = CMakeToolchain(self)
+        # Elara legacy CMakeLists / PlatformHelper / InstallComponent expect these.
+        tc.cache_variables["BUILD_RELEASE"] = "YES" if self.settings.build_type == "Release" else "NO"
+        tc.cache_variables["PRERELEASE_SUFFIX"] = ""
+        tc.cache_variables["SOURCE_REVISION"] = ""
+        tc.generate()'''
+
+# Pattern matches the bare "def generate(...): tc.generate()" the thin
+# template originally emitted. Don't touch if already patched.
+OLD_GENERATE_RE = re.compile(
+    r"^    def generate\(self\):\n"
+    r"        tc = CMakeToolchain\(self\)\n"
+    r"        tc\.generate\(\)$",
+    re.MULTILINE,
+)
+
+# Точный requirements() для legacy/grpc — весь Elara graph по
+# internal-номенклатуре. Прочие legacy/<pkg> остаются без requirements()
+# по умолчанию; если build падёт на missing dep — добавишь руками.
+GRPC_REQUIREMENTS = '''    def requirements(self):
+        # Whole Elara legacy graph (Bitbucket-fork internal nomenclature)
+        self.requires("absl/0.2.0", transitive_headers=True, transitive_libs=True)
+        self.requires("re2/0.2.0")
+        self.requires("cares/1.19.0")
+        self.requires("upb/0.2.0")
+        self.requires("address_sorting/1.0.0")
+        self.requires("protobuf/4.25.2", transitive_headers=True)
+        self.requires("openssl/1.1.11")
+        self.requires("zlib/1.3.0")
+
+'''
+
+# protobuf обычно тянет absl + zlib; openssl/zlib standalone.
+EXTRA_REQS = {
+    "protobuf": '''    def requirements(self):
+        self.requires("absl/0.2.0", transitive_headers=True)
+        self.requires("zlib/1.3.0")
+
+''',
+}
+
+CONFIGURE_MARKER = "    def configure(self):"
+
+changed = 0
+skipped = 0
+for cf in sorted(LEGACY.glob("*/conanfile.py")):
+    pkg = cf.parent.name
+    text = cf.read_text()
+    original = text
+
+    # 1) Patch generate() block if it's still the minimal template.
+    if OLD_GENERATE_RE.search(text):
+        text = OLD_GENERATE_RE.sub(NEW_GENERATE, text)
+
+    # 2) Add requirements() if pkg needs one and it's not already there.
+    extra = None
+    if pkg == "grpc":
+        extra = GRPC_REQUIREMENTS
+    elif pkg in EXTRA_REQS:
+        extra = EXTRA_REQS[pkg]
+    if extra and "def requirements(self)" not in text:
+        # Вставляем перед configure(), сохраняя отступ.
+        if CONFIGURE_MARKER in text:
+            text = text.replace(CONFIGURE_MARKER, extra + CONFIGURE_MARKER, 1)
+        else:
+            # Если configure() нет — вставляем перед generate()
+            gen_marker = "    def generate(self):"
+            text = text.replace(gen_marker, extra + gen_marker, 1)
+
+    if text != original:
+        cf.write_text(text)
+        print(f"[PATCH] {cf}")
+        changed += 1
+    else:
+        print(f"[OK]    {cf} (already patched / no template match)")
+        skipped += 1
+
+print(f"\n[INFO] auto-patch: changed={changed} skipped={skipped}")
+PYAPPLY
+
+    AUTO_PATCH_DONE=1
+    echo
+}
+
 # Pre-export all legacy recipe versions into the local cache so that
 # version ranges declared by upstream recipes (protobuf -> abseil range,
 # grpc -> abseil/re2/c-ares ranges) can be resolved offline.
@@ -125,6 +230,7 @@ export_one() {
 PREP_DONE=0
 prep_recipes() {
     [ "$PREP_DONE" = "1" ] && return
+    auto_patch_legacy_recipes
     echo "=========================================="
     echo "Step 0/N: Export all legacy recipes to local cache"
     echo "=========================================="
