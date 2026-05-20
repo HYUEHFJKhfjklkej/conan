@@ -119,7 +119,9 @@ export_one() {
 # version ranges declared by upstream recipes (protobuf -> abseil range,
 # grpc -> abseil/re2/c-ares ranges) can be resolved offline.
 # Without this, --no-remote dies with "Package 'X/[range]' not resolved".
+PREP_DONE=0
 prep_recipes() {
+    [ "$PREP_DONE" = "1" ] && return
     echo "=========================================="
     echo "Step 0/N: Export all legacy recipes to local cache"
     echo "=========================================="
@@ -130,7 +132,12 @@ prep_recipes() {
     export_one re2        20230301
     export_one c-ares     1.25.0
     export_one grpc       1.60.1
+
     echo
+    echo "[INFO] Recipes in local cache after prep:"
+    conan list "*/*" --no-remote 2>/dev/null | grep -E "^[a-z]" | head -20 || true
+    echo
+    PREP_DONE=1
 }
 
 create_one() {
@@ -148,21 +155,25 @@ create_one() {
 }
 
 build_zlib() {
+    prep_recipes
     create_one zlib 1.3.0 Release
     create_one zlib 1.3.0 Debug
 }
 
 build_protobuf() {
+    prep_recipes
     create_one protobuf 4.25.2 Release
     create_one protobuf 4.25.2 Debug
 }
 
 build_openssl() {
+    prep_recipes
     create_one openssl-1x 1.1.11 Release
     create_one openssl-1x 1.1.11 Debug
 }
 
 build_grpc() {
+    prep_recipes
     # Pulls abseil/20240116.2 + re2/20230301 + c-ares/1.25.0
     # automatically via grpc/conanfile.py's "elif >= 1.60.0" branch.
     create_one grpc 1.60.1 Release
@@ -170,6 +181,7 @@ build_grpc() {
 }
 
 pack_all() {
+    prep_recipes
     echo "=========================================="
     echo "Deployer: упаковка legacy nupkg в $OUTPUT_DIR"
     echo "=========================================="
