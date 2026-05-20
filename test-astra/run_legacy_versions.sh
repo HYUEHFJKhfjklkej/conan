@@ -140,16 +140,18 @@ if not LEGACY.is_dir():
 
 NEW_GENERATE = '''    def generate(self):
         tc = CMakeToolchain(self)
-        # ---- Elara legacy build-mode flags ----
+        # ---- Elara legacy CMake framework — verified from PlatformHelper.cmake source ----
+        # Build-mode flags (CMakeCommon.cmake)
         tc.cache_variables["BUILD_RELEASE"] = "YES" if self.settings.build_type == "Release" else "NO"
         tc.cache_variables["PRERELEASE_SUFFIX"] = ""
         tc.cache_variables["SOURCE_REVISION"] = ""
-        # ---- PlatformHelper.cmake: get_platform_prefix() requires TARGET_PLATFORM ----
-        # also feeds folder suffix lib/native/<platform>-<compiler>-<library>-<processor>
+        # PlatformHelper.cmake — exact variable names read by each helper:
+        #   get_platform_prefix()  -> TARGET_PLATFORM  ("LINUX"/"WINDOWS"/"WINCE800")
+        #   get_processor_prefix() -> TARGET_ARCH_CPU  ("X86_64" stays lowercase)
+        #   get_library_prefix()   -> BUILD_SHARED_LIBS  (set by Conan toolchain from options.shared)
+        #   get_compiler_prefix()  -> reads compiler via execute_process(g++ -dumpversion) -> "gcc84"
         tc.cache_variables["TARGET_PLATFORM"] = "LINUX"
-        tc.cache_variables["TARGET_COMPILER"] = "GCC84"
-        tc.cache_variables["TARGET_PROCESSOR_CPU"] = "X86_64"
-        tc.cache_variables["TARGET_LIBRARY"] = "shared" if self.options.get_safe("shared") else "static"
+        tc.cache_variables["TARGET_ARCH_CPU"] = "X86_64"
         tc.generate()'''
 
 # Matches any existing generate() body so we can rewrite it idempotently
@@ -229,6 +231,39 @@ PYAPPLY
     echo
 }
 
+# Распаковывает первый найденный legacy/<pkg>/src/*.tar.gz и копирует
+# cmake/PlatformHelper.cmake + cmake/InstallComponent.cmake + cmake/CMakeCommon.cmake
+# в /work/conan-recipes/output/legacy-helpers/<pkg>/. Цель — host видит
+# содержимое Elara cmake-хелперов и можно дальше править auto_patch по факту.
+HELPERS_DUMPED=0
+dump_legacy_helpers() {
+    [ "$HELPERS_DUMPED" = "1" ] && return
+    [ -d legacy ] || { HELPERS_DUMPED=1; return; }
+    mkdir -p output/legacy-helpers
+    echo "=========================================="
+    echo "Dump cmake/ helpers from legacy/*/src/*.tar.gz to output/legacy-helpers/"
+    echo "=========================================="
+    for srcdir in legacy/*/src; do
+        pkg=$(basename "$(dirname "$srcdir")")
+        archive=$(ls -1 "$srcdir"/*.tar.gz 2>/dev/null | head -1)
+        [ -n "$archive" ] || continue
+        tmp=$(mktemp -d)
+        tar -xzf "$archive" -C "$tmp" 2>/dev/null || { rm -rf "$tmp"; continue; }
+        for f in PlatformHelper.cmake InstallComponent.cmake CMakeCommon.cmake; do
+            found=$(find "$tmp" -name "$f" 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+                mkdir -p "output/legacy-helpers/$pkg"
+                cp "$found" "output/legacy-helpers/$pkg/$f"
+                echo "  [dump] $pkg/$f"
+            fi
+        done
+        rm -rf "$tmp"
+    done
+    echo "[INFO] helpers dumped to output/legacy-helpers/ — host visible via bind-mount"
+    HELPERS_DUMPED=1
+    echo
+}
+
 # Pre-export all legacy recipe versions into the local cache so that
 # version ranges declared by upstream recipes (protobuf -> abseil range,
 # grpc -> abseil/re2/c-ares ranges) can be resolved offline.
@@ -237,6 +272,7 @@ PREP_DONE=0
 prep_recipes() {
     [ "$PREP_DONE" = "1" ] && return
     auto_patch_legacy_recipes
+    dump_legacy_helpers
     echo "=========================================="
     echo "Step 0/N: Export all legacy recipes to local cache"
     echo "=========================================="
