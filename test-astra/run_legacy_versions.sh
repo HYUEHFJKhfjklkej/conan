@@ -31,8 +31,55 @@ cd "$ROOT_DIR"
 
 PROFILE="profiles/lin-gcc84-x86_64"
 OUTPUT_DIR="output-legacy"
+MIRROR_IMAGE="${MIRROR_IMAGE:-grpc-tc-mirror}"
+BASE_IMAGE="${BASE_IMAGE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:latest}"
+CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-legacy-x86_64}"
+
 mkdir -p "$OUTPUT_DIR"
 
+# ----------------------------------------------------------------------
+# Docker self-wrapping.
+#
+# Профиль lin-gcc84-x86_64 жёстко зашит на /opt/x64-native-gcc/bin/gcc —
+# этот путь существует только внутри Dockerfile.grpc-tc-mirror (Stage 1
+# копирует gcc 8.4 из ProGet-образа gcc84-build-x86_64). На голой dev-VM
+# этого пути НЕТ → cmake configure упадёт с
+#   "CMAKE_C_COMPILER /opt/x64-native-gcc/bin/gcc is not a full path".
+#
+# Поэтому если мы НЕ внутри контейнера mirror — обернуть себя в docker run.
+# Внутри контейнера флаг IN_MIRROR=1 пробрасывается через -e чтобы
+# рекурсии не было.
+# ----------------------------------------------------------------------
+if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
+    echo "[INFO] Запуск на host. Профиль lin-gcc84-x86_64 требует Docker-зеркала."
+    echo "[INFO] Оборачиваю себя в docker run $MIRROR_IMAGE ..."
+
+    # Собираем образ-зеркало если он отсутствует.
+    if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
+        echo "[INFO] Образ $MIRROR_IMAGE отсутствует — собираю..."
+        docker build \
+            --build-arg BASE_IMAGE="$BASE_IMAGE" \
+            -f Dockerfile.grpc-tc-mirror \
+            -t "$MIRROR_IMAGE" \
+            .
+    fi
+
+    # Передаём cmd-line обратно нашему же скрипту внутри контейнера.
+    exec docker run --rm \
+        -v "$ROOT_DIR/$OUTPUT_DIR:/work/conan-recipes/$OUTPUT_DIR" \
+        -v "$CACHE_VOLUME:/root/.conan2" \
+        -e IN_MIRROR=1 \
+        --entrypoint bash \
+        "$MIRROR_IMAGE" \
+        -c "./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
+fi
+
+# ----------------------------------------------------------------------
+# Дальше — мы внутри Docker-зеркала (либо рукотворного хоста с GCC 8.4 в
+# нужном пути). В образе grpc-tc-mirror Conan уже установлен в /opt/python,
+# симлинк в /usr/local/bin, venv не нужен. На host'е (если кто-то очень
+# хочет) — попробуем venv.
+# ----------------------------------------------------------------------
 if ! command -v conan >/dev/null 2>&1; then
     if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
         echo "[INFO] conan не в PATH — активирую venv автоматически"
@@ -42,7 +89,8 @@ if ! command -v conan >/dev/null 2>&1; then
 fi
 if ! command -v conan >/dev/null 2>&1; then
     echo "ERROR: conan не найден ни в PATH, ни в $ROOT_DIR/venv/."
-    echo "       Запусти сначала: ./test-astra/setup.sh"
+    echo "       На host: ./test-astra/setup.sh"
+    echo "       В Docker: образ grpc-tc-mirror должен иметь Conan в /opt/python — проверь Dockerfile"
     exit 1
 fi
 echo "[INFO] Conan: $(conan --version)"
