@@ -34,8 +34,15 @@ OUTPUT_DIR="output-legacy"
 mkdir -p "$OUTPUT_DIR"
 
 if ! command -v conan >/dev/null 2>&1; then
-    echo "ERROR: conan не найден в PATH. Активируй venv:"
-    echo "    source $ROOT_DIR/venv/bin/activate"
+    if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
+        echo "[INFO] conan не в PATH — активирую venv автоматически"
+        # shellcheck disable=SC1091
+        source "$ROOT_DIR/venv/bin/activate"
+    fi
+fi
+if ! command -v conan >/dev/null 2>&1; then
+    echo "ERROR: conan не найден ни в PATH, ни в $ROOT_DIR/venv/."
+    echo "       Запусти сначала: ./test-astra/setup.sh"
     exit 1
 fi
 echo "[INFO] Conan: $(conan --version)"
