@@ -128,19 +128,19 @@ prep_recipes() {
     echo "=========================================="
     echo "Step 0/N: Export all legacy recipes to local cache"
     echo "=========================================="
-    # Upstream-обёртки (наши conan-recipes/) для transitive deps,
-    # которых нет в Bitbucket Elara-форке.
-    export_one zlib       1.3.0
-    export_one protobuf   4.25.2
-    export_one openssl-1x 1.1.11
-
-    # Legacy форки из Bitbucket (Elara internal номенклатура).
-    # Появляются после прогона test-astra/prepare_legacy_from_bitbucket.sh
+    # Все 9 рецептов из legacy/<pkg> — клоны Bitbucket-форков Elara,
+    # созданы через test-astra/prepare_legacy_from_bitbucket.sh.
+    # Каждый export только если директория существует — позволяет
+    # запускать скрипт частично (например после прогона только
+    # absl/re2/cares).
     [ -d legacy/absl ]            && export_one legacy/absl            0.2.0
     [ -d legacy/re2 ]             && export_one legacy/re2             0.2.0
     [ -d legacy/cares ]           && export_one legacy/cares           1.19.0
     [ -d legacy/upb ]             && export_one legacy/upb             0.2.0
     [ -d legacy/address_sorting ] && export_one legacy/address_sorting 1.0.0
+    [ -d legacy/protobuf ]        && export_one legacy/protobuf        4.25.2
+    [ -d legacy/openssl ]         && export_one legacy/openssl         1.1.11
+    [ -d legacy/zlib ]            && export_one legacy/zlib            1.3.0
     [ -d legacy/grpc ]            && export_one legacy/grpc            1.60.1
 
     echo
@@ -197,6 +197,9 @@ build_legacy_re2()             { prep_recipes; create_one legacy/re2            
 build_legacy_cares()           { prep_recipes; create_one legacy/cares           1.19.0 Release; create_one legacy/cares           1.19.0 Debug; }
 build_legacy_upb()             { prep_recipes; create_one legacy/upb             0.2.0  Release; create_one legacy/upb             0.2.0  Debug; }
 build_legacy_address_sorting() { prep_recipes; create_one legacy/address_sorting 1.0.0  Release; create_one legacy/address_sorting 1.0.0  Debug; }
+build_legacy_protobuf()        { prep_recipes; create_one legacy/protobuf        4.25.2 Release; create_one legacy/protobuf        4.25.2 Debug; }
+build_legacy_openssl()         { prep_recipes; create_one legacy/openssl         1.1.11 Release; create_one legacy/openssl         1.1.11 Debug; }
+build_legacy_zlib()            { prep_recipes; create_one legacy/zlib            1.3.0  Release; create_one legacy/zlib            1.3.0  Debug; }
 build_legacy_grpc()            { prep_recipes; create_one legacy/grpc            1.60.1 Release; create_one legacy/grpc            1.60.1 Debug; }
 
 pack_deps() {
@@ -278,16 +281,16 @@ case "$cmd" in
         ;;
     legacy-all)
         # Полный Elara-legacy стек (после prepare_legacy_from_bitbucket.sh):
-        # 3 upstream deps + 6 legacy Bitbucket-форков + pack через grpc/1.60.1.
+        # все 9 пакетов из Bitbucket-форков + pack через grpc/1.60.1.
         prep_recipes
-        build_zlib
-        build_protobuf
-        build_openssl
+        build_legacy_zlib
         build_legacy_absl
         build_legacy_re2
         build_legacy_cares
         build_legacy_upb
         build_legacy_address_sorting
+        build_legacy_openssl
+        build_legacy_protobuf
         build_legacy_grpc
         pack_legacy_full
         ;;
@@ -303,6 +306,9 @@ case "$cmd" in
     legacy-cares)       build_legacy_cares ;;
     legacy-upb)         build_legacy_upb ;;
     legacy-address-sorting) build_legacy_address_sorting ;;
+    legacy-zlib)        build_legacy_zlib ;;
+    legacy-protobuf)    build_legacy_protobuf ;;
+    legacy-openssl)     build_legacy_openssl ;;
     legacy-grpc)        build_legacy_grpc ;;
     pack|pack-deps)     pack_deps ;;
     pack-legacy-full)   pack_legacy_full ;;
@@ -313,13 +319,14 @@ Usage: $0 [command]
 Commands:
   all                   3 upstream deps (zlib/protobuf/openssl) + pack 6 nupkg
   legacy-all            full Elara legacy stack (требует prepare_legacy_from_bitbucket.sh):
-                          3 upstream deps + 6 Bitbucket-форков + pack via grpc/1.60.1
+                          все 9 Bitbucket-форков + pack via legacy/grpc/1.60.1
   prep                  conan export всех recipes без сборки
   zlib | protobuf | openssl | grpc
-                        собрать один upstream pkg
+                        собрать один upstream pkg (наши conan-recipes/)
+  legacy-zlib | legacy-protobuf | legacy-openssl | legacy-grpc |
   legacy-absl | legacy-re2 | legacy-cares | legacy-upb |
-  legacy-address-sorting | legacy-grpc
-                        собрать один Elara-legacy pkg
+  legacy-address-sorting
+                        собрать один Elara Bitbucket-форк
   pack-deps             pack 6 nupkg без grpc
   pack-legacy-full      pack via legacy grpc/1.60.1 (все 9 nupkg)
 USAGE

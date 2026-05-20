@@ -49,12 +49,9 @@ PACKAGES=(
     "upb|0.2.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/upb.git|<TAG_OR_BRANCH>"
     "address_sorting|1.0.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/address_sorting.git|<TAG_OR_BRANCH>"
     "grpc|1.60.1|https://bitbucket.inc.elara.local/scm/<PROJECT>/grpc.git|<TAG_OR_BRANCH>"
-    # Раскомментируй если у Elara есть свои форки этих пакетов.
-    # Если оставишь закомментированными — будут использованы upstream-рецепты
-    # которые уже в репо (zlib/, protobuf/, openssl-1x/).
-    # "protobuf|4.25.2|https://bitbucket.inc.elara.local/scm/<PROJECT>/protobuf.git|<TAG>"
-    # "openssl|1.1.11|https://bitbucket.inc.elara.local/scm/<PROJECT>/openssl.git|<TAG>"
-    # "zlib|1.3.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/zlib.git|<TAG>"
+    "protobuf|4.25.2|https://bitbucket.inc.elara.local/scm/<PROJECT>/protobuf.git|<TAG_OR_BRANCH>"
+    "openssl|1.1.11|https://bitbucket.inc.elara.local/scm/<PROJECT>/openssl.git|<TAG_OR_BRANCH>"
+    "zlib|1.3.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/zlib.git|<TAG_OR_BRANCH>"
 )
 
 # ---------------------------------------------------------------------------
