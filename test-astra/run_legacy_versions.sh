@@ -140,17 +140,23 @@ if not LEGACY.is_dir():
 
 NEW_GENERATE = '''    def generate(self):
         tc = CMakeToolchain(self)
-        # Elara legacy CMakeLists / PlatformHelper / InstallComponent expect these.
+        # ---- Elara legacy build-mode flags ----
         tc.cache_variables["BUILD_RELEASE"] = "YES" if self.settings.build_type == "Release" else "NO"
         tc.cache_variables["PRERELEASE_SUFFIX"] = ""
         tc.cache_variables["SOURCE_REVISION"] = ""
+        # ---- PlatformHelper.cmake: get_platform_prefix() requires TARGET_PLATFORM ----
+        # also feeds folder suffix lib/native/<platform>-<compiler>-<library>-<processor>
+        tc.cache_variables["TARGET_PLATFORM"] = "LINUX"
+        tc.cache_variables["TARGET_COMPILER"] = "GCC84"
+        tc.cache_variables["TARGET_PROCESSOR_CPU"] = "X86_64"
+        tc.cache_variables["TARGET_LIBRARY"] = "shared" if self.options.get_safe("shared") else "static"
         tc.generate()'''
 
-# Pattern matches the bare "def generate(...): tc.generate()" the thin
-# template originally emitted. Don't touch if already patched.
+# Matches any existing generate() body so we can rewrite it idempotently
+# every run (cmake-vars set evolves as we discover new Elara requirements).
 OLD_GENERATE_RE = re.compile(
     r"^    def generate\(self\):\n"
-    r"        tc = CMakeToolchain\(self\)\n"
+    r"(?:        [^\n]*\n)*"
     r"        tc\.generate\(\)$",
     re.MULTILINE,
 )
