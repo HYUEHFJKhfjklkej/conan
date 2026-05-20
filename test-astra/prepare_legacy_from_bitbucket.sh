@@ -176,6 +176,17 @@ class ${class_name}Conan(ConanFile):
 
     def generate(self):
         tc = CMakeToolchain(self)
+        # Elara legacy CMakeLists/PlatformHelper.cmake/InstallComponent.cmake
+        # ждут эти переменные — без них get_platform_prefix() падает
+        # с if "STREQUAL" "" (пустая переменная без guard'a).
+        # Conan-овский conan_toolchain.cmake перекрывает Elara'ин
+        # cmake/toolchains/linux_x86_64.cmake — это ОК, gcc и флаги
+        # Conan уже задал; Elara helpers их найдут через CMAKE_*.
+        tc.cache_variables["BUILD_RELEASE"] = (
+            "YES" if self.settings.build_type == "Release" else "NO"
+        )
+        tc.cache_variables["PRERELEASE_SUFFIX"] = ""
+        tc.cache_variables["SOURCE_REVISION"] = ""
         tc.generate()
 
     def build(self):
