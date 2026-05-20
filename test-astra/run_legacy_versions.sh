@@ -32,9 +32,14 @@ cd "$ROOT_DIR"
 PROFILE="profiles/lin-gcc84-x86_64"
 OUTPUT_DIR="output-legacy"
 MIRROR_IMAGE="${MIRROR_IMAGE:-grpc-tc-mirror}"
-# Stage 1 of Dockerfile.grpc-tc-mirror — base with gcc 8.4 in /usr/local/gcc-8.4/.
-# Stage 2 base is Dockerfile's own default (gcc:8); we don't override it.
-X64_BASE_IMAGE="${X64_BASE_IMAGE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
+# Closed-network dev-VM / Astra-агент: ни docker.io, ни pypi.org недоступны.
+# Поэтому ОБЕ ARG идут на один и тот же ProGet-образ:
+#   Stage 1 (x64_native_tc) — из него копируется /usr/local/gcc-8.4/
+#   Stage 2 (mirror)        — он же используется как база сборочной среды
+# (он одновременно содержит Debian Stretch + GCC 8.4 + cmake + protoc + Qt).
+PROGET_BASE="${PROGET_BASE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
+X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
+BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-legacy-x86_64}"
 
 mkdir -p "$OUTPUT_DIR"
@@ -59,8 +64,11 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     # Собираем образ-зеркало если он отсутствует.
     if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
         echo "[INFO] Образ $MIRROR_IMAGE отсутствует — собираю..."
+        echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
+        echo "[INFO] BASE_IMAGE=$BASE_IMAGE"
         docker build \
             --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
+            --build-arg BASE_IMAGE="$BASE_IMAGE" \
             -f Dockerfile.grpc-tc-mirror \
             -t "$MIRROR_IMAGE" \
             .
