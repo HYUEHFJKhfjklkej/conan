@@ -330,13 +330,48 @@ create_one() {
     local recipe_dir="$1"
     local version="$2"
     local build_type="$3"
+    local pkg_name
+    pkg_name=$(basename "$recipe_dir")
+    local log_dir="${ROOT_DIR}/output-legacy/logs"
+    mkdir -p "$log_dir"
+    local log_file="${log_dir}/${pkg_name}-${version}-${build_type}.log"
     echo "=========================================="
     echo "conan create $recipe_dir --version=$version build_type=$build_type"
+    echo "log -> $log_file"
     echo "=========================================="
+    set +e
     conan create "$recipe_dir/" --version="$version" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         -s build_type="$build_type" \
-        --build=missing --no-remote
+        --build=missing --no-remote 2>&1 | tee "$log_file"
+    local rc=${PIPESTATUS[0]}
+    set -e
+    if [ "$rc" -ne 0 ]; then
+        echo
+        echo "=========================================="
+        echo "[FAIL] $pkg_name/$version $build_type — диагностика из $log_file"
+        echo "=========================================="
+        echo "--- find_package / Found absl etc. ---"
+        grep -E "find_package|Found absl|Could NOT find|Found ZLIB|Found Protobuf" "$log_file" | head -30 || true
+        echo
+        echo "--- undefined references (top 20) ---"
+        grep -E "undefined reference to" "$log_file" | head -20 || true
+        echo
+        echo "--- generated *-config.cmake in build dir ---"
+        local build_root
+        build_root=$(grep -oE "/root/\.conan2/p/b/[a-z0-9]+/b" "$log_file" | tail -1)
+        if [ -n "$build_root" ]; then
+            echo "[build_root] $build_root"
+            ls "$build_root/build/$build_type/generators/" 2>/dev/null | grep -E "config\.cmake|cmake$|toolchain" | head -20 || true
+        fi
+        echo
+        echo "--- patched generate() from current recipe ---"
+        if [ -f "$recipe_dir/conanfile.py" ]; then
+            awk '/def generate\(self\):/{flag=1} flag{print; if(/^    def /&&NR>1&&!/def generate/)exit} END{}' "$recipe_dir/conanfile.py" | head -40
+        fi
+        echo "=========================================="
+        return $rc
+    fi
     echo
 }
 
