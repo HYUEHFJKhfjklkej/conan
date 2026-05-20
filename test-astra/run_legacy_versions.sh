@@ -139,6 +139,9 @@ if not LEGACY.is_dir():
     sys.exit(0)
 
 NEW_GENERATE = '''    def generate(self):
+        # CMakeDeps emits <dep>-config.cmake so find_package(absl)/protobuf/etc. work
+        deps = CMakeDeps(self)
+        deps.generate()
         tc = CMakeToolchain(self)
         # ---- Elara legacy CMake framework — verified from PlatformHelper.cmake source ----
         # Build-mode flags (CMakeCommon.cmake)
@@ -152,6 +155,13 @@ NEW_GENERATE = '''    def generate(self):
         #   get_compiler_prefix()  -> reads compiler via execute_process(g++ -dumpversion) -> "gcc84"
         tc.cache_variables["TARGET_PLATFORM"] = "LINUX"
         tc.cache_variables["TARGET_ARCH_CPU"] = "X86_64"
+        # protobuf 4.25.2 needs external abseil (otherwise libprotobuf.a refs absl::lts_*
+        # symbols that aren't on the link line, producing undefined reference errors)
+        if self.name == "protobuf":
+            tc.cache_variables["protobuf_ABSL_PROVIDER"] = "package"
+            tc.cache_variables["protobuf_BUILD_TESTS"] = "OFF"
+            tc.cache_variables["protobuf_BUILD_CONFORMANCE"] = "OFF"
+            tc.cache_variables["protobuf_BUILD_EXAMPLES"] = "OFF"
         tc.generate()'''
 
 # Matches any existing generate() body so we can rewrite it idempotently
@@ -190,12 +200,30 @@ EXTRA_REQS = {
 
 CONFIGURE_MARKER = "    def configure(self):"
 
+CMAKE_IMPORT_RE = re.compile(r"^(from conan\.tools\.cmake import )([^\n]+)$", re.MULTILINE)
+
+def ensure_cmakedeps_import(src: str) -> str:
+    """Make sure CMakeDeps is imported alongside CMakeToolchain/CMake/cmake_layout."""
+    m = CMAKE_IMPORT_RE.search(src)
+    if not m:
+        return src  # no conan.tools.cmake import line — bail
+    names = m.group(2)
+    if "CMakeDeps" in names:
+        return src
+    # Append ", CMakeDeps" while keeping existing names + order
+    new_names = names.rstrip() + ", CMakeDeps"
+    return CMAKE_IMPORT_RE.sub(m.group(1) + new_names, src, count=1)
+
+
 changed = 0
 skipped = 0
 for cf in sorted(LEGACY.glob("*/conanfile.py")):
     pkg = cf.parent.name
     text = cf.read_text()
     original = text
+
+    # 0) Ensure CMakeDeps is imported (needed by new generate() body).
+    text = ensure_cmakedeps_import(text)
 
     # 1) Patch generate() block if it's still the minimal template.
     if OLD_GENERATE_RE.search(text):
