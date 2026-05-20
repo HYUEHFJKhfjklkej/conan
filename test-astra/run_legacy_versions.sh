@@ -108,6 +108,31 @@ echo "[INFO] Profile: $PROFILE"
 echo "[INFO] Output dir: $ROOT_DIR/$OUTPUT_DIR"
 echo
 
+export_one() {
+    local recipe_dir="$1"
+    local version="$2"
+    echo "[EXPORT] conan export $recipe_dir --version=$version"
+    conan export "$recipe_dir/" --version="$version" --no-remote
+}
+
+# Pre-export all legacy recipe versions into the local cache so that
+# version ranges declared by upstream recipes (protobuf -> abseil range,
+# grpc -> abseil/re2/c-ares ranges) can be resolved offline.
+# Without this, --no-remote dies with "Package 'X/[range]' not resolved".
+prep_recipes() {
+    echo "=========================================="
+    echo "Step 0/N: Export all legacy recipes to local cache"
+    echo "=========================================="
+    export_one zlib       1.3.0
+    export_one protobuf   4.25.2
+    export_one openssl-1x 1.1.11
+    export_one abseil     20240116.2
+    export_one re2        20230301
+    export_one c-ares     1.25.0
+    export_one grpc       1.60.1
+    echo
+}
+
 create_one() {
     local recipe_dir="$1"
     local version="$2"
@@ -183,11 +208,15 @@ pack_all() {
 cmd="${1:-all}"
 case "$cmd" in
     all)
+        prep_recipes
         build_zlib
         build_protobuf
         build_openssl
         build_grpc
         pack_all
+        ;;
+    prep)
+        prep_recipes
         ;;
     zlib)
         build_zlib
