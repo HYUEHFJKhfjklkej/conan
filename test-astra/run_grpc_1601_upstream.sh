@@ -193,6 +193,7 @@ conan install --requires=grpc/1.60.1 \
     -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote \
     -o "*/*:shared=$SHARED" \
+    -o "protobuf/*:debug_suffix=False" \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \
     --deployer-folder="$ROOT_DIR/$OUTPUT_DIR"
 
