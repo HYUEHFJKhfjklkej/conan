@@ -21,6 +21,32 @@ import zipfile
 # Маппинг имён Conan → legacy
 LEGACY_NAME_MAP = {"gtest": "googletest"}
 
+# Names that downstream Elara CMake framework expects to see inside
+# CMakeLists.var `${project_name}_dependencies` lines — these are the
+# Bitbucket-fork short names, not the upstream Conan names. Used ONLY
+# when emitting dep lists into other packages' CMakeLists.var. The
+# .nupkg filenames themselves still come from LEGACY_NAME_MAP (so
+# consumers find them by their canonical upstream-derived names).
+LEGACY_DEP_NAME_MAP = {
+    # Bitbucket-fork short names override (e.g. "abseil": "absl"). Unused
+    # in the upstream-mirror-of-bitbucket flow — names stay canonical.
+}
+
+# Version override for `_dependencies` entries (rarely needed — only if
+# downstream pins a Bitbucket-fork version that differs from upstream).
+LEGACY_DEP_VERSION_MAP = {
+    # "abseil": "0.2.0",
+    # "c-ares": "1.19.0",
+}
+
+# Version suffix applied to every emitted .nupkg + nuspec + _dependencies
+# entry, sourced from env LEGACY_NUPKG_VERSION_SUFFIX. Use when uploading
+# upstream-mirror artifacts to a ProGet feed that already carries the
+# same versions from a different source (Bitbucket forks) — the suffix
+# disambiguates without renaming packages. Example values: ".1",
+# "-elara1". Default empty → behavior unchanged.
+VERSION_SUFFIX = os.environ.get("LEGACY_NUPKG_VERSION_SUFFIX", "")
+
 # Маппинг ОС: Conan settings.os → legacy os-короткое
 OS_SHORT = {"Linux": "lin", "Windows": "win", "Macos": "mac"}
 
@@ -276,7 +302,7 @@ def deploy(graph, output_folder, **kwargs):
 
     for require, dep in deps:
         name = dep.ref.name
-        version = str(dep.ref.version)
+        version = str(dep.ref.version) + VERSION_SUFFIX
         legacy_name = LEGACY_NAME_MAP.get(name, name)
 
         s = dep.settings
@@ -346,7 +372,8 @@ def deploy(graph, output_folder, **kwargs):
             f.write(_generate_targets(legacy_name, os_short, compiler_short, linkage, arch, libs))
 
         # 4. .nuspec — NuGet/ProGet require it at archive root, not in nuget/
-        nuspec_deps = [(d.ref.name, str(d.ref.version)) for _, d in dep.dependencies.host.items()]
+        nuspec_deps = [(d.ref.name, str(d.ref.version) + VERSION_SUFFIX)
+                       for _, d in dep.dependencies.host.items()]
         with open(os.path.join(staging, f"{legacy_name}.nuspec"),
                   "w", encoding="utf-8") as f:
             f.write(_generate_nuspec(legacy_name, version, os_short, compiler_short,
@@ -368,10 +395,26 @@ def deploy(graph, output_folder, **kwargs):
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
         # Direct deps of THIS package only (not the whole transitive closure):
-        # downstream Elara CMake framework resolves transitives by walking
-        # each consumed package's own _dependencies var.
-        var_deps = [LEGACY_NAME_MAP.get(d.ref.name, d.ref.name)
-                    for _, d in dep.dependencies.host.items()]
+        # downstream Elara CMake framework (ResolveDependencies.cmake in
+        # grpc_sdk and friends) resolves transitives by walking each
+        # consumed package's own _dependencies var. Format that framework
+        # expects: `<legacy_name>:<version>` per line, matching the
+        # legacy_name + version of the corresponding .nupkg in the feed.
+        var_deps = []
+        for _, d in dep.dependencies.host.items():
+            dep_legacy_name = LEGACY_DEP_NAME_MAP.get(
+                d.ref.name, LEGACY_NAME_MAP.get(d.ref.name, d.ref.name))
+            dep_version = (LEGACY_DEP_VERSION_MAP.get(d.ref.name, str(d.ref.version))
+                           + VERSION_SUFFIX)
+            var_deps.append(f"{dep_legacy_name}:{dep_version}")
+        # Extra pseudo-deps that downstream ResolveDependencies.cmake
+        # expects (because the legacy Elara grpc/1.60.1 fork shipped them
+        # as separate packages) but upstream grpc/protobuf 1.60.1/4.25.2
+        # have vendored internally. Only emitted for grpc 1.60.x. These
+        # refer to packages from the legacy Bitbucket feed in ProGet
+        # (not produced by this build), so VERSION_SUFFIX is NOT applied.
+        if name == "grpc" and version.startswith("1.60."):
+            var_deps.extend(["address_sorting:1.0.0", "upb:0.2.0"])
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
             f.write(_generate_cmakelists_var(legacy_name, version, components, platforms, var_deps))
 

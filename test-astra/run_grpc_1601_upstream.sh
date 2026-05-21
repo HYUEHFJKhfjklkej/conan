@@ -44,6 +44,12 @@ X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
 BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1601-upstream}"
 SHARED="${SHARED:-True}"
+# Optional version suffix appended to every emitted .nupkg + nuspec +
+# CMakeLists.var _dependencies entry. Use when uploading to a ProGet feed
+# that already carries the same versions from a different source
+# (Bitbucket legacy forks). Example: LEGACY_NUPKG_VERSION_SUFFIX=.1
+# yields abseil.lin.gcc84.shared.x86_64.20240116.2.1.nupkg.
+LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -73,6 +79,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -e OUTPUT_DIR="$OUTPUT_DIR" \
         -e PROFILE="$PROFILE" \
         -e SHARED="$SHARED" \
+        -e LEGACY_NUPKG_VERSION_SUFFIX="$LEGACY_NUPKG_VERSION_SUFFIX" \
         --entrypoint bash \
         "$MIRROR_IMAGE" \
         -c "./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
@@ -92,11 +99,12 @@ if ! command -v conan >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "[INFO] conan:    $(conan --version 2>&1 | head -1)"
-echo "[INFO] profile:  $PROFILE"
-echo "[INFO] output:   $OUTPUT_DIR"
-echo "[INFO] shared:   $SHARED"
-echo "[INFO] cache:    $(conan config home 2>/dev/null)"
+echo "[INFO] conan:           $(conan --version 2>&1 | head -1)"
+echo "[INFO] profile:         $PROFILE"
+echo "[INFO] output:          $OUTPUT_DIR"
+echo "[INFO] shared:          $SHARED"
+echo "[INFO] cache:           $(conan config home 2>/dev/null)"
+echo "[INFO] version_suffix:  '${LEGACY_NUPKG_VERSION_SUFFIX}'  (empty = no suffix)"
 echo ""
 
 # ----------------------------------------------------------------------
