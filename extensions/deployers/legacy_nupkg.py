@@ -302,7 +302,12 @@ def deploy(graph, output_folder, **kwargs):
 
     for require, dep in deps:
         name = dep.ref.name
-        version = str(dep.ref.version) + VERSION_SUFFIX
+        # `version_real` matches what is in the Conan cache (used for
+        # cache lookups via `_find_debug_package_path` etc).
+        # `version` is what we EMIT (filename, nuspec, _dependencies):
+        # with the ProGet-conflict-avoidance suffix appended.
+        version_real = str(dep.ref.version)
+        version = version_real + VERSION_SUFFIX
         legacy_name = LEGACY_NAME_MAP.get(name, name)
 
         s = dep.settings
@@ -337,10 +342,10 @@ def deploy(graph, output_folder, **kwargs):
             continue
 
         release_pkg = dep.package_folder
-        debug_pkg = _find_debug_package_path(name, version)
+        debug_pkg = _find_debug_package_path(name, version_real)
         if not debug_pkg:
             conanfile.output.warning(
-                f"legacy_nupkg: Debug build of {name}/{version} not in cache; "
+                f"legacy_nupkg: Debug build of {name}/{version_real} not in cache; "
                 "debug folder will mirror Release"
             )
             debug_pkg = release_pkg
