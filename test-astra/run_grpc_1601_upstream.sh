@@ -1,4 +1,3 @@
- cat ~/grpc_sdk/.build/lin.gcc.shared.x64/grpc_sdk/CMakeFiles/grpc_sdk_test.dir/link.txt | tr ' ' '\n' | grep -E '^-l|zlib|absl|grpc'
 #!/bin/bash
 # Full grpc/1.60.1 tree (legacy-pinned versions, upstream sources) → .nupkg
 #
