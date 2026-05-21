@@ -1050,6 +1050,129 @@ step and send it back so the next step can be picked.
      enough sandbox runs prove a new one is stable.
 
 
+[11] Diagnostic — protoc fails to link with abseil:
+     `undefined reference to absl::lts_20230802::ByAnyChar::Find(
+        absl::lts_20230802::string_view, unsigned long)`
+     (also `StrReplaceAll`, `ByString`, `substitute_internal::SubstituteAndAppendArray`,
+      etc., all in command_line_interface.cc.o).
+
+     Read first. This repo has seen this error twice for TWO different
+     root causes — the diagnostic script tells them apart.
+
+     (A) Inline-namespace mismatch.  abseil bakes its LTS tag into the
+         inline namespace via ABSL_OPTION_INLINE_NAMESPACE_NAME
+         (absl/base/options.h). For 20230802.1 the name is `lts_20230802`.
+         If `legacy/absl/0.2.0` (or any non-matching abseil) ends up on
+         the link line — e.g. built with `lts_20240116` — protoc's TUs
+         (compiled against headers that declared `lts_20230802`) ask for
+         symbols the .a does not export. This is what
+         fix_legacy_protobuf_absl.sh repairs by swapping
+         legacy/protobuf's requires from `absl/0.2.0` → `abseil/20230802.1`.
+
+     (B) cppstd mismatch on `absl::string_view`. At c++17 abseil aliases
+         absl::string_view to std::string_view (mangling uses
+         std::basic_string_view). At c++<17 it is abseil's own class
+         (mangling uses absl::lts_*::string_view). If only some of the
+         string-typed signatures fail AND the LTS tag in the symbol
+         matches the one in the .a, this is the case — not (A).
+
+     (A) is the common one in this repo. Pick (A) or (B) from the diag
+     output, not by guessing.
+
+     Run inside the same container/shell that produced the link error
+     (REGISTRY-based mirror image for the actual TC build, dev-VM for a
+     local repro):
+
+     Fast path: there is a self-contained script that runs steps
+     [11a]–[11d] in one shot and prints a verdict:
+
+         ./test-astra/diag_protobuf_absl.sh
+
+     Run it inside the same container where the link failed. It
+     auto-detects the protobuf build dir under /root/.conan2/p/b and
+     the abseil package dir under /root/.conan2/p. If you want to
+     pin a specific build dir: `BUILD_DIR=/root/.conan2/p/b/proto<hash>/b
+     ./test-astra/diag_protobuf_absl.sh`. Save its output and read
+     the "[7] verdict" block at the bottom — it tells you which of
+     the four mismatch shapes you're in and the fix for each.
+
+     The manual steps below are kept for cases where the script
+     can't run (no python3, restricted shell, etc.):
+
+     [11a] Confirm the compile flag protoc actually got. Find the build
+           dir from the failed run (usually printed near `[build_root]`
+           in the trace, e.g. `/root/.conan2/p/b/proto<hash>/b`):
+
+         BUILD=$(ls -dt /root/.conan2/p/b/proto*/b | head -1); echo "$BUILD"
+         grep -E '\-std=c\+\+|CXX_STANDARD' \
+              "$BUILD/CMakeFiles/libprotoc.dir/flags.make" \
+              "$BUILD/CMakeFiles/protoc.dir/flags.make" 2>/dev/null
+
+         Expected: `-std=gnu++17` (or `-std=c++17`) on every CXX_FLAGS line.
+         If you see `-std=gnu++14` / `-std=c++14` — root cause is here.
+
+     [11b] Confirm what abseil's .a was actually compiled against. Pick the
+           cache entry matching the abseil reference protobuf depends on:
+
+         ABSL=$(ls -dt /root/.conan2/p/absei*/p | head -1); echo "$ABSL"
+         nm -C "$ABSL/lib/libabsl_strings.a" 2>/dev/null \
+              | grep -E 'ByAnyChar::Find|StrReplaceAll' \
+              | head -4
+
+         Verdict:
+           - param type prints as `absl::lts_20230802::string_view` →
+             absl was built at c++<17.
+           - param type prints as `std::basic_string_view<char,...>` →
+             absl was built at c++17 (matches profile) — then protobuf side
+             is the c++14 one; jump to [11d].
+
+     [11c] List all abseil package_ids in cache and the cppstd each was
+           built with. `compatibility_cppstd: False` in abseil/conanfile.py
+           means cppstd is part of package_id, so multiple variants can
+           coexist:
+
+         conan list 'abseil/*#*:*' -f json 2>/dev/null \
+              | python3 -c 'import json,sys;d=json.load(sys.stdin);
+         import itertools
+         for ref,r in d.get("Local Cache",{}).items():
+             for rev,rr in r.get("revisions",{}).items():
+                 for pid,pp in rr.get("packages",{}).items():
+                     info=pp.get("info",{}).get("settings",{})
+                     print(ref, pid, info.get("compiler.cppstd"))'
+
+         Anything with `compiler.cppstd=14` (or None) is suspect — that
+         is what protobuf may be linking against if the lockfile/graph
+         resolves to it. Cppstd in the profile must match here.
+
+     [11d] Reproduce the protobuf compile manually with -v to see the
+           real command line CMake invoked:
+
+         BUILD=$(ls -dt /root/.conan2/p/b/proto*/b | head -1)
+         cd "$BUILD" && make VERBOSE=1 \
+              CMakeFiles/libprotoc.dir/src/google/protobuf/compiler/command_line_interface.cc.o \
+              2>&1 | tail -5
+         # look for -std=c++NN on that line
+
+     [11e] Forced rebuild from scratch (use only after [11a]/[11b]/[11c]
+           confirmed a stale or mismatched abseil in cache):
+
+         conan remove 'abseil/*' -c
+         conan remove 'protobuf/*' -c
+         # Then re-run the original `conan create protobuf/...` with
+         # `--build=missing` and the same -pr=lin-gcc84-x86_64 on host
+         # AND build (-pr:h, -pr:b both pinned).
+
+     [11f] If [11a] shows -std=c++14 even with profile cppstd=17, the
+           Conan toolchain isn't being picked up (CMake project sees its
+           own CMAKE_CXX_STANDARD default). Sanity-check that
+           `conan_toolchain.cmake` in $BUILD has `set(CMAKE_CXX_STANDARD 17)`
+           and was actually passed via `-DCMAKE_TOOLCHAIN_FILE=` in the
+           configure step:
+
+         grep -E 'CMAKE_CXX_STANDARD|CMAKE_TOOLCHAIN_FILE' \
+              "$BUILD/CMakeCache.txt" | head -4
+
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
