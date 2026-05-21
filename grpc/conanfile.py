@@ -201,6 +201,67 @@ class GrpcConan(ConanFile):
                 return os.path.join(src_dir, fname)
         return None
 
+    # For grpc < 1.62 the CMake `gRPC_DOWNLOAD_ARCHIVES=OFF` toggle does
+    # not exist. grpc/CMakeLists.txt unconditionally calls
+    # download_archive() for 4 external proto repos (envoy-api,
+    # googleapis, opencensus-proto, xds) which breaks closed-network
+    # builds. Each call is wrapped in `if (NOT EXISTS .../third_party/<dep>)`,
+    # so if we pre-populate those dirs before configure, CMake skips the
+    # network fetch. The 4 tarballs are bundled in src/ alongside the
+    # main grpc archive and pulled in via exports_sources.
+    _GRPC_OFFLINE_TRANSITIVES = (
+        # (archive_filename_in_src, strip_prefix_inside_archive, target_dir_relative_to_source_folder)
+        ("data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz",
+         "data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4",
+         "third_party/envoy-api"),
+        ("googleapis-2f9af297c84c55c8b871ba4495e01ade42476c92.tar.gz",
+         "googleapis-2f9af297c84c55c8b871ba4495e01ade42476c92",
+         "third_party/googleapis"),
+        ("opencensus-proto-0.3.0.tar.gz",
+         "opencensus-proto-0.3.0/src",
+         "third_party/opencensus-proto/src"),
+        ("xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
+         "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
+         "third_party/xds"),
+    )
+
+    def _preextract_grpc_offline_deps(self):
+        if Version(self.version) >= "1.62.0":
+            return
+        import shutil
+        import tarfile
+        src_dir = os.path.join(self.export_sources_folder, "src")
+        if not os.path.isdir(src_dir):
+            return
+        for archive, strip_prefix, target in self._GRPC_OFFLINE_TRANSITIVES:
+            archive_path = os.path.join(src_dir, archive)
+            if not os.path.isfile(archive_path):
+                self.output.warning(f"grpc offline dep {archive} missing in src/ — CMake will try to download")
+                continue
+            target_path = os.path.join(self.source_folder, target)
+            if os.path.isdir(target_path) and os.listdir(target_path):
+                self.output.info(f"grpc offline dep already populated: {target}")
+                continue
+            tmp_root = os.path.join(self.source_folder, ".grpc-offline-tmp")
+            tmp_dir = os.path.join(tmp_root, os.path.basename(archive).replace(".tar.gz", ""))
+            if os.path.isdir(tmp_dir):
+                shutil.rmtree(tmp_dir)
+            os.makedirs(tmp_dir)
+            with tarfile.open(archive_path, "r:gz") as tf:
+                tf.extractall(tmp_dir)
+            src_extracted = os.path.join(tmp_dir, strip_prefix)
+            if not os.path.isdir(src_extracted):
+                raise RuntimeError(
+                    f"grpc offline dep {archive}: strip_prefix '{strip_prefix}' "
+                    f"not found after extraction to {tmp_dir}"
+                )
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            if os.path.isdir(target_path):
+                shutil.rmtree(target_path)
+            shutil.move(src_extracted, target_path)
+            shutil.rmtree(tmp_root, ignore_errors=True)
+            self.output.info(f"grpc offline dep extracted: {archive} -> {target}")
+
     def source(self):
         _local = self._offline_source_archive()
         if _local:
@@ -209,7 +270,8 @@ class GrpcConan(ConanFile):
         else:
             get(self, **self.conan_data["sources"][self.version], strip_root=True)
         apply_conandata_patches(self)
-        
+        self._preextract_grpc_offline_deps()
+
         # Let Conan define CMAKE_MSVC_RUNTIME_LIBRARY
         replace_in_file(self, os.path.join(self.source_folder, "CMakeLists.txt"), "include(cmake/msvc_static_runtime.cmake)", "")
 
