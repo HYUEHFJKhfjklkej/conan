@@ -256,14 +256,40 @@ def _generate_cmakelists_var(legacy_name, version, components, platforms, deps=N
     return "\n".join(lines)
 
 
+def _is_lib_file(fname):
+    """Recognize static/shared/import libraries including versioned shared
+    objects (e.g. libfoo.so.0.1.2). The simple tail-extension test misses
+    those because `'libfoo.so.0.1.2'.split('.')[-1]` is '2'."""
+    # Static + Windows imports + macOS dylib + bare .so / .dll.
+    if fname.endswith((".a", ".lib", ".dll", ".dylib", ".so")):
+        return True
+    # Versioned ELF shared object: libfoo.so.0, libfoo.so.0.1.2, etc.
+    if ".so." in fname:
+        return True
+    return False
+
+
 def _copy_libs(src_lib, dst):
     if not os.path.isdir(src_lib):
+        # Still create dst so the empty `-d/` directory is preserved by
+        # downstream `.keepdir` logic — the legacy CMake framework expects
+        # the directory to exist even if Debug libs are unavailable.
+        os.makedirs(dst, exist_ok=True)
         return 0
     n = 0
     os.makedirs(dst, exist_ok=True)
     for f in os.listdir(src_lib):
         sf = os.path.join(src_lib, f)
-        if os.path.isfile(sf) and f.split('.')[-1] in ("a", "lib", "so", "dll", "dylib"):
+        # Preserve symlinks instead of dereferencing them: libfoo.so ->
+        # libfoo.so.X.Y.Z must stay a link in the .nupkg.
+        if os.path.islink(sf) and _is_lib_file(f):
+            link_target = os.readlink(sf)
+            link_path = os.path.join(dst, f)
+            if os.path.islink(link_path) or os.path.exists(link_path):
+                os.unlink(link_path)
+            os.symlink(link_target, link_path)
+            n += 1
+        elif os.path.isfile(sf) and _is_lib_file(f):
             shutil.copy2(sf, os.path.join(dst, f))
             n += 1
     return n
@@ -385,8 +411,14 @@ def deploy(graph, output_folder, **kwargs):
                                      linkage, arch, nuspec_deps))
 
         # 5. .keepdir markers
+        # `lib/native/<lib_suffix>{,-d}` must survive ZIP archiving even
+        # when empty (ZipFile drops empty dirs). Downstream
+        # ResolveDependencies.cmake checks the path exists and fails
+        # hard ("Unable to find debug version of <pkg>") otherwise.
         _make_keepdirs(
             os.path.join(staging, "lib", "net461"),
+            os.path.join(staging, "lib", "native", lib_suffix),
+            os.path.join(staging, "lib", "native", f"{lib_suffix}-d"),
             os.path.join(staging, "proto"),
             os.path.join(dst_include, "gmock", "internal", "custom") if os.path.isdir(dst_include) else os.path.join(staging, "_skip"),
             os.path.join(dst_include, "gtest", "internal", "custom") if os.path.isdir(dst_include) else os.path.join(staging, "_skip"),
