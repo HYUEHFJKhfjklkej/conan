@@ -174,7 +174,8 @@ for BT in Release Debug; do
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing --no-remote \
         -s build_type="$BT" \
-        -o "*/*:shared=$SHARED"
+        -o "*/*:shared=$SHARED" \
+        -o "protobuf/*:debug_suffix=False"
 done
 echo ""
 echo "[STEP 2] full tree built."
