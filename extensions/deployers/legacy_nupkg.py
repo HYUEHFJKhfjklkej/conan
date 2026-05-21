@@ -19,24 +19,30 @@ import zipfile
 
 
 # Маппинг имён Conan → legacy
-LEGACY_NAME_MAP = {"gtest": "googletest"}
-
-# Names that downstream Elara CMake framework expects to see inside
-# CMakeLists.var `${project_name}_dependencies` lines — these are the
-# Bitbucket-fork short names, not the upstream Conan names. Used ONLY
-# when emitting dep lists into other packages' CMakeLists.var. The
-# .nupkg filenames themselves still come from LEGACY_NAME_MAP (so
-# consumers find them by their canonical upstream-derived names).
-LEGACY_DEP_NAME_MAP = {
-    # Bitbucket-fork short names override (e.g. "abseil": "absl"). Unused
-    # in the upstream-mirror-of-bitbucket flow — names stay canonical.
+LEGACY_NAME_MAP = {
+    "gtest": "googletest",
+    # Replace our upstream-built `abseil` package with the legacy Elara
+    # `absl` slot so downstream consumers (exceptions/googletest tied to
+    # `absl:0.2.0`) pick up the upstream binaries — which include the
+    # missing `cord` components.
+    "abseil": "absl",
 }
 
-# Version override for `_dependencies` entries (rarely needed — only if
-# downstream pins a Bitbucket-fork version that differs from upstream).
+# When emitting `${project_name}_dependencies` entries inside another
+# package's CMakeLists.var, the dep name is taken from this map if
+# present, else falls back to LEGACY_NAME_MAP, else to the Conan name.
+LEGACY_DEP_NAME_MAP = {
+}
+
+# Override the version used in .nupkg filename, .nuspec <version>, and
+# every _dependencies entry that references the package. The Conan
+# cache still keys by the real upstream version (`20240116.2`); this
+# only changes what the deployed artifact advertises.
 LEGACY_DEP_VERSION_MAP = {
-    # "abseil": "0.2.0",
-    # "c-ares": "1.19.0",
+    # Pretend our abseil/20240116.2 is absl/0.2.0 so it slots in as a
+    # higher version (with .1 suffix) than the legacy `absl/0.2.0`
+    # already in ProGet, taking precedence in downstream ResolveDependencies.
+    "abseil": "0.2.0",
 }
 
 # Version suffix applied to every emitted .nupkg + nuspec + _dependencies
@@ -279,28 +285,52 @@ LIB_FILENAME_ALIASES = {
                                 # libz.so.1.3.0 -> libzlib.so.1.3.0
 }
 
+# Packages whose libs have a name prefix that downstream Elara CMake
+# framework does NOT include — strip the prefix by creating an alias
+# symlink. Example: upstream abseil ships `libabsl_strings.so`, but the
+# Elara `absl/0.2.0` slot has `libstrings.so` — downstream resolver
+# emits `-lstrings`, so we mint that symlink alongside the original.
+LIB_FILENAME_PREFIX_STRIP = {
+    "abseil": "absl_",          # libabsl_<X>.so -> lib<X>.so
+}
+
 
 def _add_lib_aliases(dst, pkg_name):
-    """Create `lib<alias>.<ext>` symlinks for every `lib<base>.<ext>`
-    in `dst`, for packages listed in LIB_FILENAME_ALIASES."""
-    aliases = LIB_FILENAME_ALIASES.get(pkg_name)
-    if not aliases or not os.path.isdir(dst):
+    """Create alias symlinks alongside the real libraries. Two mechanisms:
+    1. LIB_FILENAME_ALIASES — explicit per-package base→alias rename.
+    2. LIB_FILENAME_PREFIX_STRIP — drop a known prefix from every lib name.
+    Originals are kept untouched so both naming conventions work."""
+    if not os.path.isdir(dst):
         return
-    for fname in list(os.listdir(dst)):
-        if not fname.startswith("lib"):
-            continue
-        stem_and_ext = fname[3:]  # strip 'lib'
-        # Find the longest matching base from aliases (e.g. 'z')
-        for base, alias in aliases.items():
-            if stem_and_ext == base or stem_and_ext.startswith(base + "."):
-                new_fname = "lib" + alias + stem_and_ext[len(base):]
-                if new_fname == fname:
-                    continue
-                new_path = os.path.join(dst, new_fname)
-                if os.path.islink(new_path) or os.path.exists(new_path):
-                    os.unlink(new_path)
-                os.symlink(fname, new_path)
-                break
+    aliases = LIB_FILENAME_ALIASES.get(pkg_name)
+    if aliases:
+        for fname in list(os.listdir(dst)):
+            if not fname.startswith("lib"):
+                continue
+            stem_and_ext = fname[3:]  # strip 'lib'
+            for base, alias in aliases.items():
+                if stem_and_ext == base or stem_and_ext.startswith(base + "."):
+                    new_fname = "lib" + alias + stem_and_ext[len(base):]
+                    if new_fname == fname:
+                        continue
+                    new_path = os.path.join(dst, new_fname)
+                    if os.path.islink(new_path) or os.path.exists(new_path):
+                        os.unlink(new_path)
+                    os.symlink(fname, new_path)
+                    break
+    prefix = LIB_FILENAME_PREFIX_STRIP.get(pkg_name)
+    if prefix:
+        marker = "lib" + prefix
+        for fname in list(os.listdir(dst)):
+            if not fname.startswith(marker):
+                continue
+            new_fname = "lib" + fname[len(marker):]
+            if new_fname == fname:
+                continue
+            new_path = os.path.join(dst, new_fname)
+            if os.path.islink(new_path) or os.path.exists(new_path):
+                os.unlink(new_path)
+            os.symlink(fname, new_path)
 
 
 def _copy_libs(src_lib, dst, pkg_name=None):
@@ -367,9 +397,10 @@ def deploy(graph, output_folder, **kwargs):
         # `version_real` matches what is in the Conan cache (used for
         # cache lookups via `_find_debug_package_path` etc).
         # `version` is what we EMIT (filename, nuspec, _dependencies):
-        # with the ProGet-conflict-avoidance suffix appended.
+        # LEGACY_DEP_VERSION_MAP override (if any) + ProGet-conflict
+        # VERSION_SUFFIX appended.
         version_real = str(dep.ref.version)
-        version = version_real + VERSION_SUFFIX
+        version = LEGACY_DEP_VERSION_MAP.get(name, version_real) + VERSION_SUFFIX
         legacy_name = LEGACY_NAME_MAP.get(name, name)
 
         s = dep.settings
@@ -440,9 +471,16 @@ def deploy(graph, output_folder, **kwargs):
                   "w", encoding="utf-8") as f:
             f.write(_generate_targets(legacy_name, os_short, compiler_short, linkage, arch, libs))
 
-        # 4. .nuspec — NuGet/ProGet require it at archive root, not in nuget/
-        nuspec_deps = [(d.ref.name, str(d.ref.version) + VERSION_SUFFIX)
-                       for _, d in dep.dependencies.host.items()]
+        # 4. .nuspec — NuGet/ProGet require it at archive root, not in nuget/.
+        # Apply the same name+version remap that _dependencies uses, so the
+        # .nuspec advertises the slots the downstream feed actually serves.
+        nuspec_deps = []
+        for _, d in dep.dependencies.host.items():
+            dep_n = LEGACY_DEP_NAME_MAP.get(
+                d.ref.name, LEGACY_NAME_MAP.get(d.ref.name, d.ref.name))
+            dep_v = (LEGACY_DEP_VERSION_MAP.get(d.ref.name, str(d.ref.version))
+                     + VERSION_SUFFIX)
+            nuspec_deps.append((dep_n, dep_v))
         with open(os.path.join(staging, f"{legacy_name}.nuspec"),
                   "w", encoding="utf-8") as f:
             f.write(_generate_nuspec(legacy_name, version, os_short, compiler_short,
