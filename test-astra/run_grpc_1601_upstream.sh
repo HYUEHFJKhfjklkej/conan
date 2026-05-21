@@ -133,6 +133,22 @@ echo "[STEP 0] clean."
 echo ""
 
 # ----------------------------------------------------------------------
+# Step 0.5: nuke the cache so every build is from scratch. The recipe
+# `debug_suffix` option does not always force a new package_id in the
+# protobuf recipe — Conan can silently reuse a binary built with the
+# default options. Wiping the cache guarantees a fresh build each run.
+# Skippable via SKIP_CACHE_CLEAN=1 if you want to iterate faster (e.g.
+# tweaking the deployer only).
+# ----------------------------------------------------------------------
+if [ -z "${SKIP_CACHE_CLEAN:-}" ]; then
+    echo "=================================================="
+    echo "[STEP 0.5] wipe Conan cache (set SKIP_CACHE_CLEAN=1 to skip)"
+    echo "=================================================="
+    conan remove '*' -c
+    echo ""
+fi
+
+# ----------------------------------------------------------------------
 # Step 1: export all 7 recipes at the exact versions grpc/1.60.1 pins.
 # These match grpc/conanfile.py:128 (the `elif _grpc_release == "1.60"`
 # branch), which is precisely the version-tuple downstream products
