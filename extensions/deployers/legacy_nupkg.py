@@ -196,7 +196,8 @@ def _generate_nuspec(legacy_name, version, os_short, compiler_short, linkage, ar
     return "\n".join(lines)
 
 
-def _generate_cmakelists_var(legacy_name, version, components, platforms):
+def _generate_cmakelists_var(legacy_name, version, components, platforms, deps=None):
+    deps = deps or []
     parts = version.split(".")
     major, minor, patch = (parts + ["0", "0", "0"])[:3]
     lines = ["#" * 67, "#", "# Project Name (Unique project name)", "#",
@@ -222,7 +223,10 @@ def _generate_cmakelists_var(legacy_name, version, components, platforms):
     lines += ["#", "# Definitions for all components in project.", "#",
               "set(${project_name}_definitions", "    )", ""]
     lines += ["#", "# List of dependencies on other projects.", "#",
-              "set(${project_name}_dependencies", "    )", ""]
+              "set(${project_name}_dependencies"]
+    for d in deps:
+        lines.append(f"    {d}")
+    lines += ["    )", ""]
     return "\n".join(lines)
 
 
@@ -363,8 +367,13 @@ def deploy(graph, output_folder, **kwargs):
         components = libs if libs else [name]
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
+        # Direct deps of THIS package only (not the whole transitive closure):
+        # downstream Elara CMake framework resolves transitives by walking
+        # each consumed package's own _dependencies var.
+        var_deps = [LEGACY_NAME_MAP.get(d.ref.name, d.ref.name)
+                    for _, d in dep.dependencies.host.items()]
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
-            f.write(_generate_cmakelists_var(legacy_name, version, components, platforms))
+            f.write(_generate_cmakelists_var(legacy_name, version, components, platforms, var_deps))
 
         # 7. LICENSE.txt — некоторые рецепты (openssl) кладут в licenses/ не только
         # файлы, но и подпапки (licenses/external/...). Берём только plain-файлы;
