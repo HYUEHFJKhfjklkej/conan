@@ -134,6 +134,29 @@ conan create abseil/ --version=20230802.1 \
     -s build_type=Debug --build=missing --no-remote
 
 # ----------------------------------------------------------------------
+# Step 1b — zlib 1.3.1 (Release + Debug)
+# protobuf 4.25.2 transitively requires zlib/[>=1.2.11 <2] when
+# options.with_zlib=True (the recipe default). In --no-remote mode the
+# version range cannot be resolved from conan-center; we must seed the
+# cache with a matching zlib build first.
+# ----------------------------------------------------------------------
+echo ""
+echo "=================================================="
+echo "[STEP 1b] conan create zlib/1.3.1  (Release)"
+echo "=================================================="
+conan create zlib/ --version=1.3.1 \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
+    -s build_type=Release --build=missing --no-remote
+
+echo ""
+echo "=================================================="
+echo "[STEP 1b] conan create zlib/1.3.1  (Debug)"
+echo "=================================================="
+conan create zlib/ --version=1.3.1 \
+    -pr:h="$PROFILE" -pr:b="$PROFILE" \
+    -s build_type=Debug --build=missing --no-remote
+
+# ----------------------------------------------------------------------
 # Step 2 — protobuf 4.25.2 (Release + Debug)
 # ----------------------------------------------------------------------
 echo ""
