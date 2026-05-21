@@ -269,7 +269,41 @@ def _is_lib_file(fname):
     return False
 
 
-def _copy_libs(src_lib, dst):
+# Aliases for libraries whose upstream filename ('libz.so') doesn't match
+# the legacy package name ('zlib'). Downstream Elara CMake framework
+# emits `-l<pkg_name>` on the link line, so the lib must also exist
+# under that name. Resolved as additional symlinks alongside the
+# original files (originals are kept too, so `-lz` still works).
+LIB_FILENAME_ALIASES = {
+    "zlib": {"z": "zlib"},     # libz.so       -> libzlib.so       (symlink)
+                                # libz.so.1.3.0 -> libzlib.so.1.3.0
+}
+
+
+def _add_lib_aliases(dst, pkg_name):
+    """Create `lib<alias>.<ext>` symlinks for every `lib<base>.<ext>`
+    in `dst`, for packages listed in LIB_FILENAME_ALIASES."""
+    aliases = LIB_FILENAME_ALIASES.get(pkg_name)
+    if not aliases or not os.path.isdir(dst):
+        return
+    for fname in list(os.listdir(dst)):
+        if not fname.startswith("lib"):
+            continue
+        stem_and_ext = fname[3:]  # strip 'lib'
+        # Find the longest matching base from aliases (e.g. 'z')
+        for base, alias in aliases.items():
+            if stem_and_ext == base or stem_and_ext.startswith(base + "."):
+                new_fname = "lib" + alias + stem_and_ext[len(base):]
+                if new_fname == fname:
+                    continue
+                new_path = os.path.join(dst, new_fname)
+                if os.path.islink(new_path) or os.path.exists(new_path):
+                    os.unlink(new_path)
+                os.symlink(fname, new_path)
+                break
+
+
+def _copy_libs(src_lib, dst, pkg_name=None):
     if not os.path.isdir(src_lib):
         # Still create dst so the empty `-d/` directory is preserved by
         # downstream `.keepdir` logic — the legacy CMake framework expects
@@ -292,6 +326,8 @@ def _copy_libs(src_lib, dst):
         elif os.path.isfile(sf) and _is_lib_file(f):
             shutil.copy2(sf, os.path.join(dst, f))
             n += 1
+    if pkg_name:
+        _add_lib_aliases(dst, pkg_name)
     return n
 
 
@@ -391,9 +427,11 @@ def deploy(graph, output_folder, **kwargs):
 
         # 2. lib/native/{,-d}/
         n_rel = _copy_libs(os.path.join(release_pkg, "lib"),
-                           os.path.join(staging, "lib", "native", lib_suffix))
+                           os.path.join(staging, "lib", "native", lib_suffix),
+                           pkg_name=name)
         n_dbg = _copy_libs(os.path.join(debug_pkg, "lib"),
-                           os.path.join(staging, "lib", "native", f"{lib_suffix}-d"))
+                           os.path.join(staging, "lib", "native", f"{lib_suffix}-d"),
+                           pkg_name=name)
         libs = _list_libs(os.path.join(release_pkg, "lib"))
 
         # 3. .targets
