@@ -26,6 +26,13 @@ LEGACY_NAME_MAP = {
     # `absl:0.2.0`) pick up the upstream binaries — which include the
     # missing `cord` components.
     "abseil": "absl",
+    # The conan recipe is `c-ares` (the conan-center name), but the legacy
+    # Elara slot is `cares` — no dash. Critical: downstream
+    # ResolveDependencies.cmake emits `add_definitions(-D${_name}_..._DEFINE)`
+    # WITHOUT sanitizing the package name (only the component name gets
+    # `-`->`_`). A dash there yields a broken `-Dc-ares_..._DEFINE` flag ->
+    # `<command-line>: expected ',' or '...' before '-' token`.
+    "c-ares": "cares",
 }
 
 # When emitting `${project_name}_dependencies` entries inside another
