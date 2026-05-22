@@ -389,6 +389,30 @@ def _list_libs(src_lib):
     return sorted(names)
 
 
+def _legacy_component_names(libs, pkg_name):
+    """Map raw library basenames (from _list_libs, e.g. 'z', 'absl_strings')
+    to the names the downstream Elara framework expects in the `components`
+    list of CMakeLists.var.
+
+    Must mirror the FILE renaming done by _add_lib_aliases — otherwise
+    ResolveDependencies.cmake (foreach over `components`, line ~306) builds
+    an IMPORTED target under the UPSTREAM name ('z') while consumers link
+    the LEGACY name ('zlib'). CMake then degrades the unknown name to a
+    bare link flag -> `ld: cannot find -lzlib`.
+    """
+    aliases = LIB_FILENAME_ALIASES.get(pkg_name, {})
+    prefix = LIB_FILENAME_PREFIX_STRIP.get(pkg_name)
+    out = []
+    for lib in libs:
+        if lib in aliases:
+            out.append(aliases[lib])
+        elif prefix and lib.startswith(prefix):
+            out.append(lib[len(prefix):])
+        else:
+            out.append(lib)
+    return out
+
+
 def _make_keepdirs(*dirs):
     for d in dirs:
         os.makedirs(d, exist_ok=True)
@@ -485,7 +509,10 @@ def deploy(graph, output_folder, **kwargs):
         n_dbg = _copy_libs(_libdir(debug_pkg),
                            os.path.join(staging, "lib", "native", f"{lib_suffix}-d"),
                            pkg_name=name)
-        libs = _list_libs(_libdir(release_pkg))
+        # Component names must use the LEGACY naming (zlib, not z) — see
+        # _legacy_component_names. The .so files themselves are aliased by
+        # _add_lib_aliases inside _copy_libs above.
+        libs = _legacy_component_names(_list_libs(_libdir(release_pkg)), name)
 
         # 3. .targets
         os.makedirs(os.path.join(staging, "build", "native"), exist_ok=True)
