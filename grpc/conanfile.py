@@ -125,7 +125,13 @@ class GrpcConan(ConanFile):
             # exact version Elara already publishes so binary
             # _dependencies records in CMakeLists.var match in-tree
             # consumers (el_conf, mosquitto, gsd_parser, sura_proto).
-            self.requires("abseil/20240116.2", transitive_headers=True, transitive_libs=True)
+            # abseil 20230802.1 (NOT 20240116.2): grpc 1.60 (Dec 2023)
+            # predates the 20240116 LTS, and the legacy Elara `absl/0.2.0`
+            # slot that el_conf/grpc_sdk compile against is abseil 20230802.
+            # A different abseil here yields an inline-namespace mismatch
+            # (`lts_20240116` vs `lts_20230802`) that breaks every absl
+            # symbol at downstream link time.
+            self.requires("abseil/20230802.1", transitive_headers=True, transitive_libs=True)
             self.requires("protobuf/4.25.2", transitive_headers=True)
             self.requires("re2/20230301")
             self.requires("c-ares/1.25.0")

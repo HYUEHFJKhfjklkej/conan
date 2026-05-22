@@ -7,10 +7,10 @@
 # consumers expecting the legacy GR113/GR120 version numbers, built
 # from official upstream code (no Elara forks).
 #
-# Versions (exactly what grpc/conanfile.py:128 pins for the 1.60.x line):
+# Versions (exactly what grpc/conanfile.py pins for the 1.60.x line):
 #   grpc        1.60.1
 #   protobuf    4.25.2
-#   abseil      20240116.2
+#   abseil      20230802.1
 #   re2         20230301
 #   c-ares      1.25.0
 #   openssl     1.1.11    (recipe dir: openssl-1x/, name=openssl)
@@ -48,7 +48,7 @@ SHARED="${SHARED:-True}"
 # CMakeLists.var _dependencies entry. Use when uploading to a ProGet feed
 # that already carries the same versions from a different source
 # (Bitbucket legacy forks). Example: LEGACY_NUPKG_VERSION_SUFFIX=.1
-# yields abseil.lin.gcc84.shared.x86_64.20240116.2.1.nupkg.
+# yields abseil.lin.gcc84.shared.x86_64.20230802.1.1.nupkg.
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
 # Optional 1st arg: build + deploy only ONE package instead of the whole
@@ -57,7 +57,7 @@ LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 #   ./run_grpc_1601_upstream.sh            -> grpc/1.60.1  (full tree, 7 nupkg)
 #   ./run_grpc_1601_upstream.sh abseil     -> abseil only  (1 nupkg)
 declare -A TARGET_REFS=(
-    [grpc]=grpc/1.60.1      [abseil]=abseil/20240116.2  [protobuf]=protobuf/4.25.2
+    [grpc]=grpc/1.60.1      [abseil]=abseil/20230802.1  [protobuf]=protobuf/4.25.2
     [re2]=re2/20230301      [c-ares]=c-ares/1.25.0      [zlib]=zlib/1.3.0
     [openssl]=openssl/1.1.11
 )
@@ -171,7 +171,7 @@ echo "[STEP 1] conan export — 7 recipes, legacy-pinned versions"
 echo "=================================================="
 declare -A EXPORTS=(
     [zlib]=1.3.0
-    [abseil]=20240116.2
+    [abseil]=20230802.1
     [c-ares]=1.25.0
     [re2]=20230301
     [protobuf]=4.25.2
