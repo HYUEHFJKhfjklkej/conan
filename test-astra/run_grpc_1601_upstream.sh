@@ -51,6 +51,18 @@ SHARED="${SHARED:-True}"
 # yields abseil.lin.gcc84.shared.x86_64.20240116.2.1.nupkg.
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
+# Optional 1st arg: build + deploy only ONE package instead of the whole
+# grpc tree. The recipes are still all exported (cheap) so version ranges
+# resolve, but build/deploy targets just the requested ref.
+#   ./run_grpc_1601_upstream.sh            -> grpc/1.60.1  (full tree, 7 nupkg)
+#   ./run_grpc_1601_upstream.sh abseil     -> abseil only  (1 nupkg)
+declare -A TARGET_REFS=(
+    [grpc]=grpc/1.60.1      [abseil]=abseil/20240116.2  [protobuf]=protobuf/4.25.2
+    [re2]=re2/20230301      [c-ares]=c-ares/1.25.0      [zlib]=zlib/1.3.0
+    [openssl]=openssl/1.1.11
+)
+TARGET_REF="${TARGET_REFS[${1:-grpc}]:-grpc/1.60.1}"
+
 mkdir -p "$OUTPUT_DIR"
 
 # ----------------------------------------------------------------------
@@ -185,12 +197,16 @@ echo "[STEP 2] build grpc/1.60.1 tree (Release + Debug)"
 echo "=================================================="
 for BT in Release Debug; do
     echo ""
-    echo "------ build_type=$BT ------"
-    conan install --requires=grpc/1.60.1 \
+    echo "------ build_type=$BT  ($TARGET_REF) ------"
+    # abseil static — legacy coarse 21-lib packaging only triggers on a
+    # static build (abseil/conanfile.py::_aggregate_legacy_coarse). The
+    # more-specific abseil/* pattern overrides the */* shared default.
+    conan install --requires="$TARGET_REF" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing --no-remote \
         -s build_type="$BT" \
         -o "*/*:shared=$SHARED" \
+        -o "abseil/*:shared=False" \
         -o "protobuf/*:debug_suffix=False"
 done
 echo ""
@@ -201,14 +217,19 @@ echo ""
 # Step 3: deployer → 7 legacy-named .nupkg.
 # ----------------------------------------------------------------------
 echo "=================================================="
-echo "[STEP 3] deploy 7 legacy .nupkg into $OUTPUT_DIR/"
+echo "[STEP 3] deploy $TARGET_REF -> legacy .nupkg into $OUTPUT_DIR/"
 echo "=================================================="
 rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,re2,c-ares,openssl,zlib}.*.nupkg
 
-conan install --requires=grpc/1.60.1 \
+# Deploy must target the SAME ref as Step 2 ($TARGET_REF) and repeat the
+# EXACT options Step 2 built with. There is no --build here, so a differing
+# package_id (notably a missing `abseil/*:shared=False`) makes Conan report
+# the binary as missing and abort. Single-package run -> 1 .nupkg; full -> 7.
+conan install --requires="$TARGET_REF" \
     -pr:h="$PROFILE" -pr:b="$PROFILE" \
     --no-remote \
     -o "*/*:shared=$SHARED" \
+    -o "abseil/*:shared=False" \
     -o "protobuf/*:debug_suffix=False" \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \
     --deployer-folder="$ROOT_DIR/$OUTPUT_DIR"

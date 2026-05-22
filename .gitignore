@@ -3,6 +3,14 @@ venv/
 output/
 build/
 
+# Локальные context-документы для maintainer'а / Claude Code — не для пуша.
+ARCHITECTURE.md
+CLAUDE.md
+
+# Python bytecode (deployer тестируем py_compile'ом)
+__pycache__/
+*.pyc
+
 # Распакованные тулзы для Windows-сборки (создаются test-windows\install_deps.bat).
 # ZIP-архивы остаются в репо (если переносятся через USB на оффлайн-машину).
 tools/windows/strawberryperl/
