@@ -340,9 +340,14 @@ create_one() {
     echo "log -> $log_file"
     echo "=========================================="
     set +e
+    # abseil must be STATIC: the legacy Elara packaging (21 coarse .a per
+    # absl/<subdir>/, see abseil/conanfile.py::_aggregate_legacy_coarse)
+    # only triggers on a static build. The `abseil/*:` pattern is a no-op
+    # for recipes that don't pull abseil.
     conan create "$recipe_dir/" --version="$version" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         -s build_type="$build_type" \
+        -o "abseil/*:shared=False" \
         --build=missing --no-remote 2>&1 | tee "$log_file"
     local rc=${PIPESTATUS[0]}
     set -e
@@ -425,6 +430,7 @@ pack_deps() {
     # Эти 6 nupkg сами по себе разблокируют el_conf VersionChecker:
     # protobuf 4.25.2 + openssl 1.1.11 + zlib 1.3.0 закрывают конфликты,
     # abseil/re2/c-ares идут как транзитивы protobuf'a.
+    # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
     conan install \
         --requires=protobuf/4.25.2 \
         --requires=openssl/1.1.11 \
@@ -433,6 +439,7 @@ pack_deps() {
         --requires=re2/20230301 \
         --requires=c-ares/1.25.0 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
+        -o "abseil/*:shared=False" \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
 
@@ -469,9 +476,11 @@ pack_legacy_full() {
     # address_sorting/1.0.0, protobuf/4.25.2, openssl/1.1.11, zlib/1.3.0.
     # Conan пройдёт по графу, deployer положит каждый в output-legacy/
     # под legacy-именем.
+    # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
     conan install \
         --requires=grpc/1.60.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
+        -o "abseil/*:shared=False" \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
 
