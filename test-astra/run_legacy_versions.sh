@@ -431,6 +431,9 @@ pack_deps() {
     # protobuf 4.25.2 + openssl 1.1.11 + zlib 1.3.0 закрывают конфликты,
     # abseil/re2/c-ares идут как транзитивы protobuf'a.
     # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
+    # --build=missing: forcing abseil static changes the package_id of every
+    # dependant (protobuf, re2, ...), so cached binaries built against a
+    # shared abseil no longer match — rebuild whatever is missing here.
     conan install \
         --requires=protobuf/4.25.2 \
         --requires=openssl/1.1.11 \
@@ -439,7 +442,7 @@ pack_deps() {
         --requires=re2/20230301 \
         --requires=c-ares/1.25.0 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
-        -o "abseil/*:shared=False" \
+        -o "abseil/*:shared=False" --build=missing \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
 
@@ -477,10 +480,11 @@ pack_legacy_full() {
     # Conan пройдёт по графу, deployer положит каждый в output-legacy/
     # под legacy-именем.
     # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
+    # --build=missing: see pack_deps note (shared->static flips package_ids).
     conan install \
         --requires=grpc/1.60.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
-        -o "abseil/*:shared=False" \
+        -o "abseil/*:shared=False" --build=missing \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
 
