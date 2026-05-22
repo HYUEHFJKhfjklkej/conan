@@ -294,6 +294,18 @@ LIB_FILENAME_PREFIX_STRIP = {
     "abseil": "absl_",          # libabsl_<X>.so -> lib<X>.so
 }
 
+# abseil is deployed differently from the rest — see abseil/conanfile.py.
+# The Elara CMake framework expects abseil as 21 coarse component libs
+# (`-lstrings`, `-lrandom`, ... — one per absl/<subdir>/), matching the
+# legacy `absl/0.2.0` slot. abseil/conanfile.py aggregates those into
+# `lib/legacy-coarse/`; its native ~150 fine libs stay in `lib/` for
+# Conan consumers. For abseil the deployer packages that coarse set.
+LEGACY_LIBDIR_OVERRIDE = {"abseil": "legacy-coarse"}
+# The legacy `absl/0.2.0` artifact is tagged `.shared.` in its package id
+# even though the coarse libs are static `.a`. Keep that tag so the
+# downstream `absl:0.2.0(.1)` slot id keeps matching.
+LEGACY_LINKAGE_OVERRIDE = {"abseil": "shared"}
+
 
 def _add_lib_aliases(dst, pkg_name):
     """Create alias symlinks alongside the real libraries. Two mechanisms:
@@ -415,6 +427,8 @@ def deploy(graph, output_folder, **kwargs):
         except Exception:
             shared = False
         linkage = "shared" if shared else "static"
+        # abseil keeps its legacy `.shared.` slot tag even though built static.
+        linkage = LEGACY_LINKAGE_OVERRIDE.get(name, linkage)
 
         os_short = _resolve_os_short(os_name)
         # Astra CI convention: drop gcc version (astra.gcc.static.x86_64).
@@ -457,13 +471,21 @@ def deploy(graph, output_folder, **kwargs):
             shutil.copytree(src_include, dst_include)
 
         # 2. lib/native/{,-d}/
-        n_rel = _copy_libs(os.path.join(release_pkg, "lib"),
+        # abseil ships its legacy coarse libs in a lib/ sub-folder
+        # (LEGACY_LIBDIR_OVERRIDE); everything else uses lib/ directly.
+        _lib_sub = LEGACY_LIBDIR_OVERRIDE.get(name)
+
+        def _libdir(pkg_root):
+            base = os.path.join(pkg_root, "lib")
+            return os.path.join(base, _lib_sub) if _lib_sub else base
+
+        n_rel = _copy_libs(_libdir(release_pkg),
                            os.path.join(staging, "lib", "native", lib_suffix),
                            pkg_name=name)
-        n_dbg = _copy_libs(os.path.join(debug_pkg, "lib"),
+        n_dbg = _copy_libs(_libdir(debug_pkg),
                            os.path.join(staging, "lib", "native", f"{lib_suffix}-d"),
                            pkg_name=name)
-        libs = _list_libs(os.path.join(release_pkg, "lib"))
+        libs = _list_libs(_libdir(release_pkg))
 
         # 3. .targets
         os.makedirs(os.path.join(staging, "build", "native"), exist_ok=True)

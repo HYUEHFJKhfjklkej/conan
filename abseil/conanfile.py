@@ -131,6 +131,83 @@ class AbseilConan(ConanFile):
         # Create a json helper file in order to populate package_info() at consume time
         self._create_components_file(self._components_helper_filepath, components)
 
+        # Legacy Elara packaging: aggregate abseil's ~150 native static
+        # libs into 21 coarse `.a` (one per absl/<subdir>/) under
+        # lib/legacy-coarse/. Consumed by extensions/deployers/legacy_nupkg.py.
+        if not self.options.shared:
+            self._aggregate_legacy_coarse()
+
+    def _aggregate_legacy_coarse(self):
+        """Aggregate abseil's ~150 native static libraries into 21 coarse
+        archives — one per top-level `absl/<subdir>/` — reproducing the
+        legacy `absl/0.2.0` packaging that the Elara CMake framework
+        expects (it links abseil as `-lstrings`, `-lrandom`, ... — one
+        umbrella lib per subdir, not abseil's native fine-grained set).
+
+        Output: lib/legacy-coarse/lib<subdir>.a  (21 files).
+        The native fine-grained libs in lib/ are left untouched so Conan
+        consumers (grpc, protobuf) still link abseil's `absl::*` targets.
+        Static build only — needs `.a` inputs.
+        """
+        import glob
+        import tempfile
+
+        src_absl = os.path.join(self.source_folder, "absl")
+        lib_dir = os.path.join(self.package_folder, "lib")
+        coarse_dir = os.path.join(lib_dir, "legacy-coarse")
+
+        # 1. target -> subdir, parsed from each absl/<subdir>/CMakeLists.txt
+        target_to_subdir = {}
+        subdirs = []
+        for entry in sorted(os.listdir(src_absl)):
+            cmakelists = os.path.join(src_absl, entry, "CMakeLists.txt")
+            if not os.path.isfile(cmakelists):
+                continue
+            content = load(self, cmakelists)
+            blocks = re.findall(r"absl_cc_library\(([^)]*)\)", content, re.S)
+            if not blocks:
+                continue
+            subdirs.append(entry)
+            for block in blocks:
+                m = re.search(r"\bNAME\s+(\S+)", block)
+                if m:
+                    target_to_subdir["absl_" + m.group(1)] = entry
+
+        # 2. group installed libabsl_<target>.a by subdir
+        groups = {s: [] for s in subdirs}
+        for archive in sorted(glob.glob(os.path.join(lib_dir, "libabsl_*.a"))):
+            target = os.path.basename(archive)[3:-2]  # strip 'lib' and '.a'
+            subdir = target_to_subdir.get(target)
+            if subdir is None:
+                self.output.warning(
+                    f"legacy-coarse: no subdir for '{target}', skipped")
+                continue
+            groups[subdir].append(archive)
+
+        # 3. ar-merge each subdir's archives into one lib<subdir>.a
+        ar = os.environ.get("AR") or "ar"
+        os.makedirs(coarse_dir, exist_ok=True)
+        for subdir in subdirs:
+            out = os.path.join(coarse_dir, f"lib{subdir}.a")
+            objects = []
+            workdir = tempfile.mkdtemp(prefix=f"absl-coarse-{subdir}-")
+            for idx, archive in enumerate(groups[subdir]):
+                extract = os.path.join(workdir, str(idx))
+                os.makedirs(extract)
+                self.run(f'"{ar}" x "{archive}"', cwd=extract)
+                objects += glob.glob(os.path.join(extract, "*.o"))
+            if objects:
+                args = " ".join(f'"{o}"' for o in objects)
+                self.run(f'"{ar}" rcs "{out}" {args}')
+            else:
+                # header-only subdir (algorithm, cleanup, ...) — still emit
+                # an (empty) archive so the 21-component contract holds
+                save(self, out, "!<arch>\n")
+            rmdir(self, workdir)
+        self.output.info(
+            f"legacy-coarse: aggregated {len(subdirs)} abseil libs into "
+            f"{coarse_dir}")
+
     def _load_components_from_cmake_target_file(self, absl_target_file_path):
         components = {}
 
