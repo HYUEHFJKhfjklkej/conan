@@ -511,9 +511,24 @@ def deploy(graph, output_folder, **kwargs):
         # (`--proto_path=<pkg>/proto`). Without this, downstream `.proto`
         # files that `import "google/protobuf/timestamp.proto";` fail with
         # `File not found` during protoc invocation in el_conf builds.
+        #
+        # EXCLUDE upstream-only extras the Elara legacy fork strips:
+        #   - `**/compiler/plugin.proto` — protoc plugin API; not in legacy
+        #     .nupkg, and its presence breaks downstream protoc when it
+        #     resolves transitive imports (verified IN-658 el_conf build,
+        #     2026-05-25 — see test-astra/diff_two_dirs.sh).
+        #   - `**/java/...` — Java-specific well-knowns like
+        #     `java_features.proto` (edition-2023 syntax that older protoc
+        #     can't parse); legacy doesn't ship them and they're irrelevant
+        #     to C++ consumers.
+        # Legacy protobuf 4.25.2 nupkg ships exactly 12 well-known .proto
+        # files under `proto/google/protobuf/`; we match.
         dst_proto = os.path.join(staging, "proto")
+        _PROTO_EXCLUDE_DIRS = {"compiler", "java"}
         if os.path.isdir(src_include):
-            for root, _dirs, files in os.walk(src_include):
+            for root, dirs, files in os.walk(src_include):
+                # Prune excluded subdirs in-place (os.walk respects this).
+                dirs[:] = [d for d in dirs if d not in _PROTO_EXCLUDE_DIRS]
                 for fname in files:
                     if not fname.endswith(".proto"):
                         continue
