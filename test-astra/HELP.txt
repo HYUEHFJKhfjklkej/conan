@@ -1173,6 +1173,72 @@ step and send it back so the next step can be picked.
               "$BUILD/CMakeCache.txt" | head -4
 
 
+[12] Diagnostic — downstream el_conf/grpc_sdk fails with
+     `google/protobuf/timestamp.proto: File not found`
+     (or `lts_20240116::...: undefined reference`,
+      or `absl_INCLUDE_DIRS` pointing at legacy `<pkg>.0.2.0/` not `.1`).
+
+     ROOT CAUSE: dev-VM has stale `/home/user/<pkg>.lin...<ver>.1/`
+     left over from an earlier rebuild. The `.nupkg` file produced by
+     `./test-astra/run_grpc_1601_upstream.sh <pkg>` IS correct (deployer
+     fix `6674d29` mirrors *.proto into proto/, commit `615cf9f` pins
+     correct abseil version), but the EXTRACTED package directory on the
+     VM does not auto-update. Without an explicit rm+unzip the framework
+     resolves headers from the stale slot — even if libs come from the
+     fresh `.1`.
+
+     Diagnostic — see what's actually consumed (run AFTER cmake configure
+     on a downstream project):
+
+         # Where do .proto, headers and libs actually live?
+         grep -E '(_INCLUDE_DIRS|_LIBRARY_(DEBUG|RELEASE)|^dependencies)' \
+              ~/<downstream>/.build/.../CMakeCache.txt | head -20
+         # absl_INCLUDE_DIRS must point at the `.1` folder. If it points at
+         # bare 0.2.0 — the legacy slot is still installed and shadowing.
+
+         # Compare installed .proto / .a content against what's in the
+         # fresh .nupkg. Identical md5sum = deployer is fine, install lag.
+         mkdir /tmp/pkg-check && cd /tmp/pkg-check
+         unzip -q ~/conan-recipes/output-grpc-1601-upstream/<pkg>.<...>.1.nupkg
+         md5sum proto/google/protobuf/*.proto \
+                /home/user/<pkg>.<...>.1/proto/google/protobuf/*.proto
+
+         # Inline-namespace consistency across every absl header on disk:
+         for f in $(find /home/user -path '*/absl/base/options.h' 2>/dev/null); do
+             echo "$f: $(grep -E 'INLINE_NAMESPACE_NAME [a-z0-9_]+$' "$f" | tail -1)"
+         done
+         # All `.1` packages MUST report the same lts_NNNNNNNN.
+         # `lts_20240116` on a `.1` slot = stale pre-`615cf9f` build, redeploy.
+
+     Reinstall procedure — do this for EACH package whose source recipe
+     or deployer changed since the last install:
+
+         PKG=<pkg-name>      # e.g. protobuf, absl, grpc
+         VER=<ver>.1         # e.g. 4.25.2.1, 0.2.0.1, 1.60.1.1
+         NUPKG=$PKG.lin.gcc84.shared.x86_64.$VER.nupkg
+         rm -rf /home/user/$PKG.lin.gcc84.shared.x86_64.$VER
+         rm -rf /home/user/.nuget/packages/$PKG.lin.gcc84.shared.x86_64.$VER
+         cp ~/conan-recipes/output-grpc-1601-upstream/$NUPKG /home/user/
+         cd /home/user
+         mkdir $PKG.lin.gcc84.shared.x86_64.$VER
+         cd $PKG.lin.gcc84.shared.x86_64.$VER
+         unzip -q ../$NUPKG
+
+     Also nuke ALL legacy slots (no `.1` suffix) whose CMakeLists.var
+     pins old transitive versions (`absl:0.2.0` from legacy protobuf or
+     utf8_range will defeat our `0.2.0.1` pin via the
+     last-write-wins ResolveDependencies rule):
+
+         find /home/user -maxdepth 3 -name CMakeLists.var | while read f; do
+             grep -qE '(absl|protobuf|grpc):[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' "$f" \
+                && echo "$f"
+         done
+         # Snip from /home/user (NOT from ~/conan-recipes!) any package
+         # directory whose name doesn't end in `.1`.
+
+     Then rerun cmake on downstream with -rm-rf .build to force fresh
+     CMakeCache.
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):
