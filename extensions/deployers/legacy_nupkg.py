@@ -421,8 +421,26 @@ def _legacy_component_names(libs, pkg_name):
 
 
 def _make_keepdirs(*dirs):
+    """Ensure each dir exists in the staged tree, and emit a .keepdir
+    marker IFF the dir is otherwise empty. The marker is only needed
+    so ZipFile retains the dir (it drops empty dirs); when the dir
+    already has real content, the marker is dead weight — and worse,
+    downstream tooling that globs the dir (e.g. Elara framework
+    collecting all files under `proto/` to feed protoc) treats the
+    .keepdir file as a regular entry and breaks. Verified on IN-658
+    el_conf build: sura_connector_client cmake configure failed with
+    `google/protobuf/timestamp.proto: File not found` until .keepdir
+    was removed from `proto/` (2026-05-25)."""
     for d in dirs:
         os.makedirs(d, exist_ok=True)
+        contents = [f for f in os.listdir(d) if f != ".keepdir"]
+        if contents:
+            # Dir already has real content — drop a stale .keepdir if
+            # one was made earlier in this same deploy, and skip.
+            stale = os.path.join(d, ".keepdir")
+            if os.path.isfile(stale):
+                os.remove(stale)
+            continue
         with open(os.path.join(d, ".keepdir"), "w", encoding="utf-8") as f:
             f.write(KEEPDIR_CONTENT)
 
