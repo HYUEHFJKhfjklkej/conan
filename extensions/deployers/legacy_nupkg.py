@@ -501,6 +501,27 @@ def deploy(graph, output_folder, **kwargs):
         if os.path.exists(src_include):
             shutil.copytree(src_include, dst_include)
 
+        # 1b. proto/ — legacy layout ships `.proto` files (protobuf
+        # well-knowns: timestamp.proto, duration.proto, ...; grpc plugin
+        # protos) in a separate top-level `proto/` tree with the same
+        # relative path structure as `include/`. Upstream protobuf installs
+        # them into `<prefix>/include/google/protobuf/*.proto`, so mirror
+        # any `*.proto` we copied above into `proto/` to match what the
+        # legacy Elara framework's `protobuf_generate_grpc_cpp()` consumes
+        # (`--proto_path=<pkg>/proto`). Without this, downstream `.proto`
+        # files that `import "google/protobuf/timestamp.proto";` fail with
+        # `File not found` during protoc invocation in el_conf builds.
+        dst_proto = os.path.join(staging, "proto")
+        if os.path.isdir(src_include):
+            for root, _dirs, files in os.walk(src_include):
+                for fname in files:
+                    if not fname.endswith(".proto"):
+                        continue
+                    rel = os.path.relpath(os.path.join(root, fname), src_include)
+                    target = os.path.join(dst_proto, rel)
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    shutil.copy2(os.path.join(root, fname), target)
+
         # 2. lib/native/{,-d}/
         # abseil ships its legacy coarse libs in a lib/ sub-folder
         # (LEGACY_LIBDIR_OVERRIDE); everything else uses lib/ directly.
