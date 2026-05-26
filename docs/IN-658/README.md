@@ -11,6 +11,7 @@
 | [DEVOPS-RUNBOOK.md](DEVOPS-RUNBOOK.md) | CI / DevOps | Русский |
 | [DOWNSTREAM-MIGRATION.md](DOWNSTREAM-MIGRATION.md) | Команды el_conf / grpc_sdk / sura / прочие | Русский |
 | [DEVELOPER.md](DEVELOPER.md) | Следующий разработчик conan-recipes | English |
+| [MIGRATION-PLAYBOOK.md](MIGRATION-PLAYBOOK.md) | Полный playbook миграции: методология + lessons learned + улучшения + антипаттерны | Русский |
 
 ## Быстрый старт по ролям
 
@@ -18,7 +19,10 @@
 - **DevOps хочет настроить TC-конфиг:** → `DEVOPS-RUNBOOK.md` § "TeamCity конфигурация"
 - **Команда el_conf хочет понять что менять в своих CMakeLists.var:** → `DOWNSTREAM-MIGRATION.md`
 - **Confluence-страница для команды/проекта:** → `CONFLUENCE.md`
-- **Я следующий разработчик и должен расширять рецепты:** → `DEVELOPER.md`
+- **Я следующий разработчик и должен расширять рецепты:** → `DEVELOPER.md` (orientation) + `MIGRATION-PLAYBOOK.md` (полная методология + lessons learned + антипаттерны + чек-листы)
+- **Хочу понять "как мигрировать новый пакет шаг за шагом":** → `MIGRATION-PLAYBOOK.md` Часть 1
+- **Столкнулся с непонятным багом (linker, namespace, proto):** → `MIGRATION-PLAYBOOK.md` Часть 2 (21 описанный кейс)
+- **Что улучшить / антипаттерны / координация с лидом:** → `MIGRATION-PLAYBOOK.md` Часть 3
 
 ## Ключевые коммиты IN-658
 

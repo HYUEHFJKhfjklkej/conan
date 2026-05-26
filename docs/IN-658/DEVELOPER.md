@@ -67,9 +67,6 @@ LEGACY_NAME_MAP = {
     "gtest": "googletest",
     "c-ares": "cares",
 }
-LEGACY_VERSION_MAP = {
-    "abseil": "0.2.0",
-}
 LEGACY_DEP_NAME_MAP = {
     "abseil": "absl",
 }
@@ -79,7 +76,7 @@ LEGACY_DEP_VERSION_MAP = {
 VERSION_SUFFIX = os.environ.get("LEGACY_NUPKG_VERSION_SUFFIX", "")
 ```
 
-To add a new legacy alias / version override — extend these.
+`LEGACY_NAME_MAP` renames the package itself (`abseil` → `absl` in the emitted `.nupkg` filename / `.nuspec` `<id>`). `LEGACY_DEP_NAME_MAP` and `LEGACY_DEP_VERSION_MAP` rename it when it appears as a transitive dependency in another package's `_dependencies` list in `CMakeLists.var` — these maps are consulted by the deployer when walking `dep.dependencies.host.items()` to emit each dep entry with the legacy-form `<name>:<version>` plus `VERSION_SUFFIX`. To add a new legacy alias, extend both `LEGACY_NAME_MAP` and `LEGACY_DEP_NAME_MAP`; for a version override, extend `LEGACY_DEP_VERSION_MAP`.
 
 ## How abseil coarse-aggregation works (`abseil/conanfile.py`)
 
@@ -113,7 +110,7 @@ The deployer's `LEGACY_LIBDIR_OVERRIDE = {"abseil": "legacy-coarse"}` makes depl
        apply_conandata_patches(self)
    ```
 3. Drop the upstream archive in `<pkg>/src/`.
-4. If naming/versioning differs from Elara legacy, add to `LEGACY_NAME_MAP`/`LEGACY_VERSION_MAP` in `legacy_nupkg.py`.
+4. If naming/versioning differs from Elara legacy, add to `LEGACY_NAME_MAP` + `LEGACY_DEP_NAME_MAP` (both, see explanation above) and to `LEGACY_DEP_VERSION_MAP` (for version overrides) in `legacy_nupkg.py`.
 5. Add to `EXPORTS` in `test-astra/run_grpc_1601_upstream.sh` if it's part of the grpc tree.
 
 ## When debugging — start with HELP.txt
