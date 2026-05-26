@@ -12,6 +12,8 @@
 | [DOWNSTREAM-MIGRATION.md](DOWNSTREAM-MIGRATION.md) | Команды el_conf / grpc_sdk / sura / прочие | Русский |
 | [DEVELOPER.md](DEVELOPER.md) | Следующий разработчик conan-recipes | English |
 | [MIGRATION-PLAYBOOK.md](MIGRATION-PLAYBOOK.md) | Полный playbook миграции: методология + lessons learned + улучшения + антипаттерны | Русский |
+| [USAGE.md](USAGE.md) | Hands-on инструкция: как пользоваться Conan + нашими `.nupkg` (first steps, команды, workflow'ы, diagnostic checklist) | Русский |
+| [CONANFILE-ANATOMY.md](CONANFILE-ANATOMY.md) | Deep-dive структуры 9 наших `<pkg>/conanfile.py` (lifecycle, offline-edits, patches, per-package) | Русский |
 
 ## Быстрый старт по ролям
 
@@ -19,10 +21,12 @@
 - **DevOps хочет настроить TC-конфиг:** → `DEVOPS-RUNBOOK.md` § "TeamCity конфигурация"
 - **Команда el_conf хочет понять что менять в своих CMakeLists.var:** → `DOWNSTREAM-MIGRATION.md`
 - **Confluence-страница для команды/проекта:** → `CONFLUENCE.md`
-- **Я следующий разработчик и должен расширять рецепты:** → `DEVELOPER.md` (orientation) + `MIGRATION-PLAYBOOK.md` (полная методология + lessons learned + антипаттерны + чек-листы)
+- **Впервые ставлю Conan / хочу собрать одну библиотеку:** → `USAGE.md` (start here)
+- **Я следующий разработчик и должен расширять рецепты:** → `DEVELOPER.md` (orientation) + `CONANFILE-ANATOMY.md` (структура рецептов) + `MIGRATION-PLAYBOOK.md` (полная методология + lessons learned + антипаттерны + чек-листы)
 - **Хочу понять "как мигрировать новый пакет шаг за шагом":** → `MIGRATION-PLAYBOOK.md` Часть 1
-- **Столкнулся с непонятным багом (linker, namespace, proto):** → `MIGRATION-PLAYBOOK.md` Часть 2 (21 описанный кейс)
+- **Столкнулся с непонятным багом (linker, namespace, proto):** → `MIGRATION-PLAYBOOK.md` Часть 2 (21 описанный кейс) + `USAGE.md` § 11 (diagnostic checklist)
 - **Что улучшить / антипаттерны / координация с лидом:** → `MIGRATION-PLAYBOOK.md` Часть 3
+- **Хочу понять как именно структурирован отдельный `<pkg>/conanfile.py`:** → `CONANFILE-ANATOMY.md`
 
 ## Ключевые коммиты IN-658
 
