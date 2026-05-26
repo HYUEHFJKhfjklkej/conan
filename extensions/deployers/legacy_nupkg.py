@@ -290,6 +290,14 @@ def _is_lib_file(fname):
 LIB_FILENAME_ALIASES = {
     "zlib": {"z": "zlib"},     # libz.so       -> libzlib.so       (symlink)
                                 # libz.so.1.3.0 -> libzlib.so.1.3.0
+    # Elara protobuf fork splits upstream's `libprotoc.so` (compiler
+    # library with CommandLineInterface, parsers, code generators) into
+    # a separately-named `libprotolib.a`. Downstream profibus_dp_ui_plugin
+    # and others link `-lprotolib` directly. We ship the same code as
+    # `libprotoc.so`; aliasing creates `libprotolib.so` -> `libprotoc.so`
+    # symlink so the legacy name resolves without patching consumer code.
+    # Verified on IN-658 el_conf build 2026-05-26.
+    "protobuf": {"protoc": "protolib"},
 }
 
 # Packages whose libs have a name prefix that downstream Elara CMake
@@ -412,12 +420,21 @@ def _legacy_component_names(libs, pkg_name):
     out = []
     for lib in libs:
         if lib in aliases:
+            # Emit BOTH the alias AND the original — downstream consumers
+            # may pin either name (e.g. for protobuf some pin `protoc` and
+            # others pin `protolib`; both must resolve). The alias file is
+            # a symlink to the original (see _add_lib_aliases), so both
+            # find_library() calls succeed.
             out.append(aliases[lib])
+            out.append(lib)
         elif prefix and lib.startswith(prefix):
             out.append(lib[len(prefix):])
         else:
             out.append(lib)
-    return out
+    # Dedup but preserve insertion order (legacy framework iterates `components`
+    # in order; doesn't matter for correctness but cleaner CMakeLists.var).
+    seen = set()
+    return [x for x in out if not (x in seen or seen.add(x))]
 
 
 def _make_keepdirs(*dirs):
