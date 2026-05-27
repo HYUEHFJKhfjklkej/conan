@@ -14,6 +14,7 @@
 | [MIGRATION-PLAYBOOK.md](MIGRATION-PLAYBOOK.md) | Полный playbook миграции: методология + lessons learned + улучшения + антипаттерны | Русский |
 | [USAGE.md](USAGE.md) | Hands-on инструкция: как пользоваться Conan + нашими `.nupkg` (first steps, команды, workflow'ы, diagnostic checklist) | Русский |
 | [CONANFILE-ANATOMY.md](CONANFILE-ANATOMY.md) | Deep-dive структуры 9 наших `<pkg>/conanfile.py` (lifecycle, offline-edits, patches, per-package) | Русский |
+| [INFRASTRUCTURE.md](INFRASTRUCTURE.md) | Полное описание инфраструктуры (Bitbucket, TeamCity, Docker, ProGet, dev-VMs, network, toolchains, сервисы) — для Confluence | Русский |
 
 ## Быстрый старт по ролям
 
@@ -27,6 +28,7 @@
 - **Столкнулся с непонятным багом (linker, namespace, proto):** → `MIGRATION-PLAYBOOK.md` Часть 2 (21 описанный кейс) + `USAGE.md` § 11 (diagnostic checklist)
 - **Что улучшить / антипаттерны / координация с лидом:** → `MIGRATION-PLAYBOOK.md` Часть 3
 - **Хочу понять как именно структурирован отдельный `<pkg>/conanfile.py`:** → `CONANFILE-ANATOMY.md`
+- **Новый сотрудник / архитектор хочет понять как устроена инфраструктура:** → `INFRASTRUCTURE.md`
 
 ## Ключевые коммиты IN-658
 
