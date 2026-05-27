@@ -29,7 +29,7 @@
 
 ## Стратегия coexistence с легаси
 
-Параллельно с легаси-пакетами на ProGet (`absl.lin.gcc84.shared.x86_64.0.2.0.nupkg`) публикуем наши с суффиксом `.1` в имени (`absl.lin.gcc84.shared.x86_64.0.2.0.1.nupkg`) через переменную окружения `LEGACY_NUPKG_VERSION_SUFFIX=.1`.
+Downstream-продукты Elara линкуются статически — IN-658 целится в static-слот (GR121-эквивалент). Параллельно с легаси-пакетами на ProGet (`absl.lin.gcc84.static.x86_64.0.2.0.nupkg`) публикуем наши с суффиксом `.1` в имени (`absl.lin.gcc84.static.x86_64.0.2.0.1.nupkg`) через переменную окружения `LEGACY_NUPKG_VERSION_SUFFIX=.1`.
 
 **Плюсы:**
 - ProGet не конфликтует — оба слота coexist.

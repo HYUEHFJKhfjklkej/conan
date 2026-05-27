@@ -346,17 +346,19 @@ docker build \
 
 ### Что лежит в feed'е
 
-- Все легаси-пакеты Elara (build'ы из GR113/GR120/GR121/GR122):
+- Все легаси-пакеты Elara (build'ы из GR113 — shared / GR121 — static):
   - `abseil/0.2.0`, `protobuf/4.25.2`, `zlib/1.3.0`, `openssl/1.1.11`,
-    `re2/0.2.0`, `cares/1.19.0`, `grpc/1.60.1` — все под именами
-    `<pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg`.
-- Наши `.1`-варианты после публикации (coexistence-стратегия):
-  - `abseil.lin.gcc84.shared.x86_64.20230802.1.1.nupkg` —
+    `re2/0.2.0`, `cares/1.19.0`, `grpc/1.60.1` — `.lin.gcc84.shared.x86_64.<ver>.nupkg`
+    (GR113) и `.lin.gcc84.static.x86_64.<ver>.nupkg` (GR121).
+- **Наша IN-658 миграция целится в static-слот (GR121-эквивалент)** —
+  downstream-продукты Elara линкуются статически.
+- `.1`-варианты после публикации (coexistence-стратегия):
+  - `abseil.lin.gcc84.static.x86_64.20230802.1.1.nupkg` —
     upstream-собранный, версия с суффиксом `.1`.
   - Включается через `LEGACY_NUPKG_VERSION_SUFFIX=.1` env-var в
     `run_grpc_1601_upstream.sh`.
 - ARM-варианты (после полного закрытия sandbox arm/arm64) пойдут как
-  `<pkg>.lin.gcc75.shared.arm-linaro.<ver>.nupkg` /
+  `<pkg>.lin.gcc75.static.arm-linaro.<ver>.nupkg` /
   `...arm64-linaro.<ver>...` — имена не конфликтуют с x64-слотами в feed.
 
 ### Стратегия coexistence
@@ -545,14 +547,14 @@ RUN /opt/python/bin/python3 -m pip install --no-index \
 
 ```bash
 # armv7hf
-file output-arm/<pkg>/lib/native/lin-gcc75-shared-arm-linaro/lib*.so
-# ожидаем: ELF 32-bit LSB ARM, EABI5
-readelf -A <so> | grep -E 'Tag_CPU_arch|Tag_FP_arch'
+file output-arm/<pkg>/lib/native/lin-gcc75-static-arm-linaro/lib*.a
+# ожидаем: current ar archive, содержимое — ELF 32-bit LSB ARM, EABI5
+ar x lib<pkg>.a && readelf -A <obj>.o | grep -E 'Tag_CPU_arch|Tag_FP_arch'
 # ожидаем: Tag_CPU_arch: v7, Tag_FP_arch: VFPv3
 
 # arm64
-file output-arm64/<pkg>/lib/native/lin-gcc75-shared-arm64-linaro/lib*.so
-# ожидаем: ELF 64-bit LSB ARM aarch64
+file output-arm64/<pkg>/lib/native/lin-gcc75-static-arm64-linaro/lib*.a
+# ожидаем: current ar archive, содержимое — ELF 64-bit LSB ARM aarch64
 ```
 
 Сценарий есть в `test-astra/HELP.txt` блок `[9]`.

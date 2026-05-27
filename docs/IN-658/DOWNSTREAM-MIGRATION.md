@@ -5,8 +5,8 @@
 ## TL;DR
 
 Мы пересобрали 7 third-party библиотек на Conan 2.x. Наши `.nupkg`-артефакты на ProGet выложены с **суффиксом `.1`** в версии:
-- было: `absl.lin.gcc84.shared.x86_64.0.2.0.nupkg` (легаси)
-- стало: `absl.lin.gcc84.shared.x86_64.0.2.0.1.nupkg` (наш)
+- было: `absl.lin.gcc84.static.x86_64.0.2.0.nupkg` (легаси)
+- стало: `absl.lin.gcc84.static.x86_64.0.2.0.1.nupkg` (наш)
 
 Оба слота coexist на ProGet. **Чтобы ваш проект использовал наши пакеты, нужно обновить `_dependencies` в ваших `CMakeLists.var`** — заменить bare-версии на `.1`-версии.
 
@@ -63,10 +63,10 @@ set(${project_name}_dependencies
 ### Шаг 3: Пересоберите проект
 
 ```bash
-rm -rf .build/lin.gcc.shared.x64
-mkdir -p .build/lin.gcc.shared.x64 && cd .build/lin.gcc.shared.x64
+rm -rf .build/lin.gcc.static.x64
+mkdir -p .build/lin.gcc.static.x64 && cd .build/lin.gcc.static.x64
 cmake -DCMAKE_TOOLCHAIN_FILE=../../cmake/toolchains/linux_x86_64.cmake \
-      -DCMAKE_BUILD_TYPE=Debug -DBUILD_SHARED_LIBS=ON ../..
+      -DCMAKE_BUILD_TYPE=Debug -DBUILD_SHARED_LIBS=OFF ../..
 cmake --build . -- -j$(nproc)
 ```
 
@@ -76,7 +76,7 @@ cmake --build . -- -j$(nproc)
 grep -E 'absl_INCLUDE_DIRS|^dependencies' .build/.../CMakeCache.txt | head -5
 ```
 
-`absl_INCLUDE_DIRS` должен указывать на `.../absl.lin.gcc84.shared.x86_64.0.2.0.1/include` (с `.1`).
+`absl_INCLUDE_DIRS` должен указывать на `.../absl.lin.gcc84.static.x86_64.0.2.0.1/include` (с `.1`).
 
 ## Что вы получите
 
@@ -88,7 +88,7 @@ grep -E 'absl_INCLUDE_DIRS|^dependencies' .build/.../CMakeCache.txt | head -5
       ${protobuf_proto_dir}     # или конкретный путь из CMakeCache
   )
   ```
-  Или явный путь — `/home/<user>/protobuf.lin.gcc84.shared.x86_64.4.25.2.1/proto`.
+  Или явный путь — `/home/<user>/protobuf.lin.gcc84.static.x86_64.4.25.2.1/proto`.
 
 ### abseil — inline-namespace `lts_20230802`
 - Совместимо с легаси `absl/0.2.0`.
@@ -103,7 +103,7 @@ grep -E 'absl_INCLUDE_DIRS|^dependencies' .build/.../CMakeCache.txt | head -5
 ### `cannot find -lprotolib`
 Установлен старый `.1`-пакет protobuf (до коммита `a611fc1`). Перезагрузите свежий из ProGet/output:
 ```bash
-rm -rf /home/user/protobuf.lin.gcc84.shared.x86_64.4.25.2.1
+rm -rf /home/user/protobuf.lin.gcc84.static.x86_64.4.25.2.1
 # скачать свежий .nupkg, распаковать заново
 ```
 
@@ -112,7 +112,7 @@ rm -rf /home/user/protobuf.lin.gcc84.shared.x86_64.4.25.2.1
 
 Проверка inline-namespace:
 ```bash
-grep ABSL_OPTION_INLINE_NAMESPACE_NAME /home/user/absl.lin.gcc84.shared.x86_64.0.2.0.1/include/absl/base/options.h
+grep ABSL_OPTION_INLINE_NAMESPACE_NAME /home/user/absl.lin.gcc84.static.x86_64.0.2.0.1/include/absl/base/options.h
 # должно быть `lts_20230802`, не 20240116/20250127
 ```
 
@@ -120,7 +120,7 @@ grep ABSL_OPTION_INLINE_NAMESPACE_NAME /home/user/absl.lin.gcc84.shared.x86_64.0
 В вашем `CMakeLists.var` пустой `proto_imports_directory`. Добавьте путь к protobuf'у:
 ```cmake
 set(proto_imports_directory
-    /home/user/protobuf.lin.gcc84.shared.x86_64.4.25.2.1/proto
+    /home/user/protobuf.lin.gcc84.static.x86_64.4.25.2.1/proto
 )
 ```
 

@@ -43,7 +43,7 @@ PROGET_BASE="${PROGET_BASE:-proget.inc.elara.local/main/library/gcc84-build-x86_
 X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
 BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1601-upstream}"
-SHARED="${SHARED:-True}"
+SHARED="${SHARED:-False}"
 # Optional version suffix appended to every emitted .nupkg + nuspec +
 # CMakeLists.var _dependencies entry. Use when uploading to a ProGet feed
 # that already carries the same versions from a different source

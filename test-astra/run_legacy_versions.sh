@@ -347,6 +347,7 @@ create_one() {
     conan create "$recipe_dir/" --version="$version" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         -s build_type="$build_type" \
+        -o "*/*:shared=False" \
         -o "abseil/*:shared=False" \
         --build=missing --no-remote 2>&1 | tee "$log_file"
     local rc=${PIPESTATUS[0]}
@@ -442,6 +443,7 @@ pack_deps() {
         --requires=re2/20230301 \
         --requires=c-ares/1.25.0 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
+        -o "*/*:shared=False" \
         -o "abseil/*:shared=False" --build=missing \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"
@@ -484,6 +486,7 @@ pack_legacy_full() {
     conan install \
         --requires=grpc/1.60.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
+        -o "*/*:shared=False" \
         -o "abseil/*:shared=False" --build=missing \
         --deployer=extensions/deployers/legacy_nupkg.py \
         --deployer-folder="$OUTPUT_DIR/"

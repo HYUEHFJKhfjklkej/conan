@@ -52,7 +52,7 @@ sudo docker run --rm \
         conan install --requires=abseil/20250127.0 \
             -pr:h='"$PROFILE"' -pr:b='"$PROFILE_BUILD"' \
             --build=missing --no-remote \
-            -o "*/*:shared=True" 2>&1
+            -o "*/*:shared=False" 2>&1
     ' 2>&1 | tee /tmp/diag_arm.log
 
 RC=${PIPESTATUS[0]}

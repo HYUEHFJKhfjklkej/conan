@@ -52,7 +52,7 @@ echo ""
 echo "============================================"
 echo " Step 2/3: Build grpc tree Release + Debug"
 echo "============================================"
-SHARED="${SHARED:-True}"
+SHARED="${SHARED:-False}"
 for BT in Release Debug; do
     echo "[INFO] Building grpc/1.78.1 + 6 deps build_type=$BT shared=$SHARED"
     conan install --requires=grpc/1.78.1 \
