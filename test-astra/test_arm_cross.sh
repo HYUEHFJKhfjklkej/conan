@@ -212,11 +212,13 @@ else
     fail "expected $expected_count files, got $actual_count"
 fi
 
-# Each name must look like '<pkg>.lin.<compiler><ver>.shared.<arch>[-linaro].<ver>.nupkg'
-# Glob covers both the original x86_64-phase scheme (lin.gcc.shared.x64.) and
-# the current ARM cross-build scheme (lin.gcc75.shared.arm-linaro.).
+# Each name must look like '<pkg>.lin.<compiler><ver>.<linkage>.<arch>[-linaro].<ver>.nupkg'
+# Default linkage is static (matches downstream Elara link strategy);
+# the {static,shared} brace covers a shared-build override too.
+# Schemes covered: x86_64-phase (lin.gcc.static.x64.) and ARM cross
+# (lin.gcc75.static.arm-linaro.) — and shared equivalents.
 for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
-    f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc*.shared."$ARCH_SHORT"*.nupkg 2>/dev/null | head -1)
+    f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc*.{static,shared}."$ARCH_SHORT"*.nupkg 2>/dev/null | head -1)
     if [[ -n "$f" ]]; then
         size=$(du -h "$f" | cut -f1)
         pass "$(basename "$f") ($size)"

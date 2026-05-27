@@ -26,7 +26,7 @@
 #                                ./test_all_profiles.sh build armv7hf
 #   BASE_IMAGE_TAG         — default: 0.1.0 for arm/arm64, latest for x86.
 #   CMAKE_BUILD_PARALLEL_LEVEL — default 4 (safe under 8GB Docker memory).
-#   SHARED                 — True/False, default True (matches CI shared libs).
+#   SHARED                 — True/False, default False (static — matches GR121 CI slot).
 #   FORCE_REBUILD          — non-empty → drop output dir + conan-cache before run.
 #
 # Outputs:
@@ -85,7 +85,7 @@ case "$ARCH" in
         BASE_IMAGE_NAME="gcc84-build-x86_64"
         PROFILE_REL="profiles/lin-gcc84-x86_64"
         TC_PATH=""                  # native — no user_toolchain
-        ARCH_SHORT="x86_64"         # CI: googletest.lin.gcc84.shared.x86_64.<ver>.nupkg
+        ARCH_SHORT="x86_64"         # CI: googletest.lin.gcc84.static.x86_64.<ver>.nupkg
         IMAGE_TAG="grpc-tc-mirror-x86_64"
         ;;
     i686)
@@ -93,7 +93,7 @@ case "$ARCH" in
         BASE_IMAGE_NAME="gcc84-build-x86_64"   # multilib — i686 lives in the x86_64 image
         PROFILE_REL="profiles/lin-gcc84-i686"
         TC_PATH=""
-        ARCH_SHORT="i686"           # CI: googletest.lin.gcc84.shared.i686.<ver>.nupkg
+        ARCH_SHORT="i686"           # CI: googletest.lin.gcc84.static.i686.<ver>.nupkg
         IMAGE_TAG="grpc-tc-mirror-i686"
         ;;
     armv7hf)
@@ -101,7 +101,7 @@ case "$ARCH" in
         BASE_IMAGE_NAME="gcc75-build-arm"
         PROFILE_REL="profiles/lin-gcc75-arm-linaro"
         TC_PATH="/work/conan-recipes/profiles/toolchains/linaro-arm.cmake"
-        ARCH_SHORT="arm-linaro"     # CI: googletest.lin.gcc75.shared.arm-linaro.<ver>.nupkg
+        ARCH_SHORT="arm-linaro"     # CI: googletest.lin.gcc75.static.arm-linaro.<ver>.nupkg
         IMAGE_TAG="grpc-tc-mirror-armv7hf"
         ;;
     arm64)
@@ -109,7 +109,7 @@ case "$ARCH" in
         BASE_IMAGE_NAME="gcc75-build-arm64"
         PROFILE_REL="profiles/lin-gcc-aarch64-linaro"
         TC_PATH="/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake"
-        ARCH_SHORT="arm64-linaro"   # CI: googletest.lin.gcc75.shared.arm64-linaro.<ver>.nupkg
+        ARCH_SHORT="arm64-linaro"   # CI: googletest.lin.gcc75.static.arm64-linaro.<ver>.nupkg
         IMAGE_TAG="grpc-tc-mirror-arm64"
         ;;
     *)
@@ -275,14 +275,15 @@ else
     fail "expected $expected_count files, got $actual_count"
 fi
 
-# Each name must contain '.lin.gcc.shared.<ARCH_SHORT>.'
+# Each name must contain '.lin.gcc.<linkage>.<ARCH_SHORT>.' — default static
+# (GR121 slot); brace expansion accepts shared too for SHARED=True runs.
 for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
-    f=$(ls -1 "$OUTPUT_DIR/$pkg".lin.gcc.shared."$ARCH_SHORT".*.nupkg 2>/dev/null | head -1)
+    f=$(ls -1 "$OUTPUT_DIR/$pkg".lin.gcc.{static,shared}."$ARCH_SHORT".*.nupkg 2>/dev/null | head -1)
     if [[ -n "$f" ]]; then
         size=$(du -h "$f" | cut -f1)
         pass "$(basename "$f") ($size)"
     else
-        fail "$pkg.lin.gcc.shared.$ARCH_SHORT.*.nupkg missing"
+        fail "$pkg.lin.gcc.{static,shared}.$ARCH_SHORT.*.nupkg missing"
     fi
 done
 
