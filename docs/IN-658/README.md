@@ -15,6 +15,7 @@
 | [USAGE.md](USAGE.md) | Hands-on инструкция: как пользоваться Conan + нашими `.nupkg` (first steps, команды, workflow'ы, diagnostic checklist) | Русский |
 | [CONANFILE-ANATOMY.md](CONANFILE-ANATOMY.md) | Deep-dive структуры 9 наших `<pkg>/conanfile.py` (lifecycle, offline-edits, patches, per-package) | Русский |
 | [INFRASTRUCTURE.md](INFRASTRUCTURE.md) | Полное описание инфраструктуры (Bitbucket, TeamCity, Docker, ProGet, dev-VMs, network, toolchains, сервисы) — для Confluence | Русский |
+| [GRPC-PACKAGE.md](GRPC-PACKAGE.md) | Полное описание пакета `grpc` (все файлы рецепта) + 7 уровней куда прокидывать CMake-флаги — для Confluence | Русский |
 
 ## Быстрый старт по ролям
 
@@ -29,6 +30,7 @@
 - **Что улучшить / антипаттерны / координация с лидом:** → `MIGRATION-PLAYBOOK.md` Часть 3
 - **Хочу понять как именно структурирован отдельный `<pkg>/conanfile.py`:** → `CONANFILE-ANATOMY.md`
 - **Новый сотрудник / архитектор хочет понять как устроена инфраструктура:** → `INFRASTRUCTURE.md`
+- **Хочу разобрать как устроен пакет `grpc` файл за файлом / куда прокинуть CMake-флаг:** → `GRPC-PACKAGE.md`
 
 ## Ключевые коммиты IN-658
 
