@@ -196,6 +196,39 @@ BuildAgents/
 TC-конфигов (replace GR121/GR122 in-place vs параллельно vs отдельный
 раздел `SURA2/COMPONENTS/CONAN/`) — на согласовании с лидом.
 
+### 3.7 Контракт линкажа (важно)
+
+В именах легаси `.nupkg` сегмент `shared` / `static` обозначает **slot
+runtime-CRT** (Windows: MSVC `/MD` vs `/MT`; Linux: динамический libstdc++
+vs `-static-libstdc++`), а **не** способ линковки самих наших библиотек.
+
+| Свойство | Значение для IN-658 |
+|---|---|
+| **Slot-тег в имени `.nupkg`** | `.shared.x86_64.` (DynamicRT, GR113-эквивалент) |
+| **Что лежит внутри `lib/native/<suffix>/`** | Static `.a` файлы (всегда) |
+| **Как downstream выбирает slot** | Через `BUILD_SHARED_LIBS` в своём CMake. `ON` → резолвер ищет `.shared.x86_64.`, `OFF` → `.static.x86_64.` |
+| **Что у нас выбрано** | DynamicRT slot (`.shared.x86_64.`), потому что el_conf/grpc_sdk/sura собираются с `BUILD_SHARED_LIBS=ON` |
+
+В deployer (`extensions/deployers/legacy_nupkg.py`) этот контракт
+закодирован так:
+
+```python
+# Default slot — DynamicRT (downstream el_conf, grpc_sdk, sura
+# read this slot through BUILD_SHARED_LIBS=ON).
+# Env override LEGACY_NUPKG_LINKAGE=static для StaticRT (GR121-equivalent).
+linkage = os.environ.get("LEGACY_NUPKG_LINKAGE", "shared")
+```
+
+Почему "врать" в имени? Это legacy-имя унаследовано от старого TC-скрипта
+(GR113) который **по convention'у** тэгировал артефакт как DynamicRT
+независимо от того что содержимое уже статическое. Downstream-резолвер
+matches по литералу — переименовать = всё сломать.
+
+**Практический критерий:** если хотите видеть `.static.x86_64.` slot
+(GR121-эквивалент), запускаете build с `LEGACY_NUPKG_LINKAGE=static`
+env. Сейчас это не используется (downstream не настроен на StaticRT
+slot), но архитектурно поддерживается.
+
 ---
 
 ## 4. Docker / ProGet (Docker registry)
@@ -346,19 +379,23 @@ docker build \
 
 ### Что лежит в feed'е
 
-- Все легаси-пакеты Elara (build'ы из GR113 — shared / GR121 — static):
+- Все легаси-пакеты Elara (build'ы из GR113 — DynamicRT / GR121 — StaticRT):
   - `abseil/0.2.0`, `protobuf/4.25.2`, `zlib/1.3.0`, `openssl/1.1.11`,
     `re2/0.2.0`, `cares/1.19.0`, `grpc/1.60.1` — `.lin.gcc84.shared.x86_64.<ver>.nupkg`
-    (GR113) и `.lin.gcc84.static.x86_64.<ver>.nupkg` (GR121).
-- **Наша IN-658 миграция целится в static-слот (GR121-эквивалент)** —
-  downstream-продукты Elara линкуются статически.
+    (GR113 — DynamicRT slot) и `.lin.gcc84.static.x86_64.<ver>.nupkg`
+    (GR121 — StaticRT slot).
+- **IN-658 миграция целится в `.shared.x86_64.` slot (GR113-эквивалент)** —
+  downstream-резолвер (`ResolveDependencies.cmake` в el_conf, grpc_sdk,
+  sura) ищет пакеты по этому тегу. Содержимое наших `.nupkg` — static
+  `.a` (см. §3.7 «Контракт линкажа»). Slot-tag и контент — независимые
+  свойства.
 - `.1`-варианты после публикации (coexistence-стратегия):
-  - `abseil.lin.gcc84.static.x86_64.20230802.1.1.nupkg` —
+  - `abseil.lin.gcc84.shared.x86_64.20230802.1.1.nupkg` —
     upstream-собранный, версия с суффиксом `.1`.
   - Включается через `LEGACY_NUPKG_VERSION_SUFFIX=.1` env-var в
     `run_grpc_1601_upstream.sh`.
 - ARM-варианты (после полного закрытия sandbox arm/arm64) пойдут как
-  `<pkg>.lin.gcc75.static.arm-linaro.<ver>.nupkg` /
+  `<pkg>.lin.gcc75.shared.arm-linaro.<ver>.nupkg` /
   `...arm64-linaro.<ver>...` — имена не конфликтуют с x64-слотами в feed.
 
 ### Стратегия coexistence
@@ -547,13 +584,14 @@ RUN /opt/python/bin/python3 -m pip install --no-index \
 
 ```bash
 # armv7hf
-file output-arm/<pkg>/lib/native/lin-gcc75-static-arm-linaro/lib*.a
-# ожидаем: current ar archive, содержимое — ELF 32-bit LSB ARM, EABI5
+file output-arm/<pkg>/lib/native/lin-gcc75-shared-arm-linaro/lib*.a
+# ожидаем: current ar archive (контент — static .a даже в `shared`-tag slot'е)
+# внутри: ELF 32-bit LSB ARM, EABI5
 ar x lib<pkg>.a && readelf -A <obj>.o | grep -E 'Tag_CPU_arch|Tag_FP_arch'
 # ожидаем: Tag_CPU_arch: v7, Tag_FP_arch: VFPv3
 
 # arm64
-file output-arm64/<pkg>/lib/native/lin-gcc75-static-arm64-linaro/lib*.a
+file output-arm64/<pkg>/lib/native/lin-gcc75-shared-arm64-linaro/lib*.a
 # ожидаем: current ar archive, содержимое — ELF 64-bit LSB ARM aarch64
 ```
 
@@ -719,8 +757,8 @@ cmake/
 | `get_processor_prefix` | `TARGET_ARCH_CPU` | `"X86_64"`, `"ARM_IMX6Q"` (с `_`→`-`) |
 | `get_compiler_prefix` | автодетектит `${CMAKE_CXX_COMPILER} -dumpversion` | `"gcc84"` (8.4 → 84) |
 | `get_library_prefix` | `BUILD_SHARED_LIBS` | `"shared"` / `"static"` |
-| `get_package_suffix` | composite | `lin.gcc84.static.x86_64` |
-| `get_folder_suffix` | composite | `lin-gcc84-static-x86_64` |
+| `get_package_suffix` | composite | `lin.gcc84.shared.x86_64` (если `BUILD_SHARED_LIBS=ON`) / `lin.gcc84.static.x86_64` (если `OFF`) |
+| `get_folder_suffix` | composite | `lin-gcc84-shared-x86_64` / `lin-gcc84-static-x86_64` |
 
 `CMakeCommon.cmake` также читает `BUILD_RELEASE`, `PRERELEASE_SUFFIX`,
 `SOURCE_REVISION` (эти три — эмпирические, не верифицированы из

@@ -9,9 +9,12 @@
 #
 #     ./test-astra/run_legacy_versions.sh
 #
-# и Conan собирает каждый legacy pkg под именем, совместимым с GR121/120
-# (`<pkg>.lin.gcc84.static.x86_64.<ver>.nupkg`) — downstream-продукты
-# Elara линкуются статически. GR113-эквивалент (shared) — отдельный слот.
+# и Conan собирает каждый legacy pkg под именем, совместимым с GR113/120
+# (`<pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg` — DynamicRT slot, где
+# downstream el_conf/grpc_sdk резолвят зависимости). Содержимое — static
+# `.a` (см. INFRASTRUCTURE.md §3.7). GR121-slot (`.static.x86_64.`)
+# архитектурно поддерживается через LEGACY_NUPKG_LINKAGE=static, но
+# текущий downstream его не использует.
 #
 # Использование:
 #   1. Подставь URL и tag/branch в массиве PACKAGES ниже.

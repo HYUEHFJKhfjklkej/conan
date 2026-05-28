@@ -316,10 +316,18 @@ LIB_FILENAME_PREFIX_STRIP = {
 # `lib/legacy-coarse/`; its native ~150 fine libs stay in `lib/` for
 # Conan consumers. For abseil the deployer packages that coarse set.
 LEGACY_LIBDIR_OVERRIDE = {"abseil": "legacy-coarse"}
-# The legacy `absl/0.2.0` artifact is tagged `.shared.` in its package id
-# even though the coarse libs are static `.a`. Keep that tag so the
-# downstream `absl:0.2.0(.1)` slot id keeps matching.
-LEGACY_LINKAGE_OVERRIDE = {"abseil": "shared"}
+
+# All Elara legacy artifacts emit the `.shared.<arch>.` slot tag — this is
+# the DynamicRT runtime slot in legacy CI naming (paired with GR113 on
+# TeamCity). The libraries inside are always static `.a` regardless; the
+# tag selects which runtime-CRT slot the downstream resolver
+# (ResolveDependencies.cmake / FindInstalledPackage.cmake in el_conf,
+# grpc_sdk, sura) reads. Override via env `LEGACY_NUPKG_LINKAGE=static`
+# for the StaticRT slot (GR121-equivalent — currently not used by IN-658).
+#
+# Per-package overrides remain in LEGACY_LINKAGE_OVERRIDE for historical
+# exceptions; today all packages map to "shared", so the dict is empty.
+LEGACY_LINKAGE_OVERRIDE = {}
 
 
 def _add_lib_aliases(dst, pkg_name):
@@ -488,12 +496,17 @@ def deploy(graph, output_folder, **kwargs):
         arch = _resolve_arch_with_toolchain(s.arch, os_name)
         build_type = str(s.build_type)
 
-        try:
-            shared = bool(dep.options.shared)
-        except Exception:
-            shared = False
-        linkage = "shared" if shared else "static"
-        # abseil keeps its legacy `.shared.` slot tag even though built static.
+        # The legacy CI naming uses linkage as a RUNTIME-CRT slot tag
+        # (shared = DynamicRT / GR113; static = StaticRT / GR121), NOT as
+        # a description of the library content (which is always `.a` in
+        # the post-IN-658 migration). Default: "shared" (DynamicRT slot
+        # consumed by downstream el_conf, grpc_sdk, sura).
+        # Override via env LEGACY_NUPKG_LINKAGE=static for GR121 slot.
+        # Per-package overrides take precedence (today none — see
+        # LEGACY_LINKAGE_OVERRIDE comment above).
+        linkage = os.environ.get("LEGACY_NUPKG_LINKAGE", "shared").strip() or "shared"
+        if linkage not in ("shared", "static"):
+            linkage = "shared"
         linkage = LEGACY_LINKAGE_OVERRIDE.get(name, linkage)
 
         os_short = _resolve_os_short(os_name)

@@ -29,7 +29,7 @@
 
 ## Стратегия coexistence с легаси
 
-Downstream-продукты Elara линкуются статически — IN-658 целится в static-слот (GR121-эквивалент). Параллельно с легаси-пакетами на ProGet (`absl.lin.gcc84.static.x86_64.0.2.0.nupkg`) публикуем наши с суффиксом `.1` в имени (`absl.lin.gcc84.static.x86_64.0.2.0.1.nupkg`) через переменную окружения `LEGACY_NUPKG_VERSION_SUFFIX=.1`.
+Содержимое всех наших `.nupkg` — static `.a` (downstream Elara линкуется со статическим контентом), но **slot-тег в имени** — `.shared.x86_64.` (DynamicRT slot, GR113-эквивалент): downstream-резолвер (`ResolveDependencies.cmake`) ищет пакеты по этому тегу. Тег ≠ свойство содержимого, это runtime-CRT slot selector. Параллельно с легаси-пакетами на ProGet (`absl.lin.gcc84.shared.x86_64.0.2.0.nupkg`) публикуем наши с суффиксом `.1` в имени (`absl.lin.gcc84.shared.x86_64.0.2.0.1.nupkg`) через переменную окружения `LEGACY_NUPKG_VERSION_SUFFIX=.1`.
 
 **Плюсы:**
 - ProGet не конфликтует — оба слота coexist.

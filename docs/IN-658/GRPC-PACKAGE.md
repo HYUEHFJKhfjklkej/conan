@@ -54,7 +54,7 @@ grpc/                                        ~146 000 строк (с тарбо�
 
 | Опция | Значения | Дефолт | Назначение (по-человечески) |
 |---|---|---|---|
-| `shared` | `True / False` | `False` | Тип библиотек на выходе. `False` — static (`.a`) что встраиваются прямо в бинарь потребителя; `True` — shared (`.so`) что подгружаются динамически на runtime. Наш канон — static (downstream Elara линкуется статически). |
+| `shared` | `True / False` | `False` | **Свойство содержимого** (НЕ slot-tag в имени `.nupkg`). `False` — Conan собирает либы как static `.a`; `True` — shared `.so`. Наш канон — `.a`. Slot-tag в filename контролируется отдельно через `LEGACY_NUPKG_LINKAGE` env (default `shared` — DynamicRT slot, см. INFRASTRUCTURE.md §3.7). |
 | `fPIC` | `True / False` | `True` | Position-Independent Code. Позволяет встраивать наш static `.a` внутрь `.so` потребителя (если потребитель сам сборка — shared). Без этого статические либы нельзя загнать в shared-объект. Полезно держать всегда `True`. |
 | `codegen` | `True / False` | `True` | Собирать ли вообще plugin-бинари. Plugin'ы — это утилиты которые `protoc` запускает чтобы из `.proto` файлов сгенерить код для конкретного языка (C++, Python, etc). Если `False` — наши `.nupkg` будут БЕЗ `grpc_cpp_plugin`, потребитель не сможет генерировать grpc-stubs. Оставляем `True`. |
 | `cpp_plugin` | `True / False` | `True` | Включать ли `grpc_cpp_plugin` — генератор `*.grpc.pb.cc/h` файлов из `*.proto`. Нужен для C++ потребителей (el_conf, grpc_sdk). Должен быть `True`. |

@@ -5,13 +5,15 @@
 # so it does not collide with the original in ProGet.
 #
 # Usage:
-#   ./test-astra/patch_utf8_range_dep.sh /path/to/utf8_range.lin.gcc84.static.x86_64.0.1.0.nupkg
+#   ./test-astra/patch_utf8_range_dep.sh /path/to/utf8_range.lin.gcc84.shared.x86_64.0.1.0.nupkg
 #
 # Output:
-#   ./utf8_range.lin.gcc84.static.x86_64.0.1.0.1.nupkg
+#   ./utf8_range.lin.gcc84.shared.x86_64.0.1.0.1.nupkg
 #
-# Linkage (static/shared) is derived from the INPUT filename's 4th
-# dot-segment, so the script also handles the shared.x86_64 variant.
+# Linkage tag (shared/static) is derived from the INPUT filename's 4th
+# dot-segment. Default is `shared` (DynamicRT slot — GR113-equivalent,
+# where downstream el_conf/grpc_sdk look). The script also handles a
+# static.x86_64 input if someone is targeting StaticRT (GR121) slot.
 #
 # After running, upload the new .nupkg to ProGet (it does NOT replace
 # the old one — it adds a higher version that resolver will prefer).
@@ -43,7 +45,7 @@ IN_BASENAME="$(basename "$IN_NUPKG")"
 LINKAGE="$(echo "$IN_BASENAME" | awk -F. '{print $4}')"
 case "$LINKAGE" in
     static|shared) ;;
-    *) LINKAGE="static" ;;
+    *) LINKAGE="shared" ;;
 esac
 
 OUT_BASENAME="utf8_range.lin.gcc84.${LINKAGE}.x86_64.${NEW_VER}.nupkg"

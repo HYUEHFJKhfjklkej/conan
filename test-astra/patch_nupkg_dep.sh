@@ -18,8 +18,8 @@
 # absl::lts_NNNNNNNN::...` at link time.
 #
 # Symptom in the consumer resolve log (grpc_sdk): BOTH
-#   Found installed package 'absl.lin.gcc84.static.x86_64.0.2.0.1'
-#   Found installed package 'absl.lin.gcc84.static.x86_64.0.2.0'
+#   Found installed package 'absl.lin.gcc84.shared.x86_64.0.2.0.1'
+#   Found installed package 'absl.lin.gcc84.shared.x86_64.0.2.0'
 # appear — the second one pulled in under `Find dependencies for utf8_range`.
 #
 # This script surgically repoints ONE dependency token in a legacy
@@ -38,14 +38,14 @@
 # ---------------------------------------------------
 #   # 1. utf8_range stops dragging the old abseil:
 #   ./test-astra/patch_nupkg_dep.sh \
-#       utf8_range.lin.gcc84.static.x86_64.0.1.0.nupkg \
+#       utf8_range.lin.gcc84.shared.x86_64.0.1.0.nupkg \
 #       absl:0.2.0 absl:0.2.0.1 0.1.0.1
 #
 #   # 2. upb points at the patched utf8_range. Without this, step 1 is dead
 #   #    weight: the resolver matches name:version literally, so upb's
 #   #    `utf8_range:0.1.0` keeps resolving the UNPATCHED 0.1.0.
 #   ./test-astra/patch_nupkg_dep.sh \
-#       upb.lin.gcc84.static.x86_64.0.2.0.nupkg \
+#       upb.lin.gcc84.shared.x86_64.0.2.0.nupkg \
 #       utf8_range:0.1.0 utf8_range:0.1.0.1 0.2.0.1
 #
 # Then upload both produced .nupkg to ProGet, clear the consumer's stale

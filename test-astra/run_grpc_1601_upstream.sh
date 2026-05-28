@@ -48,7 +48,8 @@ SHARED="${SHARED:-False}"
 # CMakeLists.var _dependencies entry. Use when uploading to a ProGet feed
 # that already carries the same versions from a different source
 # (Bitbucket legacy forks). Example: LEGACY_NUPKG_VERSION_SUFFIX=.1
-# yields abseil.lin.gcc84.static.x86_64.20230802.1.1.nupkg.
+# yields abseil.lin.gcc84.shared.x86_64.20230802.1.1.nupkg
+# (slot-tag `shared` = DynamicRT — содержимое всё равно static .a).
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
 # Optional 1st arg: build + deploy only ONE package instead of the whole

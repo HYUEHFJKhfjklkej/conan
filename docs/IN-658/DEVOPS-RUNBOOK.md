@@ -7,7 +7,7 @@
 - **Docker-образ для сборки:** `proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0` (Debian Stretch + gcc 8.4 в `/usr/local/gcc-8.4/`).
 - **Conan:** 2.27.1, поставляется в `conan-recipes/packages-linux/conan-2.27.1.tar.gz`. Внутри Docker устанавливается через `test-astra/setup.sh`.
 - **Python в Docker:** standalone 3.11.10 из `packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz` (Stretch system Python 2.7 не годится).
-- **ProGet (NuGet feed):** `proget.inc.elara.local/main`. NuGet-пакеты типа `<name>.lin.gcc84.static.x86_64.<version>.nupkg`.
+- **ProGet (NuGet feed):** `proget.inc.elara.local/main`. NuGet-пакеты типа `<name>.lin.gcc84.shared.x86_64.<version>.nupkg`.
 
 ## x86_64 — полный билд цепочки grpc/1.60.1
 
@@ -47,13 +47,13 @@ LEGACY_NUPKG_VERSION_SUFFIX=.1 ./test-astra/run_grpc_1601_upstream.sh
 ```bash
 ls -lh output-grpc-1601-upstream/
 # Ждём 7 файлов:
-#   abseil.lin.gcc84.static.x86_64.20230802.1[.1].nupkg
-#   c-ares.lin.gcc84.static.x86_64.1.25.0[.1].nupkg
-#   grpc.lin.gcc84.static.x86_64.1.60.1[.1].nupkg
-#   openssl.lin.gcc84.static.x86_64.1.1.11[.1].nupkg
-#   protobuf.lin.gcc84.static.x86_64.4.25.2[.1].nupkg
-#   re2.lin.gcc84.static.x86_64.20230301[.1].nupkg
-#   zlib.lin.gcc84.static.x86_64.1.3.0[.1].nupkg
+#   abseil.lin.gcc84.shared.x86_64.20230802.1[.1].nupkg
+#   c-ares.lin.gcc84.shared.x86_64.1.25.0[.1].nupkg
+#   grpc.lin.gcc84.shared.x86_64.1.60.1[.1].nupkg
+#   openssl.lin.gcc84.shared.x86_64.1.1.11[.1].nupkg
+#   protobuf.lin.gcc84.shared.x86_64.4.25.2[.1].nupkg
+#   re2.lin.gcc84.shared.x86_64.20230301[.1].nupkg
+#   zlib.lin.gcc84.shared.x86_64.1.3.0[.1].nupkg
 ```
 
 #### Sanity-checks внутри `.nupkg`
@@ -61,25 +61,25 @@ ls -lh output-grpc-1601-upstream/
 ```bash
 # 1. abseil/protobuf inline-namespace должен быть lts_20230802 (НЕ 20240116/20250127)
 mkdir /tmp/check && cd /tmp/check && rm -rf *
-unzip -q <repo>/output-grpc-1601-upstream/abseil.lin.gcc84.static.x86_64.20230802.1.1.nupkg
+unzip -q <repo>/output-grpc-1601-upstream/abseil.lin.gcc84.shared.x86_64.20230802.1.1.nupkg
 grep ABSL_OPTION_INLINE_NAMESPACE_NAME include/absl/base/options.h
 # должно быть `lts_20230802`
 
 # 2. protobuf .proto файлы well-known типов на месте
-unzip -l <repo>/output-grpc-1601-upstream/protobuf.lin.gcc84.static.x86_64.4.25.2.1.nupkg | grep '\.proto$'
+unzip -l <repo>/output-grpc-1601-upstream/protobuf.lin.gcc84.shared.x86_64.4.25.2.1.nupkg | grep '\.proto$'
 # 12 файлов: any, api, descriptor, duration, empty, field_mask, source_context,
 #            struct, timestamp, type, wrappers, cpp_features под proto/google/protobuf/
 # (compiler/plugin.proto + java/ ОТСУТСТВУЮТ — это правильно)
 
-# 3. protobuf libprotolib.a alias на libprotoc.a (для static, deployer a611fc1)
-unzip -l <repo>/output-grpc-1601-upstream/protobuf.lin.gcc84.static.x86_64.4.25.2.1.nupkg | grep -E 'libprotolib|libprotoc'
+# 3. protobuf libprotolib.a alias на libprotoc.a (контент static, deployer a611fc1)
+unzip -l <repo>/output-grpc-1601-upstream/protobuf.lin.gcc84.shared.x86_64.4.25.2.1.nupkg | grep -E 'libprotolib|libprotoc'
 # Жду libprotoc.a, libprotolib.a (alias-симлинк на первый)
-# Для shared-варианта: libprotoc.so, libprotoc.so.25.2.0, libprotolib.so, libprotolib.so.25.2.0
+# `.shared.x86_64.` в имени — runtime-CRT slot tag (DynamicRT), не свойство
+# содержимого. Содержимое — static `.a` (см. "Контракт линкажа" в INFRASTRUCTURE.md §3.7).
 
-# 4. zlib libzlib.a alias на libz.a (для static)
-unzip -l <repo>/output-grpc-1601-upstream/zlib.lin.gcc84.static.x86_64.1.3.0.1.nupkg | grep -E 'libz|libzlib'
+# 4. zlib libzlib.a alias на libz.a
+unzip -l <repo>/output-grpc-1601-upstream/zlib.lin.gcc84.shared.x86_64.1.3.0.1.nupkg | grep -E 'libz|libzlib'
 # Жду libz.a, libzlib.a (alias-симлинк)
-# Для shared: libz.so, libz.so.1, libz.so.1.3.0, libzlib.so → симлинк
 ```
 
 ### Шаг 4: Публикация на ProGet
@@ -170,9 +170,7 @@ Timeout: 45 minutes
 Проверь что в master есть коммит `6674d29` (proto/ mirror). Без него deployer оставляет proto/ пустым. `git log extensions/deployers/legacy_nupkg.py | head`.
 
 ### `LD_LIBRARY_PATH`-стенки у потребителей
-**Актуально только для shared-build** (`SHARED=True`). При static (дефолт) этот блок неприменим — `.a` встраиваются в потребителя на линковке.
-
-Для shared: RUNPATH не propagates транзитивно у Linux loader'а. На runtime у потребителя:
+Контент наших `.nupkg` всегда `.a` (static archives), поэтому транзитивный RUNPATH не нужен для них самих. Этот блок актуален если у потребителя где-то транзитивно подтянулся `.so` (например системный libssl при `secure=True` без openssl-static). На runtime у потребителя:
 ```bash
 export LD_LIBRARY_PATH="$(find /home/<user> -maxdepth 4 -path '*/lib/native/lin-gcc84-shared-x86_64*' -type d | tr '\n' ':')$LD_LIBRARY_PATH"
 ```
