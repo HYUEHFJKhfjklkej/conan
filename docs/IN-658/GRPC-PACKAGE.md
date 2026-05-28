@@ -52,22 +52,22 @@ grpc/                                        ~146 000 строк (с тарбо�
 
 ### 2.2 Опции (`options`)
 
-| Опция | Значения | Дефолт | Назначение |
+| Опция | Значения | Дефолт | Назначение (по-человечески) |
 |---|---|---|---|
-| `shared` | `True / False` | `False` | static (после миграции на static-by-default) |
-| `fPIC` | `True / False` | `True` | position-independent code |
-| `codegen` | `True / False` | `True` | генерить ли plugin-бинари (`grpc_cpp_plugin` и др.) |
-| `cpp_plugin` | `True / False` | `True` | C++ plugin |
-| `csharp_plugin` | `True / False` | `True` | C# |
-| `node_plugin` | `True / False` | `True` | Node.js |
-| `objective_c_plugin` | `True / False` | `True` | Objective-C |
-| `php_plugin` | `True / False` | `True` | PHP |
-| `python_plugin` | `True / False` | `True` | Python |
-| `ruby_plugin` | `True / False` | `True` | Ruby |
-| `secure` | `True / False` | `True` | TLS (через openssl) |
-| `use_systemd` | `True / False / "auto"` | `"auto"` | интеграция с libsystemd |
-| `with_libsystemd` | `True / False` | (derived) | подтянуть libsystemd как требование |
-| `csharp_ext` | `True / False` | `False` | C# extension |
+| `shared` | `True / False` | `False` | Тип библиотек на выходе. `False` — static (`.a`) что встраиваются прямо в бинарь потребителя; `True` — shared (`.so`) что подгружаются динамически на runtime. Наш канон — static (downstream Elara линкуется статически). |
+| `fPIC` | `True / False` | `True` | Position-Independent Code. Позволяет встраивать наш static `.a` внутрь `.so` потребителя (если потребитель сам сборка — shared). Без этого статические либы нельзя загнать в shared-объект. Полезно держать всегда `True`. |
+| `codegen` | `True / False` | `True` | Собирать ли вообще plugin-бинари. Plugin'ы — это утилиты которые `protoc` запускает чтобы из `.proto` файлов сгенерить код для конкретного языка (C++, Python, etc). Если `False` — наши `.nupkg` будут БЕЗ `grpc_cpp_plugin`, потребитель не сможет генерировать grpc-stubs. Оставляем `True`. |
+| `cpp_plugin` | `True / False` | `True` | Включать ли `grpc_cpp_plugin` — генератор `*.grpc.pb.cc/h` файлов из `*.proto`. Нужен для C++ потребителей (el_conf, grpc_sdk). Должен быть `True`. |
+| `csharp_plugin` | `True / False` | `True` | `grpc_csharp_plugin` — генерация C#-биндингов. У нас не используется (нет C#-потребителей), но `True` не мешает — бинарь маленький. |
+| `node_plugin` | `True / False` | `True` | `grpc_node_plugin` — генерация Node.js биндингов. Не используется в наших проектах. |
+| `objective_c_plugin` | `True / False` | `True` | `grpc_objective_c_plugin` — для iOS/macOS Objective-C. Не используется (мы Linux+ARM). |
+| `php_plugin` | `True / False` | `True` | `grpc_php_plugin` — PHP-биндинги. Не используется. |
+| `python_plugin` | `True / False` | `True` | `grpc_python_plugin` — генератор Python-стабов через protoc. Не используется напрямую (если нужны Python-grpc-биндинги — обычно ставят через pip). |
+| `ruby_plugin` | `True / False` | `True` | `grpc_ruby_plugin` — Ruby-биндинги. Не используется. |
+| `secure` | `True / False` | `True` | Включать ли TLS-функциональность в grpc. `True` тянет openssl как зависимость и компилирует grpc с поддержкой шифрованных каналов (SSL/TLS). `False` — grpc собирается без openssl, поддерживает только незащищённые соединения (insecure channel). У нас защищённые соединения нужны — оставляем `True`. |
+| `use_systemd` | `True / False / "auto"` | `"auto"` | Интеграция с systemd-journal для логирования (`sd_journal_send`). `"auto"` = детектить наличие libsystemd-dev при конфигурации; `True` = принудительно требовать; `False` = отключить. На Astra 1.8 systemd есть, но мы не пользуемся journal'ом — обычно `False` либо `"auto"`. |
+| `with_libsystemd` | `True / False` | (derived) | Жёсткая обвязка: тянуть ли libsystemd как явный Conan-requires. Зависит от `use_systemd`. Обычно derived автоматом — вручную не трогаем. |
+| `csharp_ext` | `True / False` | `False` | Дополнительное C# extension (нативный модуль) для gRPC-C#. Нужно только если потребитель — приложение на C#. У нас нет — оставляем `False`. |
 
 ### 2.3 Lifecycle-методы
 
