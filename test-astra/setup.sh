@@ -80,7 +80,7 @@ elif [ -d "$ROOT_DIR/packages" ]; then
     pip install --no-index --find-links="$ROOT_DIR/packages" conan
 else
     echo "[INFO] No local packages found, installing from pip..."
-    pip install conan==2.27.1
+    pip install conan==2.29.0
 fi
 
 echo "[OK] Conan installed: $(conan --version)"

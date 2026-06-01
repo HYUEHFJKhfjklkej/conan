@@ -539,7 +539,7 @@ step and send it back so the next step can be picked.
                  --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
                  -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
 
-         Then re-run the ARM build (NEXT_STEPS 4b.2). Stop here.
+         Then re-run the ARM build (./test-astra/test_arm_cross.sh build arm). Stop here.
        - Line is present → patch is in the image. Move to check 2.
 
     2. Did the override actually land in conan_toolchain.cmake of
@@ -561,9 +561,9 @@ step and send it back so the next step can be picked.
        - No `include(...linaro...)` anywhere → API
          `tc.blocks["user_toolchain"].values["paths"]` is silently
          ignored by Conan 2.27.1 for this node. Switch to the harder
-         workaround in NEXT_STEPS.md 4b.6: append `include("$_user_tc")`
-         to conan_toolchain.cmake AFTER `tc.generate()` directly via
-         load()/save() in each of the 4 patched conanfile.py.
+         workaround: append `include("$_user_tc")` to conan_toolchain.cmake
+         AFTER `tc.generate()` directly via load()/save() in each of the
+         4 patched conanfile.py.
 
     Note: run check 2 from the host directory whose `conan-cache`
     is bind-mounted into the container at `/root/.conan2`. If you
@@ -1251,3 +1251,58 @@ step and send it back so the next step can be picked.
         sudo mkdir -p /etc/docker/certs.d/<internal-registry-hostname>
         sudo cp <ca>.crt /etc/docker/certs.d/<internal-registry-hostname>/ca.crt
         sudo systemctl restart docker
+
+[13] Conan upgrade 2.27.1 -> 2.29.0 — re-test runbook.
+
+    Done already (on the Mac, reversible, in the working tree):
+      - packages-linux/conan-2.27.1.tar.gz  ->  conan-2.29.0.tar.gz
+        (same in ../conan-packages/). The dep wheels in packages-linux/
+        already satisfy 2.29.0 — nothing else added.
+      - setup.sh online-fallback pin bumped to 2.29.0.
+      - Local API smoke PASSED: py_compile of all recipes + deployer,
+        deployer module import, `conan inspect` of all 8 recipes — clean
+        under 2.29.0 (no removed/renamed conan APIs).
+    NOT yet validated off-Mac: the real Linux build + .nupkg byte-compat.
+    That is what this block is for. Run it on the dev-VM / in Docker.
+
+    Step 1 — confirm the mirror image picks 2.29.0 (offline bootstrap):
+        # rebuilds Dockerfile.grpc-tc-mirror; pip --no-index resolves 2.29.0
+        export REGISTRY=<internal-registry>/main
+        ./test-astra/test_arm_cross.sh smoke arm        # quick image probe
+        docker run --rm grpc-tc-mirror conan --version  # expect: 2.29.0
+
+    Step 2 — full x86_64 tree, native, in Docker (NOT on bare dev-VM):
+        docker run --rm -v "$PWD":/work -w /work grpc-tc-mirror \
+            ./test-astra/run_test_grpc.sh                # expect 7 .nupkg in output/
+
+    Step 3 — byte-compat is the contract. Diff the new 7 .nupkg against a
+    known-good 2.27.1 reference set (keep an output-2271/ copy before this):
+        ./test-astra/diff_two_dirs.sh output-2271/ output/
+        # Acceptance: identical lib/native layout, .nuspec <id>, CMakeLists.var.
+        # Any diff that is NOT just build-stamp/timestamp noise = regression.
+        # See [9] for ELF-arch content check.
+
+    Step 4 — ARM cross (both arches), rebuilds the mirror from the new tarball:
+        ./test-astra/test_arm_cross.sh build arm
+        ./test-astra/test_arm_cross.sh build arm64
+
+    Step 5 — ONLY after 1-4 are green: retire the 2.27.1 workarounds, one at
+    a time, re-running Step 2+4 after EACH removal (do not batch them):
+        grep -rn 'CONAN_USER_TOOLCHAIN' --include=conanfile.py .   # 4 recipes
+      (a) env-fallback user_toolchain injection in generate() of
+          abseil/re2/protobuf/grpc — was for 2.27.1 not propagating
+          *:tools.cmake.cmaketoolchain:user_toolchain to transitive deps.
+          Test by dropping ONE recipe's block, ARM-cross build, confirm the
+          .nupkg arch stays armv7hf/armv8 (not x86_64). If it regresses,
+          2.29 still has the quirk — keep the block.
+      (b) explicit [buildenv] in profiles/lin-gcc84-x86_64 (and *-arm/*-aarch64)
+          — was for host [buildenv] leaking into the build context.
+      (c) exact-pin cmake/3.25.1 in build_requirements() — was for flaky
+          2.27.1 version-range resolution against [platform_tool_requires].
+      Keep whatever still regresses; 2.29 may not have fixed all three.
+
+    Rollback (any step fails): the old tarball is still in git history (HEAD).
+        git checkout HEAD -- packages-linux/conan-2.27.1.tar.gz
+        rm -f packages-linux/conan-2.29.0.tar.gz
+        # offline-independent alt: pip download conan==2.27.1 --no-deps \
+        #     --no-binary=:all: -d packages-linux/
