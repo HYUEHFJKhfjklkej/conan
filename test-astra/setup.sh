@@ -72,12 +72,14 @@ if [ -d "$ROOT_DIR/packages-linux" ]; then
     echo "[INFO] Installing build dependencies..."
     pip install --no-index --find-links="$PKGS" pip setuptools wheel 2>/dev/null || true
 
-    # Теперь установить Conan со всеми зависимостями
+    # Теперь установить Conan со всеми зависимостями.
+    # --upgrade обязателен: без него pip видит уже стоящий conan (любой версии)
+    # как "already satisfied" и не поднимает версию после bump'а тарбола.
     echo "[INFO] Installing Conan..."
-    pip install --no-index --find-links="$PKGS" conan
+    pip install --no-index --find-links="$PKGS" --upgrade conan
 elif [ -d "$ROOT_DIR/packages" ]; then
     echo "[INFO] Using packages/"
-    pip install --no-index --find-links="$ROOT_DIR/packages" conan
+    pip install --no-index --find-links="$ROOT_DIR/packages" --upgrade conan
 else
     echo "[INFO] No local packages found, installing from pip..."
     pip install conan==2.29.0
