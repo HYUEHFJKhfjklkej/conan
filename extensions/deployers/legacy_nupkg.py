@@ -445,6 +445,66 @@ def _legacy_component_names(libs, pkg_name):
     return [x for x in out if not (x in seen or seen.add(x))]
 
 
+def _target_binutils_prefix(arch, user_toolchain):
+    """Binutils prefix for the *target* linker. Empty for native x86_64/i686.
+
+    For Linaro ARM cross-builds the deployer must use the cross `ld` to merge
+    ARM relocatable objects (host `ld` rejects a foreign EM_ARM/EM_AARCH64).
+    Detection mirrors _resolve_arch_with_toolchain: a Linaro user_toolchain in
+    the conf marks an ARM cross run.
+    """
+    a = str(arch)
+    if "linaro" in (user_toolchain or "").lower():
+        if a in ("armv7", "armv7hf", "armv7s"):
+            return "arm-linux-gnueabihf-"
+        if a in ("armv8", "armv8_32", "armv8.3", "arm64ec"):
+            return "aarch64-linux-gnu-"
+    return ""
+
+
+def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
+    """Merge grpc's separate `libupb*.a` archives into `libgrpc.a` and delete
+    them, so the package ships a SELF-CONTAINED `libgrpc.a` — byte-structurally
+    like the legacy TeamCity grpc package (which folded upb in and shipped NO
+    separate upb libs).
+
+    Why this is required (proven end-to-end on dev-astra18-13, 2026-06-02):
+    the legacy Elara framework (`ResolveDependencies.cmake`) flat-links each
+    component `.a` with no dependency graph / link order. grpc upstream splits
+    upb into overlapping per-feature archives (`libupb_json_lib.a`, ...) and the
+    package also carries an ~8KB stub `libupb.a`. A flat consumer then either:
+      - links the stub libupb.a  -> `undefined reference to upb_Encode/...`, or
+      - links the real upb libs  -> `multiple definition of google_protobuf_*`
+        (`descriptor.upb_minitable.c.o` is duplicated in both upb and libgrpc.a).
+    Partial-linking (`ld -r ... -z muldefs`) flattens grpc + upb into one
+    relocatable object, de-duplicating the overlapping descriptor minitables
+    (identical objects, first wins), yielding a libgrpc.a that links cleanly.
+    """
+    if not os.path.isdir(lib_dir):
+        return
+    libgrpc = os.path.join(lib_dir, "libgrpc.a")
+    upb_libs = sorted(
+        os.path.join(lib_dir, f) for f in os.listdir(lib_dir)
+        if f.startswith("libupb") and f.endswith(".a")
+    )
+    if not os.path.isfile(libgrpc) or not upb_libs:
+        return
+    combined = os.path.join(lib_dir, "_grpc_upb_combined.o")
+    subprocess.run(
+        [ld_cmd, "-r", "--whole-archive", libgrpc] + upb_libs
+        + ["--no-whole-archive", "-z", "muldefs", "-o", combined],
+        check=True)
+    os.remove(libgrpc)
+    subprocess.run(["ar", "qcs", libgrpc, combined], check=True)
+    os.remove(combined)
+    for ulib in upb_libs:
+        os.remove(ulib)
+    if output is not None:
+        output.info(
+            f"legacy_nupkg: folded {len(upb_libs)} upb archive(s) into "
+            f"libgrpc.a ({os.path.basename(lib_dir)})")
+
+
 def _make_keepdirs(*dirs):
     """Ensure each dir exists in the staged tree, and emit a .keepdir
     marker IFF the dir is otherwise empty. The marker is only needed
@@ -594,16 +654,44 @@ def deploy(graph, output_folder, **kwargs):
             base = os.path.join(pkg_root, "lib")
             return os.path.join(base, _lib_sub) if _lib_sub else base
 
-        n_rel = _copy_libs(_libdir(release_pkg),
-                           os.path.join(staging, "lib", "native", lib_suffix),
-                           pkg_name=name)
-        n_dbg = _copy_libs(_libdir(debug_pkg),
-                           os.path.join(staging, "lib", "native", f"{lib_suffix}-d"),
-                           pkg_name=name)
+        _staging_rel_libdir = os.path.join(staging, "lib", "native", lib_suffix)
+        _staging_dbg_libdir = os.path.join(staging, "lib", "native", f"{lib_suffix}-d")
+        n_rel = _copy_libs(_libdir(release_pkg), _staging_rel_libdir, pkg_name=name)
+        n_dbg = _copy_libs(_libdir(debug_pkg), _staging_dbg_libdir, pkg_name=name)
+
+        # grpc: fold the separate upb static archives into libgrpc.a so the
+        # legacy flat-linking framework sees a self-contained libgrpc.a, exactly
+        # like the legacy TeamCity package. Operates on the staged copy only;
+        # the upstream Conan package folder is untouched. See
+        # _fold_upb_into_libgrpc for the full why.
+        if name == "grpc":
+            _ld = _target_binutils_prefix(
+                s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld"
+            _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output)
+            _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output)
+
+            # Ship grpc_cpp_plugin in lib/native/<suffix>/ (matches the legacy
+            # package). The Elara framework's protobuf_generate_grpc_cpp() looks
+            # here for the version-matched plugin; without it codegen falls back
+            # to a system grpc_cpp_plugin of a different gRPC version and dies
+            # (`error while loading shared libraries: libgrpc_plugin_support.so.1.78`).
+            # NOTE for ARM cross: this ships the HOST-arch plugin; a consumer that
+            # cross-compiles on x86_64 needs a build-context (x86_64) plugin —
+            # revisit when wiring the ARM consumer path.
+            for _src_pkg, _dst in ((release_pkg, _staging_rel_libdir),
+                                   (debug_pkg, _staging_dbg_libdir)):
+                _src_plugin = os.path.join(_src_pkg, "bin", "grpc_cpp_plugin")
+                if os.path.isfile(_src_plugin):
+                    os.makedirs(_dst, exist_ok=True)
+                    _dst_plugin = os.path.join(_dst, "grpc_cpp_plugin")
+                    shutil.copy2(_src_plugin, _dst_plugin)
+                    os.chmod(_dst_plugin, 0o755)
+
         # Component names must use the LEGACY naming (zlib, not z) — see
         # _legacy_component_names. The .so files themselves are aliased by
-        # _add_lib_aliases inside _copy_libs above.
-        libs = _legacy_component_names(_list_libs(_libdir(release_pkg)), name)
+        # _add_lib_aliases inside _copy_libs above. Read from the STAGING dir
+        # (post-fold) so folded-away upb libs don't reappear as phantom components.
+        libs = _legacy_component_names(_list_libs(_staging_rel_libdir), name)
 
         # 3. .targets
         os.makedirs(os.path.join(staging, "build", "native"), exist_ok=True)
@@ -644,7 +732,18 @@ def deploy(graph, output_folder, **kwargs):
             shutil.rmtree(skip)
 
         # 6. CMakeLists.var
-        components = libs if libs else [name]
+        components = list(libs) if libs else [name]
+        # grpc_cpp_plugin is an EXECUTABLE (no .a/.so suffix) so _list_libs skips
+        # it — but the legacy grpc CMakeLists.var lists it as a component, which
+        # is how the Elara framework (GenerateGrpcCpp.cmake's find_program) locates
+        # the version-matched plugin in lib/native/<variant>. Without the component
+        # entry, dropping the file alone is invisible -> codegen falls back to a
+        # system plugin of the wrong gRPC version. Added to CMakeLists.var only,
+        # NOT to the Windows .targets lib list (it is not a link library).
+        if name == "grpc" and os.path.isfile(
+                os.path.join(_staging_rel_libdir, "grpc_cpp_plugin")) \
+                and "grpc_cpp_plugin" not in components:
+            components.append("grpc_cpp_plugin")
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
         # Direct deps of THIS package only (not the whole transitive closure):
@@ -667,7 +766,13 @@ def deploy(graph, output_folder, **kwargs):
         # refer to packages from the legacy Bitbucket feed in ProGet
         # (not produced by this build), so VERSION_SUFFIX is NOT applied.
         if name == "grpc" and version.startswith("1.60."):
-            var_deps.extend(["address_sorting:1.0.0", "upb:0.2.0"])
+            # address_sorting stays a separate legacy package (links cleanly as
+            # its own .a). upb is NO LONGER emitted: it is folded into libgrpc.a
+            # by _fold_upb_into_libgrpc above. Keeping `upb:0.2.0` here would make
+            # the consumer pull the legacy standalone libupb.a, re-duplicating the
+            # google_protobuf descriptor minitables already inside the folded
+            # libgrpc.a -> multiple-definition at link time.
+            var_deps.append("address_sorting:1.0.0")
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
             f.write(_generate_cmakelists_var(legacy_name, version, components, platforms, var_deps))
 
