@@ -445,6 +445,20 @@ def _legacy_component_names(libs, pkg_name):
     return [x for x in out if not (x in seen or seen.add(x))]
 
 
+# Build-tool executables each package ships in lib/native/<variant>/ (like the
+# legacy TeamCity packages). They live in the Conan package's bin/; the deployer
+# copies them next to the libs AND lists them as components so the Elara
+# framework's find_program (GenerateGrpcCpp.cmake) locates the version-matched
+# protoc / grpc_cpp_plugin instead of falling back to system tools of the wrong
+# version (system protoc -> `google/protobuf/runtime_version.h` not found;
+# system grpc_cpp_plugin -> wrong gRPC ABI). Verified end-to-end on el_conf,
+# 2026-06-02.
+LEGACY_BIN_TOOLS = {
+    "grpc": ("grpc_cpp_plugin",),
+    "protobuf": ("protoc",),
+}
+
+
 def _target_binutils_prefix(arch, user_toolchain):
     """Binutils prefix for the *target* linker. Empty for native x86_64/i686.
 
@@ -682,22 +696,24 @@ def deploy(graph, output_folder, **kwargs):
                     f"legacy_nupkg: debug libgrpc.a upb-fold skipped ({_fold_err}); "
                     "release variant is folded, debug shipped as-is")
 
-            # Ship grpc_cpp_plugin in lib/native/<suffix>/ (matches the legacy
-            # package). The Elara framework's protobuf_generate_grpc_cpp() looks
-            # here for the version-matched plugin; without it codegen falls back
-            # to a system grpc_cpp_plugin of a different gRPC version and dies
-            # (`error while loading shared libraries: libgrpc_plugin_support.so.1.78`).
-            # NOTE for ARM cross: this ships the HOST-arch plugin; a consumer that
-            # cross-compiles on x86_64 needs a build-context (x86_64) plugin —
-            # revisit when wiring the ARM consumer path.
+        # Ship build-tool executables (grpc -> grpc_cpp_plugin, protobuf ->
+        # protoc) in lib/native/<suffix>/, matching the legacy packages. The
+        # Elara framework's GenerateGrpcCpp.cmake locates the version-matched
+        # protoc + grpc_cpp_plugin; without them codegen falls back to system
+        # tools of the wrong version. Source is the Conan package's bin/ (needs a
+        # build that actually kept the binary — protobuf must be built with
+        # protobuf_BUILD_PROTOC_BINARIES=ON, which the recipe sets).
+        # NOTE for ARM cross: ships the HOST-arch binary; an x86_64 cross
+        # consumer needs the build-context binary — revisit for the ARM path.
+        for _tool in LEGACY_BIN_TOOLS.get(name, ()):
             for _src_pkg, _dst in ((release_pkg, _staging_rel_libdir),
                                    (debug_pkg, _staging_dbg_libdir)):
-                _src_plugin = os.path.join(_src_pkg, "bin", "grpc_cpp_plugin")
-                if os.path.isfile(_src_plugin):
+                _src_tool = os.path.join(_src_pkg, "bin", _tool)
+                if os.path.isfile(_src_tool):
                     os.makedirs(_dst, exist_ok=True)
-                    _dst_plugin = os.path.join(_dst, "grpc_cpp_plugin")
-                    shutil.copy2(_src_plugin, _dst_plugin)
-                    os.chmod(_dst_plugin, 0o755)
+                    _dst_tool = os.path.join(_dst, _tool)
+                    shutil.copy2(_src_tool, _dst_tool)
+                    os.chmod(_dst_tool, 0o755)
 
         # Component names must use the LEGACY naming (zlib, not z) — see
         # _legacy_component_names. The .so files themselves are aliased by
@@ -745,17 +761,16 @@ def deploy(graph, output_folder, **kwargs):
 
         # 6. CMakeLists.var
         components = list(libs) if libs else [name]
-        # grpc_cpp_plugin is an EXECUTABLE (no .a/.so suffix) so _list_libs skips
-        # it — but the legacy grpc CMakeLists.var lists it as a component, which
-        # is how the Elara framework (GenerateGrpcCpp.cmake's find_program) locates
-        # the version-matched plugin in lib/native/<variant>. Without the component
-        # entry, dropping the file alone is invisible -> codegen falls back to a
-        # system plugin of the wrong gRPC version. Added to CMakeLists.var only,
-        # NOT to the Windows .targets lib list (it is not a link library).
-        if name == "grpc" and os.path.isfile(
-                os.path.join(_staging_rel_libdir, "grpc_cpp_plugin")) \
-                and "grpc_cpp_plugin" not in components:
-            components.append("grpc_cpp_plugin")
+        # grpc_cpp_plugin / protoc are EXECUTABLES (no .a/.so) so _list_libs
+        # skips them — but the legacy CMakeLists.var lists them as components so
+        # the Elara framework (GenerateGrpcCpp.cmake's find_program) locates the
+        # version-matched tool in lib/native/<variant>. Without the component
+        # entry, dropping the file alone is invisible. Added to CMakeLists.var
+        # only, NOT to the Windows .targets lib list (not link libraries).
+        for _tool in LEGACY_BIN_TOOLS.get(name, ()):
+            if os.path.isfile(os.path.join(_staging_rel_libdir, _tool)) \
+                    and _tool not in components:
+                components.append(_tool)
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
         # Direct deps of THIS package only (not the whole transitive closure):
