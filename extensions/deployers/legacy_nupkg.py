@@ -667,8 +667,20 @@ def deploy(graph, output_folder, **kwargs):
         if name == "grpc":
             _ld = _target_binutils_prefix(
                 s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld"
+            # Release fold is required. _fold_upb_into_libgrpc only mutates the
+            # dir AFTER `ld -r` succeeds, so a failure leaves the dir intact.
             _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output)
-            _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output)
+            # Debug libgrpc.a is huge (~1.4 GB static+debug); `ld -r` on it can
+            # exhaust RAM on a CI agent. Make it non-fatal: if it fails, ship the
+            # debug variant unfolded (release is what consumers link in Release
+            # builds). Debug consumers would then hit upb refs — acceptable until
+            # we split the fold or stream it.
+            try:
+                _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output)
+            except Exception as _fold_err:
+                conanfile.output.warning(
+                    f"legacy_nupkg: debug libgrpc.a upb-fold skipped ({_fold_err}); "
+                    "release variant is folded, debug shipped as-is")
 
             # Ship grpc_cpp_plugin in lib/native/<suffix>/ (matches the legacy
             # package). The Elara framework's protobuf_generate_grpc_cpp() looks
