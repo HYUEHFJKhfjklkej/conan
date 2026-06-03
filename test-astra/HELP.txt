@@ -1239,6 +1239,81 @@ step and send it back so the next step can be picked.
      Then rerun cmake on downstream with -rm-rf .build to force fresh
      CMakeCache.
 
+[12a] Diagnostic — grpc_sdk / el_conf link fails with
+      `/usr/bin/ld.gold: error: cannot find -lupb`
+      (appears AFTER the upb-fold; commit a357953).
+
+      CONFIRMED ROOT CAUSE (2026-06-03, dev-astra18-13): a stale `upb`
+      link entry in the CONSUMER's OWN `CMakeLists.var` (e.g.
+      `grpc_sdk/CMakeLists.var`, an indented `upb` line in its component/
+      link list). It is a LEGACY LEFTOVER from when grpc shipped a
+      standalone upb. Until a357953 it resolved silently because SOME
+      `libupb.a` was on disk (the standalone upb package, or an un-folded
+      grpc slot). a357953 folded upb into libgrpc.a AND deleted every
+      libupb*.a AND dropped the `upb:0.2.0` pseudo-dep — so the long-
+      dormant `upb` reference had nothing to bind to and surfaced as a
+      bare `-lupb`. NOT a deployer bug in the link itself; the file that
+      was hiding the dangling reference got removed.
+
+      WHY IT IS NOT the resolver / grpc slot: ResolveDependencies.cmake
+      (legacy-cmake-framework) FATAL_ERRORs if a *component* lib is not
+      found — so a missing-component would abort configure, not yield
+      -lupb. Configure prints "Generating done" and the PKG table has NO
+      upb row => upb is a raw link NAME (undefined target -> -l<name>),
+      injected by the consumer's own var, not by any resolved package.
+
+      Pin the source (run AFTER the failing link). Note `.var` files —
+      earlier greps that filtered *.cmake/CMakeLists.txt/*.in MISS them:
+
+          B=<consumer>/build/.../<target>.dir/link.txt   # the failing link
+          # (1) which INSTALLED package names `upb` at all:
+          grep -rln '\bupb\b' /home/user/*/CMakeLists.var 2>/dev/null
+          # (2) does the CONSUMER's own var carry a stray `upb` line:
+          grep -rIn '\bupb\b' ~/<consumer> --exclude-dir=build \
+            --exclude-dir=.build --exclude-dir=.git 2>/dev/null
+          # (3) confirm it is a bare token, not a resolved path:
+          tr ' ' '\n' < "$B" | grep -niC2 upb     # `-lupb` with no path
+
+      VERDICT + FIX (two legitimate options — pick by SCOPE):
+
+      A) Consumer-side (simplest, when you own/maintain the consumer and
+         the `upb` line is just a stale leftover): delete the `upb` line
+         from <consumer>/CMakeLists.var, `rm -rf` its build dir, rebuild.
+         CORRECT because upb symbols are already inside the folded
+         libgrpc.a the consumer links. Verified green for grpc_sdk
+         (Debug) 2026-06-03. Use when only one/few consumers carry it:
+             grep -rln '\bupb\b' /home/user/*/CMakeLists.var | grep -v '/upb\.'
+
+      B) Package-side / DROP-IN (when consumers must stay unedited): keep
+         upb folded in libgrpc.a, but re-introduce a STUB upb so the
+         consumer's existing `upb` ref resolves itself:
+           - ship a standalone `upb` package with an EMPTY libupb.a
+             (release + -d) — empty => no duplicate symbols (the original
+             reason a357953 dropped it was the legacy package's REAL
+             libupb.a duplicating folded descriptor minitables);
+           - re-emit `upb:0.2.0` in grpc/1.60.x `_dependencies`.
+         This mirrors the legacy design (folded libgrpc.a + ~8KB stub upb
+         package) and is the permanent deployer change to make if scope
+         is wide. Structural/packaging decision -> clear with the lead.
+
+      Quick dev-VM unblock for (B) without touching any consumer:
+          SFX=lin-gcc84-shared-x86_64
+          UPB=/home/user/upb.lin.gcc84.shared.x86_64.0.2.0
+          mkdir -p "$UPB/lib/native/$SFX" "$UPB/lib/native/$SFX-d" "$UPB/include"
+          echo '' | gcc -x c -c - -o /tmp/empty.o
+          ar rcs "$UPB/lib/native/$SFX/libupb.a"   /tmp/empty.o
+          ar rcs "$UPB/lib/native/$SFX-d/libupb.a" /tmp/empty.o
+          printf 'set(project_name upb)\nset(upb_major 0)\nset(upb_minor 2)\nset(upb_patch 0)\nset(components upb)\nset(upb WINDOWS LINUX LINUX_ARM_NXP LINUX_ARM_LINARO LINUX_ARM64_ROCKCHIP LINUX_ARM64_LINARO LINUX_ATOM WINCE800)\nset(upb_dependencies)\n' > "$UPB/CMakeLists.var"
+          # re-add the dep so the resolver pulls the stub:
+          sed -i '/address_sorting:1.0.0/a\    upb:0.2.0' \
+            /home/user/grpc.lin.gcc84.shared.x86_64.1.60.1.1/CMakeLists.var
+
+      NOTE (debug): a357953's debug fold is RAM-guarded and may be
+      SKIPPED on a low-RAM agent -> Debug libgrpc.a then lacks folded
+      upb; an empty stub gives undefined refs instead of -lupb. Confirm
+      `ls $G/lib/native/*-d/ | grep upb` is empty (folded) before relying
+      on the stub for Debug; else build Release or split the debug fold.
+
 [X] Troubleshooting — docker pull fails on x509:
 
     Quick (insecure, dev only):

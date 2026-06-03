@@ -477,12 +477,13 @@ def _target_binutils_prefix(arch, user_toolchain):
 
 
 def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
-    """Merge grpc's separate `libupb*.a` archives into `libgrpc.a` and delete
-    them, so the package ships a SELF-CONTAINED `libgrpc.a` — byte-structurally
-    like the legacy TeamCity grpc package (which folded upb in and shipped NO
-    separate upb libs).
+    """Merge grpc's separate `libupb*.a` archives into `libgrpc.a`, then
+    replace them with a single EMPTY `libupb.a` stub — so the package ships a
+    SELF-CONTAINED `libgrpc.a` PLUS a no-op `upb` component, byte-structurally
+    like the legacy TeamCity grpc package (which folded upb in and exposed only
+    a tiny stub upb).
 
-    Why this is required (proven end-to-end on dev-astra18-13, 2026-06-02):
+    Why the fold is required (proven end-to-end on dev-astra18-13, 2026-06-02):
     the legacy Elara framework (`ResolveDependencies.cmake`) flat-links each
     component `.a` with no dependency graph / link order. grpc upstream splits
     upb into overlapping per-feature archives (`libupb_json_lib.a`, ...) and the
@@ -493,6 +494,16 @@ def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
     Partial-linking (`ld -r ... -z muldefs`) flattens grpc + upb into one
     relocatable object, de-duplicating the overlapping descriptor minitables
     (identical objects, first wins), yielding a libgrpc.a that links cleanly.
+
+    Why the EMPTY stub is required (2026-06-03): downstream consumers
+    (grpc_sdk, the el_conf chain, ... — many of them) carry a historical `upb`
+    link component in their OWN CMakeLists.var, left from when grpc shipped a
+    standalone upb. Deleting every libupb*.a (as the fold does) leaves that
+    reference dangling -> `ld: cannot find -lupb` at link time. The empty stub
+    keeps `upb` resolvable as a benign component (`find_library` finds it,
+    `_list_libs` re-emits `upb`, ld links it as a no-op) while the real upb
+    symbols stay folded inside libgrpc.a. Empty => zero duplicate symbols, so
+    no multiple-def — the fix lives entirely on our side, consumers untouched.
     """
     if not os.path.isdir(lib_dir):
         return
@@ -513,10 +524,17 @@ def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
     os.remove(combined)
     for ulib in upb_libs:
         os.remove(ulib)
+    # Leave an EMPTY libupb.a stub so the legacy `upb` link component that
+    # downstream consumers reference still resolves (see docstring). `!<arch>\n`
+    # is a valid empty GNU `ar` archive: ld links it as a no-op, find_library()
+    # finds it by name, and _list_libs() re-emits `upb` as a grpc component.
+    stub = os.path.join(lib_dir, "libupb.a")
+    with open(stub, "wb") as _stub_f:
+        _stub_f.write(b"!<arch>\n")
     if output is not None:
         output.info(
             f"legacy_nupkg: folded {len(upb_libs)} upb archive(s) into "
-            f"libgrpc.a ({os.path.basename(lib_dir)})")
+            f"libgrpc.a + left empty upb stub ({os.path.basename(lib_dir)})")
 
 
 def _make_keepdirs(*dirs):
@@ -718,7 +736,10 @@ def deploy(graph, output_folder, **kwargs):
         # Component names must use the LEGACY naming (zlib, not z) — see
         # _legacy_component_names. The .so files themselves are aliased by
         # _add_lib_aliases inside _copy_libs above. Read from the STAGING dir
-        # (post-fold) so folded-away upb libs don't reappear as phantom components.
+        # (post-fold): the upb FEATURE libs (libupb_json_lib, ...) are folded
+        # into libgrpc.a, leaving only the single empty `libupb.a` stub -> `upb`
+        # is emitted as one benign component so consumers resolve it (see
+        # _fold_upb_into_libgrpc).
         libs = _legacy_component_names(_list_libs(_staging_rel_libdir), name)
 
         # 3. .targets
@@ -794,11 +815,14 @@ def deploy(graph, output_folder, **kwargs):
         # (not produced by this build), so VERSION_SUFFIX is NOT applied.
         if name == "grpc" and version.startswith("1.60."):
             # address_sorting stays a separate legacy package (links cleanly as
-            # its own .a). upb is NO LONGER emitted: it is folded into libgrpc.a
-            # by _fold_upb_into_libgrpc above. Keeping `upb:0.2.0` here would make
-            # the consumer pull the legacy standalone libupb.a, re-duplicating the
-            # google_protobuf descriptor minitables already inside the folded
-            # libgrpc.a -> multiple-definition at link time.
+            # its own .a). upb is NOT emitted as a dependency: it is folded into
+            # libgrpc.a by _fold_upb_into_libgrpc, which also leaves an empty
+            # libupb.a stub so `upb` ships as a self-contained no-op COMPONENT of
+            # grpc — consumers that reference `upb` resolve it from grpc itself.
+            # Re-adding `upb:0.2.0` as a dep would pull the legacy standalone
+            # libupb.a (real symbols), re-duplicating the google_protobuf
+            # descriptor minitables already inside the folded libgrpc.a ->
+            # multiple-definition at link time.
             var_deps.append("address_sorting:1.0.0")
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
             f.write(_generate_cmakelists_var(legacy_name, version, components, platforms, var_deps))
