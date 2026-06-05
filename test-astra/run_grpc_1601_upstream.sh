@@ -95,7 +95,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -e LEGACY_NUPKG_VERSION_SUFFIX="$LEGACY_NUPKG_VERSION_SUFFIX" \
         --entrypoint bash \
         "$MIRROR_IMAGE" \
-        -c "./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
+        -c "bash ./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
 fi
 
 # ----------------------------------------------------------------------
