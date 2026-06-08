@@ -1,25 +1,20 @@
 @echo off
 :: ============================================
-::  Скачивает / распаковывает Windows build-tools (Strawberry Perl + NASM)
-::  в tools\windows\ внутри репо.
+::  Готовит Windows build-tools (Strawberry Perl + NASM) в tools\windows\.
+::  ОФЛАЙН-ТОЛЬКО — НИКОГДА не качает из интернета (closed-network).
 ::
-::  Запускать ОДИН РАЗ перед setup.bat.
+::  Источник тулзов, в порядке приоритета (что найдёт — то и возьмёт):
+::    1) уже распакованы в tools\windows\strawberryperl\ и tools\windows\nasm\
+::    2) env PERL_SRC / NASM_SRC указывает на уже распакованную папку ИЛИ .zip
+::         set PERL_SRC=C:\Users\me\Downloads\strawberry-perl-5.32.1.1-64bit-portable
+::         set NASM_SRC=C:\path\nasm-2.16.01-win64.zip
+::    3) портативный .zip лежит в tools\windows\ (имена см. PERL_ZIP/NASM_ZIP ниже)
+::  Если ничего не найдено — скрипт ПАДАЕТ с инструкцией, в сеть НЕ лезет.
 ::
-::  Сценарии:
-::    1) На машине с интернетом:
-::       test-windows\install_deps.bat
-::         → скачивает архивы в tools\windows\, потом распаковывает.
-::         → можно после этого скопировать tools\windows\*.zip на USB/share
-::           для оффлайн-машины (вместе с самим репозиторием).
-::
-::    2) На оффлайн-машине, если архивы уже принесли в tools\windows\:
-::       test-windows\install_deps.bat
-::         → видит готовые архивы, пропускает скачивание, распаковывает.
-::
-::  После прогона:
+::  Результат:
 ::    tools\windows\strawberryperl\perl\bin\perl.exe
 ::    tools\windows\nasm\nasm.exe
-::  И профили win-* видят их через [buildenv] PATH.
+::  Профили win-* добавляют их в PATH сборки через [buildenv].
 :: ============================================
 setlocal ENABLEEXTENSIONS
 
@@ -31,12 +26,10 @@ if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
 
 set PERL_VER=5.32.1.1
 set PERL_ZIP=%TOOLS_DIR%\strawberryperl-%PERL_VER%-portable.zip
-set PERL_URL=https://strawberryperl.com/download/%PERL_VER%/strawberry-perl-%PERL_VER%-64bit-portable.zip
 set PERL_DIR=%TOOLS_DIR%\strawberryperl
 
 set NASM_VER=2.16.01
 set NASM_ZIP=%TOOLS_DIR%\nasm-%NASM_VER%-win64.zip
-set NASM_URL=https://www.nasm.us/pub/nasm/releasebuilds/%NASM_VER%/win64/nasm-%NASM_VER%-win64.zip
 set NASM_DIR=%TOOLS_DIR%\nasm
 
 echo.
@@ -48,17 +41,16 @@ if exist "%PERL_DIR%\perl\bin\perl.exe" (
     goto :nasm
 )
 if not exist "%PERL_ZIP%" (
-    echo [INFO] Downloading from %PERL_URL%
-    powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%PERL_URL%' -OutFile '%PERL_ZIP%' } catch { Write-Host '[ERROR]' $_.Exception.Message; exit 1 }"
-    if errorlevel 1 (
-        echo.
-        echo [FAIL] Не удалось скачать Strawberry Perl.
-        echo        Если на этой машине нет интернета:
-        echo          1. Скачайте %PERL_URL% на машине с интернетом.
-        echo          2. Положите файл в %PERL_ZIP%
-        echo          3. Запустите этот скрипт снова.
-        goto :END_FAIL
-    )
+    echo.
+    echo [FAIL] Strawberry Perl не найден, скачивание ОТКЛЮЧЕНО ^(closed-network^).
+    echo        Дай тулзу офлайн одним из способов и запусти снова:
+    echo          A) распакуй портативный Perl так, чтобы существовал файл:
+    echo               %PERL_DIR%\perl\bin\perl.exe
+    echo             ^(например скопируй свою папку strawberry-perl-...-portable
+    echo              целиком в %PERL_DIR%^)
+    echo          B) либо положи портативный .zip сюда:
+    echo               %PERL_ZIP%
+    goto :END_FAIL
 )
 echo [INFO] Extracting %PERL_ZIP% to %PERL_DIR%
 if exist "%PERL_DIR%" rmdir /s /q "%PERL_DIR%"
@@ -84,14 +76,12 @@ if exist "%NASM_DIR%\nasm.exe" (
     goto :verify
 )
 if not exist "%NASM_ZIP%" (
-    echo [INFO] Downloading from %NASM_URL%
-    powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%NASM_URL%' -OutFile '%NASM_ZIP%' } catch { Write-Host '[ERROR]' $_.Exception.Message; exit 1 }"
-    if errorlevel 1 (
-        echo.
-        echo [FAIL] Не удалось скачать NASM.
-        echo        На оффлайн-машине: скачайте %NASM_URL% и положите в %NASM_ZIP%.
-        goto :END_FAIL
-    )
+    echo.
+    echo [FAIL] NASM не найден, скачивание ОТКЛЮЧЕНО ^(closed-network^).
+    echo        Дай тулзу офлайн одним из способов и запусти снова:
+    echo          A) положи nasm.exe сюда: %NASM_DIR%\nasm.exe
+    echo          B) либо положи nasm-%NASM_VER%-win64.zip сюда: %NASM_ZIP%
+    goto :END_FAIL
 )
 echo [INFO] Extracting %NASM_ZIP% to %NASM_DIR%
 if exist "%NASM_DIR%" rmdir /s /q "%NASM_DIR%"
