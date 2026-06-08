@@ -1,9 +1,18 @@
-# TeamCity — GRPC build tree (replicate the production GR9xx layout)
+# TeamCity — GRPC build tree (Conan), mirroring the legacy GR9xx shape
 
-Blueprint for recreating the existing **`GRPC`** TeamCity project (the hand-written
-`GR9xx` tree) with our Conan-based builds. Target line first: **grpc 1.60.1**
-(parity with `GR910 RELEASE`), then the newer 1.78.1 line ("сначала 1.60.1, дальше все").
-Scope now: **GRPC only** (GRPC_SDK / GS9xx comes after, it consumes our grpc `.nupkg`).
+**Where this is built:** the maintainer's own project **`SANDBOX/GRPC_CONAN_ARM`**
+(today just `Build Conan ARM` + `Build Conan ARM64`). We grow it into a full tree
+shaped like the legacy hand-written **`GRPC`** project (`GR9xx`), but Conan-based —
+**in parallel**, not touching the legacy `GRPC`. Merging/replacing the legacy tree
+later is the team lead's call.
+
+Target line first: **grpc 1.60.1** (parity with legacy `GR910 RELEASE`), then the
+1.78.1 line ("сначала 1.60.1, дальше все"). Scope now: **GRPC only** (GRPC_SDK / GS9xx
+comes after — it consumes our grpc `.nupkg`).
+
+> Note: the two existing configs (`Build Conan ARM`/`ARM64`) are the **Linux ARM**
+> leg of this tree (they already emit the 7 `.nupkg`, currently on 1.78.1 + old Conan
+> — see `HELP.txt [14]` to move them to 1.60.1 + 2.29.0).
 
 TeamCity is configured by hand (no `.teamcity/settings.kts` in the repo), so this
 doc is the source of truth pasted into the build configs. Driver mechanics:
@@ -88,11 +97,30 @@ exactly this matrix, incl. the `openssl-1x/` recipe, and self-wraps in
 3. Then the "дальше все": GR121/GR122 (ARM 1.60.1 cross), GR100-103 (Windows 1.60.1 +
    StaticRT slot), and the whole 1.78.1 line.
 
+## Target shape inside `SANDBOX/GRPC_CONAN_ARM`
+
+```
+GRPC_CONAN_ARM                       (the maintainer's project — grow it)
+├── Windows
+│   ├── Build Conan Win x86 StaticRT     ~ GR100
+│   ├── Build Conan Win x64 StaticRT     ~ GR101
+│   ├── Build Conan Win x86 DynamicRT    ~ GR102
+│   └── Build Conan Win x64 DynamicRT    ~ GR103
+├── Linux
+│   ├── Build Conan Linux x86 DynamicRT  ~ GR112
+│   └── Build Conan Linux x64 DynamicRT  ~ GR113
+└── Linux ARM
+    ├── Build Conan ARM    (exists, #1)  ~ GR121
+    └── Build Conan ARM64  (exists, #5)  ~ GR122
+```
+Group the configs into `Windows` / `Linux` / `Linux ARM` subprojects, exactly like the
+legacy `GRPC` tree. The two existing ARM configs are the `Linux ARM` leg already.
+
 ## Lead decisions (not invented here)
 
-- **Cutover:** replace the existing hand-written `GR1xx` configs in place, or add the
-  Conan ones in parallel (e.g. a separate `GRPC_CONAN` project / `GR1xx-conan` ids)
-  and switch downstream once green. Per standing rule this is the team lead's call.
+- **Merge into legacy `GRPC`:** this Conan tree is built in parallel in
+  `GRPC_CONAN_ARM`; replacing the legacy hand-written `GR1xx` configs (or pointing
+  downstream at the new `.nupkg`) is the team lead's call once it is green.
 - **ProGet publish + version coexistence** (overwrite vs `LEGACY_NUPKG_VERSION_SUFFIX=.1`).
 
 ---
