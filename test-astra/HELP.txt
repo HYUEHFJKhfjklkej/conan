@@ -1436,14 +1436,13 @@ step and send it back so the next step can be picked.
      Prereqs on the Windows agent (one-time):
         - MSVC toolset matching the profile: v143 (VS2022) for win-v143-x64,
           v142 (VS2019) for win-v142-x64 / win-v142-x86.
-        - Conan 2.29.0 installed offline. CAVEAT: test-windows\packages\ still
-          ships conan-2.27.1.tar.gz. Bump it the same way as Linux:
-            copy packages-linux\conan-2.29.0.tar.gz  ->  packages\
-            del   packages\conan-2.27.1.tar.gz
-          The conan sdist is platform-independent, BUT its deps are resolved
-          from the cp314-win wheels in packages\ — if `setup.bat` can't
-          resolve 2.29.0's deps offline, add the missing cp314 wheels.
-          (This could not be verified from the Mac — do it on the agent.)
+        - Conan 2.29.0 installed offline. packages\ now ships
+          conan-2.29.0.tar.gz, and the existing cp314-win dep wheels already
+          cover 2.29.0 (runtime deps are identical to 2.27.1 except
+          patch-ng<1.20, satisfied by the present patch-ng-1.18.1). setup.bat
+          pip-installs --upgrade, so a pre-existing 2.27.1 on the agent is
+          replaced. (Offline dep resolution itself was not run on Windows from
+          the Mac — first agent run confirms it.)
         cd <repo>\conan-recipes
         test-windows\setup.bat            :: installs Conan offline from packages\
 

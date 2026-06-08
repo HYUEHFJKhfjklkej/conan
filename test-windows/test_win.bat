@@ -11,8 +11,8 @@
 ::  Env:
 ::     PROFILE_NAME   default win-v143-x64  (also win-v142-x64, win-v142-x86)
 ::     EXPECT_CONAN   default 2.29.0 ; set to "any" to disable the guard.
-::                    NOTE: packages\ still ships conan-2.27.1.tar.gz — bump it
-::                    to 2.29.0 and re-run setup.bat, else this guard FAILS.
+::                    packages\ ships conan-2.29.0.tar.gz; run setup.bat (which
+::                    pip-installs --upgrade) so the agent is on 2.29.0.
 ::
 ::  Artefacts: output\<pkg>.win.v1xx.shared.x64.<ver>.nupkg  (7 files)
 :: ============================================================
@@ -44,8 +44,8 @@ for /f "tokens=3" %%v in ('conan --version 2^>nul') do set CVER=%%v
 echo [INFO] Conan: %CVER%   (expect %EXPECT_CONAN%)   profile %PROFILE_NAME%
 if /i not "%EXPECT_CONAN%"=="any" if not "%CVER%"=="%EXPECT_CONAN%" (
     echo [FAIL] Conan %CVER%, expected %EXPECT_CONAN%.
-    echo        Bump packages\conan-2.27.1.tar.gz -^> conan-2.29.0.tar.gz and
-    echo        re-run test-windows\setup.bat ^(confirm its deps resolve offline^).
+    echo        Run test-windows\setup.bat ^(installs --upgrade from packages\,
+    echo        which now ships conan-2.29.0.tar.gz^).
     endlocal & exit /b 1
 )
 

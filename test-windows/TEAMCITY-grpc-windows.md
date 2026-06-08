@@ -45,18 +45,20 @@ Produces `<pkg>.win.v1xx.shared.{x64,x86}.<ver>.nupkg` × 7
   the native build writes to `output\` (not `output-<arch>\`); keep the x64 and
   x86 configs on separate agents/checkout dirs or clean `output\` between them.
 
-## The migration gap to close first
+## Conan version — already on 2.29.0
 
-`test-windows\packages\` still ships **`conan-2.27.1.tar.gz`** — only the Linux
-`packages-linux\` was bumped. Before the first green run:
+`packages\` (the Windows offline wheel/sdist cache used by `setup.bat`) now ships
+**`conan-2.29.0.tar.gz`** (was 2.27.1). The existing cp314-win dep wheels already
+cover it: 2.29.0's runtime deps are identical to 2.27.1 except `patch-ng<1.20`,
+satisfied by the present `patch-ng-1.18.1`. `setup.bat` installs with `--upgrade`,
+so a pre-existing 2.27.1 on the agent is replaced. Just run:
 ```
-copy packages-linux\conan-2.29.0.tar.gz  packages\
-del  packages\conan-2.27.1.tar.gz
+cd <repo>\conan-recipes
 test-windows\setup.bat
 ```
-The conan sdist is platform-independent, but its deps resolve from the cp314-win
-wheels in `packages\`; if `setup.bat` can't satisfy 2.29.0 offline, add the
-missing cp314 wheels. Verify on the agent — not reproducible from macOS.
+Offline dep resolution on Windows cp314 was reasoned out, not executed from macOS
+— the first agent run is the final confirmation (the `test_win.bat` version guard
+fails loudly if the agent is somehow still on 2.27.1).
 
 ## Out of scope (same as Linux)
 

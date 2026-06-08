@@ -63,7 +63,9 @@ if errorlevel 1 (
 
 echo.
 echo [INFO] Installing Conan from local packages...
-python -m pip install conan
+:: --upgrade so a pre-existing Conan (e.g. an old 2.27.1 on the agent) is
+:: actually replaced by the 2.29.0 sdist in packages\ (mirrors setup.sh).
+python -m pip install --upgrade conan
 if errorlevel 1 (
     echo [ERROR] Conan install failed
     goto :END
