@@ -131,6 +131,10 @@ if "%EXITCODE%"=="0" (
 ) else (
     echo [DONE] FAILED with code %EXITCODE%
 )
-echo Press any key to close this window...
-pause >nul
+:: CI / TeamCity sets CI=1 (test_win.bat does) to skip the interactive
+:: pause — otherwise the build step hangs forever waiting for a keypress.
+if not defined CI (
+    echo Press any key to close this window...
+    pause >nul
+)
 endlocal & exit /b %EXITCODE%

@@ -1381,3 +1381,83 @@ step and send it back so the next step can be picked.
         rm -f packages-linux/conan-2.29.0.tar.gz
         # offline-independent alt: pip download conan==2.27.1 --no-deps \
         #     --no-binary=:all: -d packages-linux/
+
+
+[14] TeamCity: add the Linux x86_64 stage + migrate ARM/ARM64 to 2.29.0.
+
+     Context: SANDBOX/GRPC_CONAN_ARM already has two GREEN stages — "Build
+     Conan ARM" (#1) and "Build Conan ARM64" (#5) — but they were built on
+     Conan 2.27.1 (see output-armv7hf/conan-cache/version.txt). Goal:
+     (A) add a third native stage "Build Conan x86_64", and
+     (B) re-run the two ARM stages on the new Conan.
+     Deep workaround-retirement is [13]; byte-compat acceptance is [9] +
+     diff_two_dirs.sh. One-time per shell:
+        export REGISTRY=proget.inc.elara.local/main      # or your ProGet host
+
+  --- A. New x86_64 stage (the TC build step runs exactly this) -----------
+     0. Smoke — image build + Conan-version guard (~1-2 min, no full build):
+        ./test-astra/test_x86_64.sh smoke
+        # the PASS "Conan 2.29.0" line is the "moved to new Conan" proof.
+     1. Full build + verify 7 .nupkg (this IS the TC stage command):
+        FRESH_CACHE=1 ./test-astra/test_x86_64.sh build
+        # artefacts -> output-x86_64/*.nupkg, named
+        #   <pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg   (NO -linaro suffix).
+     TC artifact rule:  output-x86_64/*.nupkg => x86_64
+     TC agent req:      Linux + Docker  (same pool as the ARM stages).
+
+  --- B. Migrate the two existing ARM/ARM64 stages to 2.29.0 --------------
+     The mirror rebuilds from Dockerfile.grpc-tc-mirror at-call-time and
+     pip --no-index resolves conan-2.29.0 from packages-linux/, so the image
+     is already correct after `git pull`. The ONE thing [13] omits: the
+     per-arch Conan cache VOLUMES still hold 2.27.1-built packages. Purge
+     them or the "new" build silently reuses the old artefacts:
+        sudo docker volume rm conan-cache-arm conan-cache-arm64
+     Then re-run each stage (rebuilds image + starts from a clean cache):
+        ./test-astra/test_arm_cross.sh build arm
+        ./test-astra/test_arm_cross.sh build arm64
+     Verify the version, same as x86_64:
+        sudo docker run --rm grpc-tc-mirror-arm   conan --version   # 2.29.0
+        sudo docker run --rm grpc-tc-mirror-arm64 conan --version   # 2.29.0
+
+  --- C. Acceptance before flipping the stages green on TC ----------------
+     Keep a known-good 2.27.1 artefact set as output-2271-<arch>/ and diff:
+        ./test-astra/diff_two_dirs.sh output-2271-x86_64/ output-x86_64/
+     Only build-stamp/timestamp noise is allowed; content/layout/.nuspec
+     diffs = regression. ELF-arch spot check per [9].
+
+
+[15] TeamCity: Windows (MSVC) grpc stage — NOT YET VALIDATED.
+
+     Runs natively on a Windows agent (no Docker). The stage driver is
+     test-windows\test_win.bat (non-interactive sibling of test_x86_64.sh);
+     it guards the Conan version, calls run_test_grpc.bat with CI=1 (skips
+     the interactive pause), and verifies the 7 .nupkg.
+
+     Prereqs on the Windows agent (one-time):
+        - MSVC toolset matching the profile: v143 (VS2022) for win-v143-x64,
+          v142 (VS2019) for win-v142-x64 / win-v142-x86.
+        - Conan 2.29.0 installed offline. CAVEAT: test-windows\packages\ still
+          ships conan-2.27.1.tar.gz. Bump it the same way as Linux:
+            copy packages-linux\conan-2.29.0.tar.gz  ->  packages\
+            del   packages\conan-2.27.1.tar.gz
+          The conan sdist is platform-independent, BUT its deps are resolved
+          from the cp314-win wheels in packages\ — if `setup.bat` can't
+          resolve 2.29.0's deps offline, add the missing cp314 wheels.
+          (This could not be verified from the Mac — do it on the agent.)
+        cd <repo>\conan-recipes
+        test-windows\setup.bat            :: installs Conan offline from packages\
+
+     Build (this IS the TC stage command):
+        set PROFILE_NAME=win-v143-x64
+        test-windows\test_win.bat build
+        :: smoke first if you want just the version/profile guard:
+        :: test-windows\test_win.bat smoke      (expects "Conan 2.29.0")
+
+     Produces: output\<pkg>.win.v143.shared.x64.<ver>.nupkg  (7 files).
+     For x86:  set PROFILE_NAME=win-v142-x86  (arch short -> x86).
+     TC artifact rule:  output\*.nupkg => win-x64   (resp. win-x86)
+     TC agent req:      Windows + the matching MSVC toolset.
+
+     STATUS: the Windows path has never been run green end-to-end. Treat the
+     first agent run as bring-up: expect to fix offline deps / profile / MSVC
+     env before the 7 .nupkg appear. Byte-compat acceptance = [9] + diff.
