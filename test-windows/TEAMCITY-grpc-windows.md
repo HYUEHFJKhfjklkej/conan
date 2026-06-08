@@ -1,6 +1,6 @@
 # TeamCity — grpc Conan builds, Windows (MSVC)
 
-Sibling of `test-astra/TEAMCITY-grpc-linux.md`, for the Windows MSVC stages.
+Sibling of `test-astra/TEAMCITY-grpc-tree.md`, for the Windows MSVC stages.
 Operational runbook: **`test-astra/HELP.txt [15]`**.
 
 > **STATUS: NOT YET VALIDATED.** The Windows path has never built the grpc tree
@@ -63,4 +63,4 @@ fails loudly if the agent is somehow still on 2.27.1).
 ## Out of scope (same as Linux)
 
 Publish step to the ProGet NuGet feed and final TC placement/rename are lead
-decisions (see `test-astra/TEAMCITY-grpc-linux.md`).
+decisions (see `test-astra/TEAMCITY-grpc-tree.md`).
