@@ -248,25 +248,35 @@ class GrpcConan(ConanFile):
             if os.path.isdir(target_path) and os.listdir(target_path):
                 self.output.info(f"grpc offline dep already populated: {target}")
                 continue
-            tmp_root = os.path.join(self.source_folder, ".grpc-offline-tmp")
-            tmp_dir = os.path.join(tmp_root, os.path.basename(archive).replace(".tar.gz", ""))
-            if os.path.isdir(tmp_dir):
-                shutil.rmtree(tmp_dir)
-            os.makedirs(tmp_dir)
-            with tarfile.open(archive_path, "r:gz") as tf:
-                tf.extractall(tmp_dir)
-            src_extracted = os.path.join(tmp_dir, strip_prefix)
-            if not os.path.isdir(src_extracted):
-                raise RuntimeError(
-                    f"grpc offline dep {archive}: strip_prefix '{strip_prefix}' "
-                    f"not found after extraction to {tmp_dir}"
-                )
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            # Extract straight into target_path, stripping the archive's top
+            # directory. The previous temp-dir + move approach doubled the
+            # "<name>-<hash>/<name>-<hash>/" prefix, which on Windows pushed the
+            # deep envoy proto paths past MAX_PATH (260) and broke source().
+            # Direct extraction keeps the final paths short (third_party/...).
+            prefix = strip_prefix.replace("\\", "/").rstrip("/") + "/"
             if os.path.isdir(target_path):
                 shutil.rmtree(target_path)
-            shutil.move(src_extracted, target_path)
-            shutil.rmtree(tmp_root, ignore_errors=True)
-            self.output.info(f"grpc offline dep extracted: {archive} -> {target}")
+            os.makedirs(target_path)
+            matched = 0
+            with tarfile.open(archive_path, "r:gz") as tf:
+                members = []
+                for m in tf.getmembers():
+                    name = m.name.replace("\\", "/")
+                    if not name.startswith(prefix):
+                        continue
+                    rel = name[len(prefix):]
+                    if not rel:
+                        continue
+                    m.name = rel
+                    members.append(m)
+                    matched += 1
+                tf.extractall(target_path, members=members)
+            if matched == 0:
+                raise RuntimeError(
+                    f"grpc offline dep {archive}: strip_prefix '{strip_prefix}' "
+                    f"matched no entries in {archive}"
+                )
+            self.output.info(f"grpc offline dep extracted: {archive} -> {target} ({matched} entries)")
 
     def source(self):
         _local = self._offline_source_archive()
