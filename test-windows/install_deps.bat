@@ -52,12 +52,16 @@ if not exist "%PERL_ZIP%" (
     echo               %PERL_ZIP%
     goto :END_FAIL
 )
-echo [INFO] Extracting %PERL_ZIP% to %PERL_DIR%
+echo [INFO] Extracting %PERL_ZIP% to %PERL_DIR%  (via tar, без PowerShell)
 if exist "%PERL_DIR%" rmdir /s /q "%PERL_DIR%"
 mkdir "%PERL_DIR%"
-powershell -NoProfile -Command "Expand-Archive -Path '%PERL_ZIP%' -DestinationPath '%PERL_DIR%' -Force"
+:: tar.exe встроен в Windows 10 1803+ и работает из cmd — НЕ powershell
+:: (Kaspersky AAC блокирует powershell -Command). Если tar нет / падает —
+:: распакуй Perl вручную так, чтобы был %PERL_DIR%\perl\bin\perl.exe.
+tar -xf "%PERL_ZIP%" -C "%PERL_DIR%"
 if errorlevel 1 (
-    echo [FAIL] Распаковка Perl провалилась.
+    echo [FAIL] Распаковка Perl провалилась ^(tar^).
+    echo        Распакуй портативный Perl вручную в %PERL_DIR% ^(чтобы был perl\bin\perl.exe^).
     goto :END_FAIL
 )
 if not exist "%PERL_DIR%\perl\bin\perl.exe" (
@@ -83,11 +87,13 @@ if not exist "%NASM_ZIP%" (
     echo          B) либо положи nasm-%NASM_VER%-win64.zip сюда: %NASM_ZIP%
     goto :END_FAIL
 )
-echo [INFO] Extracting %NASM_ZIP% to %NASM_DIR%
+echo [INFO] Extracting %NASM_ZIP% to %NASM_DIR%  (via tar, без PowerShell)
 if exist "%NASM_DIR%" rmdir /s /q "%NASM_DIR%"
 mkdir "%NASM_DIR%"
-:: NASM-zip распаковывается в подпапку nasm-X.Y.ZZ — переносим nasm.exe на уровень выше
-powershell -NoProfile -Command "Expand-Archive -Path '%NASM_ZIP%' -DestinationPath '%NASM_DIR%\_extract' -Force"
+mkdir "%NASM_DIR%\_extract"
+:: tar (cmd-нативный) вместо powershell. NASM-zip распаковывается в подпапку
+:: nasm-X.Y.ZZ — переносим nasm.exe на уровень выше.
+tar -xf "%NASM_ZIP%" -C "%NASM_DIR%\_extract"
 for /d %%D in ("%NASM_DIR%\_extract\nasm-*") do (
     xcopy /e /y /q "%%D\*" "%NASM_DIR%\" >nul
 )
