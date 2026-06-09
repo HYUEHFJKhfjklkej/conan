@@ -39,6 +39,24 @@ if "%SHARED%"=="" set SHARED=False
 if "%OUTPUT_DIR%"=="" set OUTPUT_DIR=%ROOT_DIR%\output-grpc-1601-win
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
+:: -----------------------------------------------------------
+:: Ensure Conan is available. A clean TC agent may not have it; install it
+:: offline from packages\ (no internet). Needs Python on the agent. If the
+:: agent has neither, provision it once (see [FAIL] message below).
+:: -----------------------------------------------------------
+where conan >nul 2>&1 || (
+    echo [INFO] conan not on PATH - installing offline from packages\ ...
+    python -m pip install --no-index --find-links="%ROOT_DIR%\packages" --upgrade pip setuptools wheel
+    python -m pip install --no-index --find-links="%ROOT_DIR%\packages" --upgrade conan
+)
+where conan >nul 2>&1 || (
+    echo [FAIL] Conan not available on this agent.
+    echo        Provision once: install Python, then run test-windows\setup.bat
+    echo        ^(installs Conan offline from packages\^), or add conan to PATH.
+    set EXITCODE=1
+    goto :END
+)
+
 echo [INFO] Profile:  %PROFILE%
 echo [INFO] Output:   %OUTPUT_DIR%
 echo [INFO] Shared:   %SHARED%

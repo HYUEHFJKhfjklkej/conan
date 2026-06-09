@@ -100,6 +100,9 @@ echo Next: test-windows\run_test_grpc.bat
 :END
 popd
 echo.
-echo Press any key to close...
-pause >nul
+:: CI / TeamCity sets CI=1 to skip the interactive pause (would hang the agent).
+if not defined CI (
+    echo Press any key to close...
+    pause >nul
+)
 endlocal
