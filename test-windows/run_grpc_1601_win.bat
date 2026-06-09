@@ -114,13 +114,7 @@ echo.
 echo ============================================
 echo  Step 3/3: Package full tree via deployer
 echo ============================================
-del /q "%OUTPUT_DIR%\grpc.*.nupkg"     2>nul
-del /q "%OUTPUT_DIR%\protobuf.*.nupkg" 2>nul
-del /q "%OUTPUT_DIR%\abseil.*.nupkg"   2>nul
-del /q "%OUTPUT_DIR%\re2.*.nupkg"      2>nul
-del /q "%OUTPUT_DIR%\c-ares.*.nupkg"   2>nul
-del /q "%OUTPUT_DIR%\openssl.*.nupkg"  2>nul
-del /q "%OUTPUT_DIR%\zlib.*.nupkg"     2>nul
+del /q "%OUTPUT_DIR%\*.nupkg" 2>nul
 
 conan install --requires=grpc/1.60.1 ^
     -pr:h="%PROFILE%" -pr:b="%PROFILE%" ^
@@ -139,7 +133,8 @@ echo [INFO] Generated .nupkg files:
 dir /b "%OUTPUT_DIR%\*.nupkg"
 
 set /a COUNT=0
-for %%P in (grpc protobuf abseil re2 c-ares openssl zlib) do (
+:: deployer emits LEGACY names (LEGACY_NAME_MAP): abseil->absl, c-ares->cares
+for %%P in (grpc protobuf absl re2 cares openssl zlib) do (
     if exist "%OUTPUT_DIR%\%%P.win.*.nupkg" (
         set /a COUNT+=1
     ) else (
