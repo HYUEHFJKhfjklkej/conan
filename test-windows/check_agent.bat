@@ -49,7 +49,7 @@ if errorlevel 1 (
     call :fail "CMake" "not found - install CMake 3.25+ on PATH"
 ) else (
     set "CMVER="
-    for /f "tokens=3" %%v in ('cmake --version 2^>^&1 ^| findstr /b /i "cmake version"') do set "CMVER=%%v"
+    for /f "tokens=3" %%v in ('cmake --version 2^>^&1 ^| findstr /i /b /c:"cmake version"') do set "CMVER=%%v"
     call :ok "CMake" "!CMVER!"
 )
 
