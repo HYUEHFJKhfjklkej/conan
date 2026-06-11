@@ -13,7 +13,7 @@
 #   PROGET_API_KEY=<key> NUGET_FEED=nuget-sandbox ./test-astra/proget_push_nupkg.sh output/
 #
 # Env:
-#   PROGET_URL       default https://proget.inc.elara.local
+#   PROGET_URL       default http://proget.inc.elara.local
 #   NUGET_FEED       default nuget-sandbox (create first: Feeds -> Create
 #                    New Feed -> NuGet). NEVER point this at the production
 #                    feed without the lead's sign-off.
@@ -32,7 +32,7 @@ if [ -z "$DIR" ] || [ ! -d "$DIR" ]; then
     exit 2
 fi
 
-PROGET_URL="${PROGET_URL:-https://proget.inc.elara.local}"
+PROGET_URL="${PROGET_URL:-http://proget.inc.elara.local}"
 NUGET_FEED="${NUGET_FEED:-nuget-sandbox}"
 DRY_RUN="${DRY_RUN:-}"
 PUSH_URL="$PROGET_URL/nuget/$NUGET_FEED/package"

@@ -25,7 +25,7 @@
 #   DRY_RUN=1           ./test-astra/proget_upload_sources.sh   # print, no network
 #
 # Env:
-#   PROGET_URL       default https://proget.inc.elara.local
+#   PROGET_URL       default http://proget.inc.elara.local
 #   SOURCES_FEED     Asset Directory name, default conan-sources
 #                    (create first: Feeds -> Create New Feed -> Asset Directory)
 #   PROGET_API_KEY   API key with upload rights on the feed (X-ApiKey header)
@@ -40,7 +40,7 @@
 
 set -uo pipefail
 
-PROGET_URL="${PROGET_URL:-https://proget.inc.elara.local}"
+PROGET_URL="${PROGET_URL:-http://proget.inc.elara.local}"
 SOURCES_FEED="${SOURCES_FEED:-conan-sources}"
 BY_NAME="${BY_NAME:-1}"
 DRY_RUN="${DRY_RUN:-}"

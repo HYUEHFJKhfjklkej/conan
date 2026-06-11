@@ -12,11 +12,11 @@
 #
 # Env:
 #   PROGET_SOURCES_URL     backup-sources base, e.g.
-#                          https://proget.inc.elara.local/endpoints/conan-sources/content/
+#                          http://proget.inc.elara.local/endpoints/conan-sources/content/
 #                          (Dockerfile.grpc-tc-mirror sets this by default;
 #                          override with -e PROGET_SOURCES_URL="" to disable)
 #   CONAN_REMOTE           remote name to register (e.g. proget); empty = skip
-#   CONAN_REMOTE_URL       remote URL, e.g. https://proget.inc.elara.local/conan/conan
+#   CONAN_REMOTE_URL       remote URL, e.g. http://proget.inc.elara.local/conan/conan
 #   CONAN_REMOTE_INSECURE  1 = pass --insecure (self-signed TLS)
 #
 # Auth for the remote is conan-native, no wiring needed here:

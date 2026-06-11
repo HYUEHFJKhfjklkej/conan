@@ -1517,7 +1517,7 @@ step and send it back so the next step can be picked.
      2. Point a consumer at the feed (dev-VM venv, or inside a mirror
         container). One line in global.conf:
 
-        echo 'core.sources:download_urls=["https://proget.inc.elara.local/endpoints/conan-sources/content/", "origin"]' \
+        echo 'core.sources:download_urls=["http://proget.inc.elara.local/endpoints/conan-sources/content/", "origin"]' \
             >> "$(conan config home)/global.conf"
 
         Container caveat: conan home lives on the conan-cache-* volume,
@@ -1573,7 +1573,7 @@ step and send it back so the next step can be picked.
         All commands UNVERIFIED until run once — exact URL shape comes
         from Inedo docs (https://<host>/conan/<feed-name>):
 
-        conan remote add proget https://proget.inc.elara.local/conan/conan
+        conan remote add proget http://proget.inc.elara.local/conan/conan
         # self-signed TLS: append --insecure
         conan remote login proget <user>        # prompts for password/key
 
@@ -1615,7 +1615,7 @@ step and send it back so the next step can be picked.
 
      a) Backup-sources is on by default INSIDE the mirror image:
         Dockerfile.grpc-tc-mirror now sets
-            PROGET_SOURCES_URL=https://proget.inc.elara.local/endpoints/conan-sources/content/
+            PROGET_SOURCES_URL=http://proget.inc.elara.local/endpoints/conan-sources/content/
         and every driver (run_test_grpc.sh, run_grpc_1601_upstream.sh,
         run_grpc_1781_upstream.sh) re-asserts the global.conf line on
         start via test-astra/ensure_proget.sh (survives FRESH_CACHE —
@@ -1633,7 +1633,7 @@ step and send it back so the next step can be picked.
      c) Conan remote in the drivers (the [17] pilot, scripted):
 
         CONAN_REMOTE=proget \
-        CONAN_REMOTE_URL=https://proget.inc.elara.local/conan/conan \
+        CONAN_REMOTE_URL=http://proget.inc.elara.local/conan/conan \
         CONAN_LOGIN_USERNAME=<user> CONAN_PASSWORD=<key> \
         UPLOAD_AFTER=1 \
             ./test-astra/run_grpc_1601_upstream.sh

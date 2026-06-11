@@ -113,6 +113,6 @@ ENV CONAN_USER_TOOLCHAIN=""
 # volume, so it cannot be baked into the image layer). The grpc recipe also
 # uses it to fetch its 4 FetchContent tarballs when src/ has none.
 # Disable per-run with: -e PROGET_SOURCES_URL=""
-ENV PROGET_SOURCES_URL="https://proget.inc.elara.local/endpoints/conan-sources/content/"
+ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
 
 CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]
