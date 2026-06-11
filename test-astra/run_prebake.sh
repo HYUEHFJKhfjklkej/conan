@@ -61,6 +61,12 @@ esac
 REGISTRY="${REGISTRY:-proget.inc.elara.local/main}"
 MIRROR_VER="${MIRROR_VER:-0.1.0}"
 MIN_FREE_GB="${MIN_FREE_GB:-30}"
+
+# Backup-sources base URL (HELP [16]). Passed into the container EXPLICITLY:
+# a bare `-e VAR` with VAR unset on the host makes docker UNSET the image's
+# ENV default instead of inheriting it. `-` (not `:-`): explicit empty
+# string still disables backup-sources for this run.
+PROGET_SOURCES_URL="${PROGET_SOURCES_URL-http://proget.inc.elara.local/endpoints/conan-sources/content/}"
 PROFILE_BUILD="/work/conan-recipes/profiles/lin-gcc84-x86_64"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -155,7 +161,7 @@ if "${DOCKER[@]}" run --rm \
         -e CONAN_USER_TOOLCHAIN="$USER_TC" \
         -e CONAN_REMOTE -e CONAN_REMOTE_URL -e CONAN_REMOTE_INSECURE \
         -e UPLOAD_AFTER -e CONAN_LOGIN_USERNAME -e CONAN_PASSWORD \
-        -e PROGET_SOURCES_URL \
+        -e PROGET_SOURCES_URL="$PROGET_SOURCES_URL" \
         "$IMAGE" \
         bash /work/conan-recipes/test-astra/run_test_grpc.sh \
         2>&1 | tee "$OUTPUT_DIR/build.log"; then

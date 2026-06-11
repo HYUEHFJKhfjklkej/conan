@@ -52,6 +52,12 @@ SHARED="${SHARED:-False}"
 # (slot-tag `shared` = DynamicRT — содержимое всё равно static .a).
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
+# Backup-sources base URL (HELP [16]). Passed into the container EXPLICITLY:
+# a bare `-e VAR` with VAR unset on the host makes docker UNSET the image's
+# ENV default instead of inheriting it. `-` (not `:-`): explicit empty
+# string still disables backup-sources for this run.
+PROGET_SOURCES_URL="${PROGET_SOURCES_URL-http://proget.inc.elara.local/endpoints/conan-sources/content/}"
+
 # Optional 1st arg: build + deploy only ONE package instead of the whole
 # grpc tree. The recipes are still all exported (cheap) so version ranges
 # resolve, but build/deploy targets just the requested ref.
@@ -95,7 +101,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -e LEGACY_NUPKG_VERSION_SUFFIX="$LEGACY_NUPKG_VERSION_SUFFIX" \
         -e CONAN_REMOTE -e CONAN_REMOTE_URL -e CONAN_REMOTE_INSECURE \
         -e UPLOAD_AFTER -e CONAN_LOGIN_USERNAME -e CONAN_PASSWORD \
-        -e PROGET_SOURCES_URL \
+        -e PROGET_SOURCES_URL="$PROGET_SOURCES_URL" \
         --entrypoint bash \
         "$MIRROR_IMAGE" \
         -c "bash ./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
