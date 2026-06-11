@@ -35,7 +35,9 @@ if [ -n "$URL" ]; then
     LINE="core.sources:download_urls=[\"$URL\", \"origin\"]"
     mkdir -p "$CONAN_HOME_DIR"
     if [ -f "$CONF" ] && grep -q '^core\.sources:download_urls=' "$CONF"; then
-        if ! grep -qF "$LINE" "$CONF"; then
+        if grep -qF "$LINE" "$CONF"; then
+            echo "[INFO] ensure_proget: backup-sources already configured -> $URL"
+        else
             grep -v '^core\.sources:download_urls=' "$CONF" > "$CONF.tmp" \
                 && mv "$CONF.tmp" "$CONF"
             printf '%s\n' "$LINE" >> "$CONF"
@@ -45,6 +47,8 @@ if [ -n "$URL" ]; then
         printf '%s\n' "$LINE" >> "$CONF"
         echo "[INFO] ensure_proget: backup-sources enabled -> $URL"
     fi
+else
+    echo "[INFO] ensure_proget: PROGET_SOURCES_URL empty — backup-sources OFF"
 fi
 
 # --- conan remote -------------------------------------------------------
