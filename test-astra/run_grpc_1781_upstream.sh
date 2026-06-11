@@ -92,6 +92,9 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -e PROFILE="$PROFILE" \
         -e SHARED="$SHARED" \
         -e LEGACY_NUPKG_VERSION_SUFFIX="$LEGACY_NUPKG_VERSION_SUFFIX" \
+        -e CONAN_REMOTE -e CONAN_REMOTE_URL -e CONAN_REMOTE_INSECURE \
+        -e UPLOAD_AFTER -e CONAN_LOGIN_USERNAME -e CONAN_PASSWORD \
+        -e PROGET_SOURCES_URL \
         --entrypoint bash \
         "$MIRROR_IMAGE" \
         -c "bash ./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
@@ -110,6 +113,16 @@ if ! command -v conan >/dev/null 2>&1; then
     echo "ERROR: conan not on PATH inside container — check grpc-tc-mirror image"
     exit 1
 fi
+
+# ProGet wiring (no-op without env): backup-sources global.conf line +
+# optional remote registration. See HELP [16]/[17].
+bash "$ROOT_DIR/test-astra/ensure_proget.sh" || true
+
+# CONAN_REMOTE=<name> switches installs from --no-remote to -r <name>
+# (binaries reused from / uploadable to ProGet). Default: offline as before.
+CONAN_REMOTE="${CONAN_REMOTE:-}"
+REMOTE_ARGS=(--no-remote)
+[ -n "$CONAN_REMOTE" ] && REMOTE_ARGS=(-r "$CONAN_REMOTE")
 
 echo "[INFO] conan:           $(conan --version 2>&1 | head -1)"
 echo "[INFO] profile:         $PROFILE"
@@ -203,7 +216,7 @@ for BT in Release Debug; do
     # overrides SHARED=True (rare; default SHARED=False is already static).
     conan install --requires="$TARGET_REF" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
-        --build=missing --no-remote \
+        --build=missing "${REMOTE_ARGS[@]}" \
         -s build_type="$BT" \
         -o "*/*:shared=$SHARED" \
         -o "abseil/*:shared=False" \
@@ -227,7 +240,7 @@ rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,absl,re2,c-ares,cares,openssl,zlib}.*.
 # the binary as missing and abort. Single-package run -> 1 .nupkg; full -> 7.
 conan install --requires="$TARGET_REF" \
     -pr:h="$PROFILE" -pr:b="$PROFILE" \
-    --no-remote \
+    "${REMOTE_ARGS[@]}" \
     -o "*/*:shared=$SHARED" \
     -o "abseil/*:shared=False" \
     -o "protobuf/*:debug_suffix=False" \
@@ -243,3 +256,17 @@ echo "=================================================="
 echo "[DONE] grpc/1.78.1 newest-line tree built."
 echo "Artifacts in $OUTPUT_DIR/ (legacy-named .nupkg)."
 echo "=================================================="
+
+# ----------------------------------------------------------------------
+# Step 4 (opt-in): publish the built conan packages to the remote.
+# Requires CONAN_REMOTE=<name> UPLOAD_AFTER=1 and auth (conan remote
+# login done once on the cache volume, or CONAN_LOGIN_USERNAME +
+# CONAN_PASSWORD in env). See HELP [17].
+# ----------------------------------------------------------------------
+if [ -n "$CONAN_REMOTE" ] && [ "${UPLOAD_AFTER:-0}" = "1" ]; then
+    echo ""
+    echo "=================================================="
+    echo "[STEP 4] conan upload '*' -> remote '$CONAN_REMOTE'"
+    echo "=================================================="
+    conan upload "*" -r "$CONAN_REMOTE" --confirm
+fi

@@ -1606,3 +1606,67 @@ step and send it back so the next step can be picked.
 
      Until the pilot is green, nothing in the build scripts references
      the remote — all drivers keep building offline from local cache.
+
+
+[18] Drivers wired for ProGet (sandbox) — env knobs + .nupkg push.
+
+     Everything below is OPT-IN: with no env set, every driver behaves
+     exactly as before (offline, --no-remote, bundled tarballs).
+
+     a) Backup-sources is on by default INSIDE the mirror image:
+        Dockerfile.grpc-tc-mirror now sets
+            PROGET_SOURCES_URL=https://proget.inc.elara.local/endpoints/conan-sources/content/
+        and every driver (run_test_grpc.sh, run_grpc_1601_upstream.sh,
+        run_grpc_1781_upstream.sh) re-asserts the global.conf line on
+        start via test-astra/ensure_proget.sh (survives FRESH_CACHE —
+        the conan home lives on the cache volume, so it can't be baked
+        into the image). Disable per-run: -e PROGET_SOURCES_URL="".
+        Rebuild the mirror image once to pick this up.
+
+     b) grpc < 1.62 FetchContent tarballs: the recipe now downloads
+        data-plane-api/googleapis/opencensus-proto/xds from
+        $PROGET_SOURCES_URL/by-name/grpc/<file> (sha256-pinned in
+        _GRPC_OFFLINE_TRANSITIVES) when they are absent in grpc/src/.
+        Bundled copies still win when present. This unblocks dropping
+        grpc/src/*.tar.gz from git after [16] seeding + one green run.
+
+     c) Conan remote in the drivers (the [17] pilot, scripted):
+
+        CONAN_REMOTE=proget \
+        CONAN_REMOTE_URL=https://proget.inc.elara.local/conan/conan \
+        CONAN_LOGIN_USERNAME=<user> CONAN_PASSWORD=<key> \
+        UPLOAD_AFTER=1 \
+            ./test-astra/run_grpc_1601_upstream.sh
+
+        - ensure_proget.sh registers the remote in the cache volume
+          (CONAN_REMOTE_INSECURE=1 for self-signed TLS);
+        - installs run with -r proget instead of --no-remote
+          (prebuilt binaries are REUSED instead of rebuilt — second run
+          on a fresh cache volume should compile nothing);
+        - UPLOAD_AFTER=1 runs `conan upload "*" -r proget --confirm`
+          after the deployer step.
+        The docker self-wrap passes all these through; run_prebake.sh
+        passes them too. test_arm_cross.sh does NOT yet (next iteration
+        if the pilot is green).
+
+     d) Push built .nupkg to a SANDBOX NuGet feed (so the e2e chain
+        conan build -> deployer -> ProGet -> downstream resolver can be
+        rehearsed without touching the production feed):
+
+        # one-time: Feeds -> Create New Feed -> NuGet, name: nuget-sandbox
+        PROGET_API_KEY=<key> \
+            ./test-astra/proget_push_nupkg.sh output-grpc-1601-upstream
+        # endpoint PUT /nuget/<feed>/package — UNVERIFIED until first run
+
+        Production publish (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1)
+        remains the lead's call — the script defaults to nuget-sandbox
+        on purpose.
+
+     Suggested order on the dev-VM:
+        1. [16] seed conan-sources + zlib smoke
+        2. rebuild mirror image (picks up PROGET_SOURCES_URL ENV)
+        3. [17] step 0-1 round-trip by hand on zlib
+        4. (c) full 1601 run with CONAN_REMOTE + UPLOAD_AFTER=1
+        5. re-run same on FRESH_CACHE=1 volume — expect zero compiles
+        6. (d) push the 7 .nupkg to nuget-sandbox, point a downstream
+           consumer checkout at it, run its cmake resolve

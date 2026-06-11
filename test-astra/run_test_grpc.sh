@@ -29,6 +29,16 @@ echo "[INFO] Profile (build): $PROFILE_BUILD"
 echo "[INFO] Conan: $(conan --version)"
 echo ""
 
+# ProGet wiring (no-op without env): backup-sources global.conf line +
+# optional remote registration. See HELP [16]/[17].
+bash "$SCRIPT_DIR/ensure_proget.sh" || true
+
+# CONAN_REMOTE=<name> switches installs from --no-remote to -r <name>.
+# Default: offline, exactly as before.
+CONAN_REMOTE="${CONAN_REMOTE:-}"
+REMOTE_ARGS=(--no-remote)
+[ -n "$CONAN_REMOTE" ] && REMOTE_ARGS=(-r "$CONAN_REMOTE")
+
 # Step 1: export all recipes so --no-remote can find them
 echo "============================================"
 echo " Step 1/3: Export all recipes to local cache"
@@ -57,7 +67,7 @@ for BT in Release Debug; do
     echo "[INFO] Building grpc/1.78.1 + 6 deps build_type=$BT shared=$SHARED"
     conan install --requires=grpc/1.78.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
-        --build=missing --no-remote \
+        --build=missing "${REMOTE_ARGS[@]}" \
         -s build_type="$BT" \
         -o "*/*:shared=$SHARED"
 done
@@ -74,7 +84,7 @@ rm -f "$ROOT_DIR/output"/{grpc,protobuf,abseil,re2,c-ares,openssl,zlib}.*.nupkg
 conan install \
     --requires=grpc/1.78.1 \
     -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
-    --no-remote \
+    "${REMOTE_ARGS[@]}" \
     -o "*/*:shared=$SHARED" \
     --deployer="$ROOT_DIR/extensions/deployers/legacy_nupkg.py" \
     --deployer-folder="$ROOT_DIR/output"
@@ -90,3 +100,9 @@ echo "============================================"
 echo " Артефакты: output/*.nupkg (7 файлов)"
 echo " Структура совпадает с TeamCity-форматом."
 echo "============================================"
+
+# Opt-in: publish built conan packages to the remote (HELP [17]).
+if [ -n "$CONAN_REMOTE" ] && [ "${UPLOAD_AFTER:-0}" = "1" ]; then
+    echo "[INFO] conan upload '*' -> remote '$CONAN_REMOTE'"
+    conan upload "*" -r "$CONAN_REMOTE" --confirm
+fi

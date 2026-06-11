@@ -107,4 +107,12 @@ ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
 # this via -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake
 ENV CONAN_USER_TOOLCHAIN=""
 
+# ProGet backup-sources base URL (HELP [16]). The drivers re-assert the
+# matching core.sources:download_urls line in global.conf on every run via
+# test-astra/ensure_proget.sh (the conan home lives on the mounted cache
+# volume, so it cannot be baked into the image layer). The grpc recipe also
+# uses it to fetch its 4 FetchContent tarballs when src/ has none.
+# Disable per-run with: -e PROGET_SOURCES_URL=""
+ENV PROGET_SOURCES_URL="https://proget.inc.elara.local/endpoints/conan-sources/content/"
+
 CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]

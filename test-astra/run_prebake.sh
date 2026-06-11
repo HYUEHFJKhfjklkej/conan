@@ -153,6 +153,9 @@ if "${DOCKER[@]}" run --rm \
         -e PROFILE="$PROFILE" \
         -e PROFILE_BUILD="$PROFILE_BUILD" \
         -e CONAN_USER_TOOLCHAIN="$USER_TC" \
+        -e CONAN_REMOTE -e CONAN_REMOTE_URL -e CONAN_REMOTE_INSECURE \
+        -e UPLOAD_AFTER -e CONAN_LOGIN_USERNAME -e CONAN_PASSWORD \
+        -e PROGET_SOURCES_URL \
         "$IMAGE" \
         bash /work/conan-recipes/test-astra/run_test_grpc.sh \
         2>&1 | tee "$OUTPUT_DIR/build.log"; then

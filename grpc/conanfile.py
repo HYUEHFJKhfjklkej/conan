@@ -6,7 +6,7 @@ from conan.errors import ConanInvalidConfiguration
 from conan.tools.apple import is_apple_os
 from conan.tools.build import cross_building, valid_min_cppstd, check_min_cppstd
 from conan.tools.cmake import cmake_layout, CMake, CMakeToolchain, CMakeDeps
-from conan.tools.files import apply_conandata_patches, copy, export_conandata_patches, get, rename, replace_in_file, rmdir
+from conan.tools.files import apply_conandata_patches, copy, download, export_conandata_patches, get, rename, replace_in_file, rmdir
 from conan.tools.microsoft import check_min_vs, is_msvc
 from conan.tools.scm import Version
 
@@ -214,21 +214,28 @@ class GrpcConan(ConanFile):
     # builds. Each call is wrapped in `if (NOT EXISTS .../third_party/<dep>)`,
     # so if we pre-populate those dirs before configure, CMake skips the
     # network fetch. The 4 tarballs are bundled in src/ alongside the
-    # main grpc archive and pulled in via exports_sources.
+    # main grpc archive and pulled in via exports_sources; when missing
+    # there (src/ dropped from git) they are fetched from the internal
+    # ProGet asset feed instead — see PROGET_SOURCES_URL below.
     _GRPC_OFFLINE_TRANSITIVES = (
-        # (archive_filename_in_src, strip_prefix_inside_archive, target_dir_relative_to_source_folder)
+        # (archive_filename_in_src, strip_prefix_inside_archive,
+        #  target_dir_relative_to_source_folder, sha256)
         ("data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz",
          "data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4",
-         "third_party/envoy-api"),
+         "third_party/envoy-api",
+         "fff067a5d6d776fc88549b5dd4773a6f8f0187b26a859de8b29bd4226a28ee63"),
         ("googleapis-2f9af297c84c55c8b871ba4495e01ade42476c92.tar.gz",
          "googleapis-2f9af297c84c55c8b871ba4495e01ade42476c92",
-         "third_party/googleapis"),
+         "third_party/googleapis",
+         "5bb6b0253ccf64b53d6c7249625a7e3f6c3bc6402abd52d3778bfa48258703a0"),
         ("opencensus-proto-0.3.0.tar.gz",
          "opencensus-proto-0.3.0/src",
-         "third_party/opencensus-proto/src"),
+         "third_party/opencensus-proto/src",
+         "b7e13f0b4259e80c3070b583c2f39e53153085a6918718b1c710caf7037572b0"),
         ("xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
          "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-         "third_party/xds"),
+         "third_party/xds",
+         "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899"),
     )
 
     def _preextract_grpc_offline_deps(self):
@@ -237,10 +244,23 @@ class GrpcConan(ConanFile):
         import shutil
         import tarfile
         src_dir = os.path.join(self.export_sources_folder, "src")
+        # Fallback source: ProGet asset feed (by-name copies seeded by
+        # test-astra/proget_upload_sources.sh). Same env var the
+        # backup-sources global.conf uses; empty/unset = bundled-only.
+        proget_base = os.environ.get("PROGET_SOURCES_URL", "").strip()
         if not os.path.isdir(src_dir):
-            return
-        for archive, strip_prefix, target in self._GRPC_OFFLINE_TRANSITIVES:
+            if not proget_base:
+                return
+            os.makedirs(src_dir, exist_ok=True)
+        for archive, strip_prefix, target, sha256 in self._GRPC_OFFLINE_TRANSITIVES:
             archive_path = os.path.join(src_dir, archive)
+            if not os.path.isfile(archive_path) and proget_base:
+                url = proget_base.rstrip("/") + "/by-name/grpc/" + archive
+                self.output.info(f"grpc offline dep {archive} not in src/ — fetching {url}")
+                try:
+                    download(self, url, archive_path, sha256=sha256)
+                except Exception as exc:
+                    self.output.warning(f"grpc offline dep download failed: {exc}")
             if not os.path.isfile(archive_path):
                 self.output.warning(f"grpc offline dep {archive} missing in src/ — CMake will try to download")
                 continue
