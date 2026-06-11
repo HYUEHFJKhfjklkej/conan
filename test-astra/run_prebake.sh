@@ -7,13 +7,14 @@
 # Usage:
 #   ./run_prebake.sh arm
 #   ./run_prebake.sh arm64
+#   ./run_prebake.sh x86_64
 #
 # Required env:
 #   REGISTRY     ProGet hostname + main feed (e.g. proget.example/main).
 #                Default: proget.inc.elara.local/main
 #
 # Optional env:
-#   MIRROR_VER   Tag of grpc-tc-mirror-{arm,arm64} to verify.
+#   MIRROR_VER   Tag of grpc-tc-mirror-{arm,arm64,x86_64} to verify.
 #                Default: 0.1.0
 #   MIN_FREE_GB  Required free space in /var/lib/docker before launch.
 #                Default: 30
@@ -46,8 +47,13 @@ case "$ARCH" in
         PROFILE="/work/conan-recipes/profiles/lin-gcc-aarch64-linaro"
         USER_TC="/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake"
         ;;
+    x86_64)
+        # Native build — host profile = build profile, no cross toolchain.
+        PROFILE="/work/conan-recipes/profiles/lin-gcc84-x86_64"
+        USER_TC=""
+        ;;
     *)
-        echo "[FAIL] arch must be 'arm' or 'arm64', got '$ARCH'" >&2
+        echo "[FAIL] arch must be 'arm', 'arm64' or 'x86_64', got '$ARCH'" >&2
         exit 2
         ;;
 esac
