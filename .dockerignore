@@ -1,9 +1,20 @@
 .git
 venv/
-output/
+# output* (not just output/): output-armv7hf, output-*-prebake,
+# output-grpc-*-upstream etc. hold multi-GB .nupkg artifacts from previous
+# runs and root-owned files that break the context tar ("Can't add file ...
+# read/write on closed pipe").
+output*
 example/build/
 **/.DS_Store
 **/build/
 **/__pycache__/
 *.md
 photo_*.jpg
+*.bak
+build.log
+packages/
+test-windows/
+tools/
+docs/
+**/CMakeUserPresets.json
