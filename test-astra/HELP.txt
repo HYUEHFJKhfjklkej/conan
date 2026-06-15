@@ -1702,3 +1702,17 @@ step and send it back so the next step can be picked.
         mv zlib/src.off zlib/src
      (docker volume rm also drops the download_urls line, but ensure_proget.sh
      re-adds it on the next driver start — see [16].3 for the full smoke.)
+
+     DOCKER smoke (the real case — build runs in the container, src/ is baked
+     into the image layer so it must be moved aside INSIDE the container):
+
+        # one shot: wipe volume + remove pkg + mv src aside + create + grep
+        FRESH_VOLUME=1 ./test-astra/smoke_proget_sources.sh          # zlib/1.3.1
+        PKG=re2 VERSION=20230301 ./test-astra/smoke_proget_sources.sh
+
+        Runs `docker run --rm grpc-tc-mirror-x86_64`: ensure_proget.sh writes
+        download_urls onto the cache volume, conan remove forces source() to
+        re-run, the bundled src/ is moved aside in the throwaway container
+        (image + host repo untouched, no restore), then conan create must hit
+        ProGet. Verdict greps the log for a conan-sources/content download.
+        Env: IMAGE / VOLUME / PROFILE / PROGET_SOURCES_URL / NO_SUDO.
