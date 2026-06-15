@@ -1714,5 +1714,17 @@ step and send it back so the next step can be picked.
         download_urls onto the cache volume, conan remove forces source() to
         re-run, the bundled src/ is moved aside in the throwaway container
         (image + host repo untouched, no restore), then conan create must hit
-        ProGet. Verdict greps the log for a conan-sources/content download.
-        Env: IMAGE / VOLUME / PROFILE / PROGET_SOURCES_URL / NO_SUDO.
+        ProGet. Two explicit proofs printed to the console:
+          - PROGET_PROBE: an HTTP probe of the exact blob URL
+            (<base>/<sha256-of-tarball>) -> HTTP code + size; this ALSO leaves
+            a hit in the conan-sources feed request log on ProGet.
+          - conan create runs -vvv, so the source download URL is printed.
+        Verdict PASS if the probe is 200 and/or conan fetched over the URL.
+        Env: IMAGE / VOLUME / PROFILE / PROGET_SOURCES_URL / NO_SUDO, plus
+        probe auth PROGET_API_KEY (X-ApiKey) or PROGET_USER+PROGET_PASS
+        (basic), PROGET_INSECURE=1 for self-signed TLS.
+
+        NOTE on the ProGet logs you watch: the smoke's *download* is an
+        anonymous GET — it shows in the conan-sources FEED request log, NOT in
+        Administration -> API Key Access Logs (that only records key-authed
+        calls, i.e. the upload seeding from proget_upload_sources.sh).

@@ -14,8 +14,15 @@
 #   1. ensure_proget.sh  -> (re)write core.sources:download_urls on the volume
 #   2. conan remove "<pkg>/*" -c                 (force source() to re-run)
 #   3. mv <pkg>/src <pkg>/src.off                (disable bundled fallback)
-#   4. conan create <pkg> ... --no-remote        (must now hit backup-sources)
-#   5. grep the log for a download from conan-sources/content -> PASS/FAIL
+#   4. HTTP-probe the exact blob URL (<base>/<sha256>) -> definitive code+size,
+#      and it leaves an entry in the conan-sources feed request log on ProGet
+#   5. conan create <pkg> ... --no-remote -vvv     (prints the source download
+#      URL; must now hit backup-sources, not the bundled archive)
+#   6. verdict from BOTH signals (HTTP 200 probe + conan -vvv fetch) -> PASS/FAIL
+#
+# Auth for the probe (the conan download itself is anonymous backup-sources):
+#   PROGET_API_KEY  -> X-ApiKey header     | PROGET_USER/PROGET_PASS -> basic
+#   PROGET_INSECURE=1 -> curl -k (self-signed TLS)
 #
 # Usage:
 #   ./test-astra/smoke_proget_sources.sh                 # zlib/1.3.1, x86_64
@@ -58,54 +65,110 @@ if [ "${FRESH_VOLUME:-}" = "1" ]; then
 fi
 
 # Pass PROGET_SOURCES_URL through only if the caller overrode it; otherwise the
-# image ENV default applies.
-URL_ARG=()
-[ -n "${PROGET_SOURCES_URL:-}" ] && URL_ARG=(-e "PROGET_SOURCES_URL=$PROGET_SOURCES_URL")
+# image ENV default applies. Pass smoke params + optional ProGet auth through
+# as env vars (cleaner than string substitution into the INNER script).
+PASS_ENV=(
+    -e "SMOKE_PKG=$PKG"
+    -e "SMOKE_VER=$VERSION"
+    -e "SMOKE_PROFILE=$PROFILE"
+    # passthrough-if-set from the host env (no '=' -> inherit):
+    -e PROGET_API_KEY -e PROGET_USER -e PROGET_PASS -e PROGET_INSECURE
+)
+[ -n "${PROGET_SOURCES_URL:-}" ] && PASS_ENV+=(-e "PROGET_SOURCES_URL=$PROGET_SOURCES_URL")
 
+# Single-quoted: nothing expands on the host. All vars resolve inside the
+# container at runtime from the -e passthrough above.
 INNER='
 set -uo pipefail
 cd /work/conan-recipes
+PKG="$SMOKE_PKG"; VER="$SMOKE_VER"; PROF="$SMOKE_PROFILE"
+
 echo "--- ensure_proget (download_urls on the volume) ---"
 ./test-astra/ensure_proget.sh
+CONF="$(conan config home)/global.conf"
 echo "--- download_urls in global.conf ---"
-grep "core.sources:download_urls" "$(conan config home)/global.conf" \
+DLU=$(grep "core.sources:download_urls" "$CONF") \
     || { echo "[FAIL] download_urls not set — backup-sources is OFF"; exit 2; }
-echo "--- conan remove '"'"'PKG_PLACEHOLDER/*'"'"' -c ---"
-conan remove "PKG_PLACEHOLDER/*" -c || true
+echo "$DLU"
+
+# Backup-sources base = first URL in the list. The blob ProGet serves is named
+# by the tarball sha256 (== the sha256 conandata declares), so we can probe the
+# exact object URL directly.
+BASE=$(printf "%s" "$DLU" | sed -E "s/.*\[\"([^\"]+)\".*/\1/")
+TARBALL=$(ls "$PKG"/src/*"$VER"*.tar.gz 2>/dev/null | head -1)
+[ -z "$TARBALL" ] && TARBALL=$(ls "$PKG"/src/*.tar.gz 2>/dev/null | head -1)
+SHA=""
+[ -n "$TARBALL" ] && SHA=$(sha256sum "$TARBALL" | awk "{print \$1}")
+echo "--- backup-sources base: $BASE"
+echo "--- tarball: ${TARBALL:-<none>}  sha256: ${SHA:-<none>}"
+
+# Explicit HTTP probe — definitive code + size, AND it shows up in the
+# conan-sources feed request log on ProGet.
+if [ -n "$SHA" ] && command -v curl >/dev/null 2>&1; then
+    URL="${BASE%/}/$SHA"
+    AUTH=()
+    if [ -n "${PROGET_API_KEY:-}" ]; then AUTH=(-H "X-ApiKey: ${PROGET_API_KEY}")
+    elif [ -n "${PROGET_USER:-}" ]; then AUTH=(-u "${PROGET_USER}:${PROGET_PASS:-}"); fi
+    INS=(); [ "${PROGET_INSECURE:-}" = "1" ] && INS=(-k)
+    echo "PROGET_PROBE_URL: $URL"
+    PROBE=$(curl -sS -o /dev/null "${INS[@]}" "${AUTH[@]}" \
+        -w "HTTP %{http_code}  %{size_download}B  time=%{time_total}s" "$URL" 2>&1) \
+        || PROBE="curl failed: $PROBE"
+    echo "PROGET_PROBE: $PROBE"
+else
+    echo "PROGET_PROBE: skipped (no curl or no sha256)"
+fi
+
+echo "--- conan remove \"$PKG/*\" -c ---"
+conan remove "$PKG/*" -c || true
 echo "--- disable bundled fallback (ephemeral, container is --rm) ---"
-[ -d "PKG_PLACEHOLDER/src" ] && mv "PKG_PLACEHOLDER/src" "PKG_PLACEHOLDER/src.off"
-echo "--- conan create ---"
-conan create "PKG_PLACEHOLDER/" --version="VERSION_PLACEHOLDER" \
-    -pr:h="PROFILE_PLACEHOLDER" -pr:b="PROFILE_PLACEHOLDER" \
-    -s build_type=Release --build=missing --no-remote
+[ -d "$PKG/src" ] && mv "$PKG/src" "$PKG/src.off"
+echo "--- conan create -vvv (verbose: prints the source download URL) ---"
+conan create "$PKG/" --version="$VER" \
+    -pr:h="$PROF" -pr:b="$PROF" \
+    -s build_type=Release --build=missing --no-remote -vvv
 '
-INNER="${INNER//PKG_PLACEHOLDER/$PKG}"
-INNER="${INNER//VERSION_PLACEHOLDER/$VERSION}"
-INNER="${INNER//PROFILE_PLACEHOLDER/$PROFILE}"
 
 $SUDO docker run --rm \
-    "${URL_ARG[@]}" \
+    "${PASS_ENV[@]}" \
     -v "$VOLUME:/root/.conan2" \
     --entrypoint bash "$IMAGE" -c "$INNER" 2>&1 | tee "$LOG"
 RC="${PIPESTATUS[0]}"
 
 echo ""
 echo "================ SMOKE VERDICT ================"
+
+# 1. Direct HTTP probe of the blob URL.
+PROBE_LINE=$(grep "^PROGET_PROBE:" "$LOG" | tail -1)
+PROBE_URL=$(grep "^PROGET_PROBE_URL:" "$LOG" | tail -1 | sed 's/^PROGET_PROBE_URL: //')
+[ -n "$PROBE_LINE" ] && echo " probe: ${PROBE_LINE#PROGET_PROBE: }  ($PROBE_URL)"
+probe_ok=0
+echo "$PROBE_LINE" | grep -q "HTTP 200" && probe_ok=1
+
+# 2. conan -vvv actually fetched the source over the backup-sources URL.
+conan_ok=0
+grep -Eq "conan-sources/content|backup remote|Sources downloaded|Source.*[Dd]ownload" "$LOG" && conan_ok=1
+
 if [ "$RC" -ne 0 ]; then
     echo " docker run exited $RC — build failed (see $LOG)"
+    [ "$probe_ok" = 1 ] && echo " (but the HTTP probe got 200 — feed is reachable & seeded)"
     echo "=============================================="
     exit 1
 fi
-if grep -Eq "conan-sources/content|backup remote|Sources downloaded from" "$LOG"; then
-    echo " PASS — sources for $PKG/$VERSION came from ProGet backup-sources"
-    echo "        evidence:"
-    grep -Ei "conan-sources/content|backup|Sources downloaded" "$LOG" | sed 's/^/          /' | head -5
+if [ "$conan_ok" = 1 ] || [ "$probe_ok" = 1 ]; then
+    echo " PASS — $PKG/$VERSION sources served by ProGet backup-sources"
+    echo "        HTTP probe 200: $([ "$probe_ok" = 1 ] && echo yes || echo 'no — check feed read perms')"
+    echo "        conan fetched : $([ "$conan_ok" = 1 ] && echo yes || echo 'not seen in -vvv log')"
+    echo "        conan evidence:"
+    grep -Ei "conan-sources/content|backup|Sources downloaded|Source.*download" "$LOG" \
+        | sed 's/^/          /' | head -5
     echo "=============================================="
     exit 0
 else
-    echo " FAIL — no ProGet download seen in the log. Either the bundled src"
-    echo "        was still present, download_urls was unset, or the feed is"
-    echo "        not seeded (run HELP [16] step 1). Log: $LOG"
+    echo " FAIL — no ProGet download seen. Either the bundled src was still"
+    echo "        present, download_urls was unset, the feed is not seeded"
+    echo "        (HELP [16] step 1), or read perms block anonymous GET."
+    echo "        probe=$PROBE_LINE  log=$LOG"
     echo "=============================================="
     exit 1
 fi
