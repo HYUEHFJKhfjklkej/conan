@@ -155,7 +155,7 @@ X64_BASE_IMAGE="${X64_BASE_IMAGE:-$REGISTRY/library/gcc84-build-x86_64:$X64_BASE
 if sudo docker build \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
         --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
-        -f Dockerfile.grpc-tc-mirror \
+        -f "Dockerfile.grpc-tc-mirror-$ARCH" \
         -t "$IMAGE_TAG" \
         . 2>&1 | tee /tmp/build.log | tail -20
 then
@@ -192,6 +192,7 @@ if sudo docker run --rm \
         -e PROFILE="$PROFILE" \
         -e PROFILE_BUILD="$PROFILE_BUILD" \
         -e CONAN_USER_TOOLCHAIN="$USER_TC" \
+        -v "$ROOT_DIR:/work/conan-recipes" \
         -v "$ROOT_DIR/$OUTPUT_DIR:/work/conan-recipes/output" \
         -v "conan-cache-${ARCH}:/root/.conan2" \
         "$IMAGE_TAG" 2>&1 | tee /tmp/run.log | tail -30

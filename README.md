@@ -122,13 +122,13 @@ extensions/deployers/       legacy_nupkg.py — упаковка в legacy .nupk
 profiles/                   Conan-профили + toolchains/ (linaro ARM)
 test-astra/ test-windows/   build-скрипты (Linux .sh / Windows .bat)
 packages-linux/ packages/   offline pip-колёса (Conan + deps)
-Dockerfile.grpc-tc-mirror   CI-зеркало: FROM базовый образ (Bitbucket/ProGet) + Conan
+Dockerfile.grpc-tc-mirror-{x86_64,arm,arm64}  CI-зеркало по сборке: FROM базовый
+                            образ (Bitbucket/ProGet) + Conan. По файлу на арку.
 Dockerfile.*-test           локальный/online smoke (Docker Hub, не для ProGet)
-DOCKERFILES.md              описание всех Dockerfile + заливка образов в ProGet
 ```
 
 Сборка и публикация CI-образов `grpc-tc-mirror-{x86_64,arm,arm64}` в ProGet —
-вручную и через `test-astra/prebake_push.sh` — описаны в **`DOCKERFILES.md`**.
+драйвер `test-astra/prebake_push.sh` (раннбук — HELP `[20]`).
 
 ## Отладка
 

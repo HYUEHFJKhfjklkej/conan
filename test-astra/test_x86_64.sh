@@ -129,7 +129,7 @@ cd "$ROOT_DIR"
 if sudo docker build \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
         --build-arg X64_BASE_IMAGE="$BASE_IMAGE" \
-        -f Dockerfile.grpc-tc-mirror \
+        -f Dockerfile.grpc-tc-mirror-x86_64 \
         -t "$IMAGE_TAG" \
         . 2>&1 | tee /tmp/build_x64.log | tail -20
 then
@@ -179,6 +179,7 @@ rm -f "$ROOT_DIR/$OUTPUT_DIR"/*.nupkg
 if sudo docker run --rm \
         -e PROFILE="$PROFILE" \
         -e PROFILE_BUILD="$PROFILE_BUILD" \
+        -v "$ROOT_DIR:/work/conan-recipes" \
         -v "$ROOT_DIR/$OUTPUT_DIR:/work/conan-recipes/output" \
         -v "$CACHE_VOL:/root/.conan2" \
         "$IMAGE_TAG" 2>&1 | tee /tmp/run_x64.log | tail -30

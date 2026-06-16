@@ -1,7 +1,19 @@
 venv/
 .DS_Store
 output/
+output-*/
 build/
+
+# Conan build artefacts / generated env scripts that land in the repo root or
+# package dirs during a local `conan create` (must never be committed).
+conanbuild.sh
+conanrun.sh
+conanbuildenv-*.sh
+conanrunenv-*.sh
+deactivate_conanbuild.sh
+deactivate_conanrun.sh
+**/CMakeUserPresets.json
+*.bak
 
 # Локальные context-документы для maintainer'а / Claude Code — не для пуша.
 ARCHITECTURE.md

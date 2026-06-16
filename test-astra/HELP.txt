@@ -69,7 +69,7 @@ step and send it back so the next step can be picked.
     cd <repo>/conan-recipes
     sudo docker build \
         --build-arg BASE_IMAGE=$REGISTRY/library/gcc84-build-x86_64:latest \
-        -f Dockerfile.grpc-tc-mirror \
+        -f Dockerfile.grpc-tc-mirror-x86_64 \
         -t grpc-tc-mirror .
 
 
@@ -97,7 +97,7 @@ step and send it back so the next step can be picked.
     arm (32-bit, hard-float, gcc 7.5 linaro):
         sudo docker build \
             --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
-            -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+            -f Dockerfile.grpc-tc-mirror-arm -t grpc-tc-mirror-arm .
 
         sudo docker run --rm \
             -e PROFILE=/work/conan-recipes/profiles/lin-gcc75-arm-linaro \
@@ -108,7 +108,7 @@ step and send it back so the next step can be picked.
     arm64 (gcc 7.5 linaro):
         sudo docker build \
             --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm64:0.1.0 \
-            -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm64 .
+            -f Dockerfile.grpc-tc-mirror-arm64 -t grpc-tc-mirror-arm64 .
 
         sudo docker run --rm \
             -e PROFILE=/work/conan-recipes/profiles/lin-gcc-aarch64-linaro \
@@ -537,7 +537,7 @@ step and send it back so the next step can be picked.
              cd ~/conan-master
              sudo docker build --no-cache \
                  --build-arg BASE_IMAGE=$REGISTRY/library/gcc75-build-arm:0.1.0 \
-                 -f Dockerfile.grpc-tc-mirror -t grpc-tc-mirror-arm .
+                 -f Dockerfile.grpc-tc-mirror-arm -t grpc-tc-mirror-arm .
 
          Then re-run the ARM build (./test-astra/test_arm_cross.sh build arm). Stop here.
        - Line is present → patch is in the image. Move to check 2.
@@ -945,7 +945,7 @@ step and send it back so the next step can be picked.
         sudo docker build \
             --build-arg X64_BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
             --build-arg BASE_IMAGE="$REGISTRY/library/gcc75-build-arm:$ARM_BASE_IMAGE_TAG" \
-            -f Dockerfile.grpc-tc-mirror \
+            -f Dockerfile.grpc-tc-mirror-arm \
             -t "$REGISTRY/library/grpc-tc-mirror-arm:$MIRROR_VER" \
             .
 
@@ -953,7 +953,7 @@ step and send it back so the next step can be picked.
         sudo docker build \
             --build-arg X64_BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
             --build-arg BASE_IMAGE="$REGISTRY/library/gcc75-build-arm64:$ARM64_BASE_IMAGE_TAG" \
-            -f Dockerfile.grpc-tc-mirror \
+            -f Dockerfile.grpc-tc-mirror-arm64 \
             -t "$REGISTRY/library/grpc-tc-mirror-arm64:$MIRROR_VER" \
             .
 
@@ -1050,7 +1050,7 @@ step and send it back so the next step can be picked.
         sudo docker build \
             --build-arg X64_BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
             --build-arg BASE_IMAGE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG" \
-            -f Dockerfile.grpc-tc-mirror \
+            -f Dockerfile.grpc-tc-mirror-x86_64 \
             -t "$REGISTRY/library/grpc-tc-mirror-x86_64:$MIRROR_VER" \
             .
         sudo docker push "$REGISTRY/library/grpc-tc-mirror-x86_64:$MIRROR_VER"
@@ -1735,7 +1735,7 @@ step and send it back so the next step can be picked.
      Producer half of the pre-bake flow (HELP [10] is the same thing by hand).
      Driver: test-astra/prebake_push.sh — build -> smoke -> push -> verify pull,
      for one or all of x86_64 / arm / arm64. Run on the dev-VM (ProGet is only
-     reachable there). Full write-up: ../DOCKERFILES.md.
+     reachable there).
 
          sudo docker login proget.inc.elara.local     # once per shell
 

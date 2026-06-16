@@ -146,7 +146,7 @@ for ARCH in "${ARCHES[@]}"; do
     BUILD_ARGS=(build
         --build-arg "X64_BASE_IMAGE=$X64_BASE"
         --build-arg "BASE_IMAGE=$BASE_IMAGE"
-        -f "$ROOT_DIR/Dockerfile.grpc-tc-mirror"
+        -f "$ROOT_DIR/Dockerfile.grpc-tc-mirror-$ARCH"
         -t "$IMAGE")
     [ "$NO_CACHE" = "1" ] && BUILD_ARGS+=(--no-cache)
     BUILD_ARGS+=("$ROOT_DIR")

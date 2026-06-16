@@ -194,12 +194,20 @@ else
     fi
 fi
 
-# Build the grpc-tc-mirror image on top of the base.
+# Build the grpc-tc-mirror image on top of the base. One Dockerfile per build
+# arch; i686 reuses the x86_64 file (same gcc84 base, profile set via -e PROFILE
+# at run time), armv7hf uses the arm file.
+case "$ARCH" in
+    x86_64|i686) DOCKERFILE_ARCH=x86_64 ;;
+    armv7hf)     DOCKERFILE_ARCH=arm ;;
+    arm64)       DOCKERFILE_ARCH=arm64 ;;
+    *)           DOCKERFILE_ARCH="$ARCH" ;;
+esac
 hdr "2. docker build $IMAGE_TAG"
 cd "$ROOT_DIR"
 if $DOCKER build $PLATFORM_FLAG \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
-        -f Dockerfile.grpc-tc-mirror \
+        -f "Dockerfile.grpc-tc-mirror-$DOCKERFILE_ARCH" \
         -t "$IMAGE_TAG" \
         . >/tmp/build-$ARCH.log 2>&1; then
     pass "built $IMAGE_TAG"
@@ -233,6 +241,7 @@ fi
 DOCKER_ARGS=(
     --rm $PLATFORM_FLAG
     --memory=6g --memory-swap=10g
+    -v "$ROOT_DIR:/work/conan-recipes"
     -v "$CACHE_DIR:/root/.conan2"
     -v "$OUTPUT_DIR:/work/conan-recipes/output"
     -v "$OUTPUT_DIR:/host"

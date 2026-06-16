@@ -57,7 +57,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         docker build \
             --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
             --build-arg BASE_IMAGE="$BASE_IMAGE" \
-            -f Dockerfile.grpc-tc-mirror \
+            -f Dockerfile.grpc-tc-mirror-x86_64 \
             -t "$MIRROR_IMAGE" \
             .
     fi
