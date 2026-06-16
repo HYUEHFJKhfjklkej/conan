@@ -29,7 +29,7 @@ RUN echo "deb [trusted=yes] http://archive.debian.org/debian stretch main contri
 #   RUN apt update && apt install -y linaro-arm64-7.5-devel-elara && rm -rf /var/lib/apt/lists/* && rm -f *.deb
 # or:
 #   ADD gcc-linaro-7.5.0-2019.12-rc1-x86_64_aarch64-linux-gnu.tar.xz /opt/linaro-arm64-7.5.0/
-RUN false "<< TODO: install linaro aarch64 7.5 toolchain to /opt/linaro-arm64-7.5.0 >>"
+RUN echo "gcc75-build-arm64 is a SCAFFOLD — fill the linaro 7.5 aarch64 install above (see base-images/README.md)" >&2 && exit 1
 
 RUN echo "" >> /etc/apt/apt.conf
 RUN echo "" >> /etc/apt/sources.list
