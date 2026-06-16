@@ -1,8 +1,12 @@
 # Dockerfiles & publishing the build images to ProGet
 
-This repo carries five Dockerfiles. Only one — `Dockerfile.grpc-tc-mirror` —
-is the production build image that gets published to ProGet and consumed by
-TeamCity. The other four are local/online smoke harnesses.
+This repo carries five Dockerfiles at the root. Only one —
+`Dockerfile.grpc-tc-mirror` — is the production build image that gets published
+to ProGet and consumed by TeamCity. The other four are local/online smoke
+harnesses. The **toolchain base images** it sits on (`gcc84-build-x86_64`,
+`gcc75-build-arm`, `gcc75-build-arm64`, `build-tools`) have their own
+Dockerfiles under `base-images/` — see `base-images/README.md` for provenance
+and the (still-needed) ARM source content.
 
 This document describes each Dockerfile and gives the full publish flow **two
 ways**: by hand (so you understand every step) and via the
