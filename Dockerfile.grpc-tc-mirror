@@ -107,12 +107,29 @@ ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
 # this via -e CONAN_USER_TOOLCHAIN=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake
 ENV CONAN_USER_TOOLCHAIN=""
 
-# ProGet backup-sources base URL (HELP [16]). The drivers re-assert the
-# matching core.sources:download_urls line in global.conf on every run via
-# test-astra/ensure_proget.sh (the conan home lives on the mounted cache
-# volume, so it cannot be baked into the image layer). The grpc recipe also
-# uses it to fetch its 4 FetchContent tarballs when src/ has none.
+# ProGet backup-sources base URL (HELP [16]). The grpc recipe also uses it
+# to fetch its 4 FetchContent tarballs when src/ has none.
 # Disable per-run with: -e PROGET_SOURCES_URL=""
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
+
+# Bake the backup-sources line into the image's default Conan home
+# (/root/.conan2/global.conf). This makes the published image self-sufficient
+# in two cases the per-run wiring used to be the only cover for:
+#   * a plain `docker run` with NO cache volume mounted — the baked home is
+#     used directly;
+#   * a FRESH named cache volume — Docker seeds an empty volume from the
+#     image layer on first mount, so the baked global.conf is copied in.
+# A REUSED named volume shadows this layer (it already carries its own
+# global.conf), so test-astra/ensure_proget.sh still re-asserts the line on
+# every driver start — baked default + runtime re-assert, belt and braces.
+# Skipped when PROGET_SOURCES_URL is empty (offline-only build).
+RUN if [ -n "$PROGET_SOURCES_URL" ]; then \
+        mkdir -p /root/.conan2; \
+        printf 'core.sources:download_urls=["%s", "origin"]\n' "$PROGET_SOURCES_URL" \
+            >> /root/.conan2/global.conf; \
+        echo "[bake] /root/.conan2/global.conf:"; cat /root/.conan2/global.conf; \
+    else \
+        echo "[bake] PROGET_SOURCES_URL empty — backup-sources not baked"; \
+    fi
 
 CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]

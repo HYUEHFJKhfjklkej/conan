@@ -4,11 +4,14 @@
 # anywhere: with no PROGET_/CONAN_REMOTE env set it is a no-op, so the Mac
 # and bare dev-VM keep working exactly as before.
 #
-# Why per-run and not baked into the image: the conan home lives on the
-# conan-cache-* docker volume (mounted over /root/.conan2), so anything
-# baked into the image layer is shadowed, and FRESH_CACHE / `docker volume
-# rm` wipes it. Re-asserting on every driver start is the only layout that
-# survives both.
+# Relationship to the baked global.conf: Dockerfile.grpc-tc-mirror bakes the
+# backup-sources line into the image's /root/.conan2/global.conf, which covers
+# a plain `docker run` (no volume) and a FRESH named volume (Docker seeds an
+# empty volume from the image layer). But a REUSED conan-cache-* volume mounted
+# over /root/.conan2 shadows that layer and carries its own global.conf, and
+# `docker volume rm` / FRESH_CACHE resets it. So this script re-asserts the
+# line on every driver start — that is the one layout that survives all cases,
+# including the bare dev-VM / Mac where there is no image at all.
 #
 # Env:
 #   PROGET_SOURCES_URL     backup-sources base, e.g.

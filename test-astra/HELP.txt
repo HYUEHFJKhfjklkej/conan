@@ -1728,3 +1728,40 @@ step and send it back so the next step can be picked.
         anonymous GET — it shows in the conan-sources FEED request log, NOT in
         Administration -> API Key Access Logs (that only records key-authed
         calls, i.e. the upload seeding from proget_upload_sources.sh).
+
+
+[20] Publish the grpc-tc-mirror images to ProGet — automated driver.
+
+     Producer half of the pre-bake flow (HELP [10] is the same thing by hand).
+     Driver: test-astra/prebake_push.sh — build -> smoke -> push -> verify pull,
+     for one or all of x86_64 / arm / arm64. Run on the dev-VM (ProGet is only
+     reachable there). Full write-up: ../DOCKERFILES.md.
+
+         sudo docker login proget.inc.elara.local     # once per shell
+
+         ./test-astra/prebake_push.sh                 # all three arches
+         ./test-astra/prebake_push.sh x86_64          # one arch
+         ./test-astra/prebake_push.sh arm arm64       # a subset
+
+     Env knobs:
+         REGISTRY              default proget.inc.elara.local/main
+         MIRROR_VER            default 0.1.0 (bump on any Dockerfile/toolchain/
+                               Conan change — never overwrite a tag)
+         X64_BASE_IMAGE_TAG    default 0.1.0
+         ARM_BASE_IMAGE_TAG    default 0.1.0  (adjust per ProGet inventory)
+         ARM64_BASE_IMAGE_TAG  default 0.1.0  (adjust per ProGet inventory)
+         PUSH=0                build + smoke only, do not publish
+         VERIFY_PULL=0         skip the drop-local + pull-back round-trip
+         E2E=1                 chain run_prebake.sh <arch> after push (full
+                               7-nupkg acceptance, ~15-25 min/arch)
+         NO_CACHE=1            docker build --no-cache
+         DRY_RUN=1             print every docker command, execute nothing
+                               (runs on the Mac too — preview before the dev-VM)
+
+     Consumer/acceptance half stays run_prebake.sh (fresh pull of a PUBLISHED
+     tag + e2e 7 .nupkg). prebake_push.sh E2E=1 just invokes it per arch.
+
+     The image now also bakes core.sources:download_urls into
+     /root/.conan2/global.conf (from PROGET_SOURCES_URL). It covers a plain
+     `docker run` (no volume) and a FRESH named cache volume; a REUSED volume
+     shadows the layer, so ensure_proget.sh still re-asserts on every start.

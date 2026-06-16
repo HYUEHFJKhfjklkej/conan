@@ -123,11 +123,16 @@ profiles/                   Conan-профили + toolchains/ (linaro ARM)
 test-astra/ test-windows/   build-скрипты (Linux .sh / Windows .bat)
 packages-linux/ packages/   offline pip-колёса (Conan + deps)
 Dockerfile.grpc-tc-mirror   CI-зеркало для x86_64 + ARM cross
+Dockerfile.*-test           локальный/online smoke (Docker Hub, не для ProGet)
+DOCKERFILES.md              описание всех Dockerfile + заливка образов в ProGet
 ```
+
+Сборка и публикация CI-образов `grpc-tc-mirror-{x86_64,arm,arm64}` в ProGet —
+вручную и через `test-astra/prebake_push.sh` — описаны в **`DOCKERFILES.md`**.
 
 ## Отладка
 
 Диагностика и разбор типовых багов — пронумерованные блоки в **`test-astra/HELP.txt`**
-(`[0]`…`[13]`). Частые грабли: `undefined reference to absl::lts_*` (inline-namespace
+(`[0]`…`[20]`). Частые грабли: `undefined reference to absl::lts_*` (inline-namespace
 mismatch), `-lzlib` / `-lprotolib` (legacy-имена компонентов), `timestamp.proto:
 File not found` (proto/-слой) — все разобраны в HELP.txt.
