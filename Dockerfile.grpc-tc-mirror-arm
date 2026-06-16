@@ -1,10 +1,10 @@
-# grpc-tc-mirror build container — arm (armv7hf). FROM the gcc75-build-arm CI
-# base + Conan. Sources are NOT baked — drivers mount the repo at run time.
+# grpc-tc-mirror build container - arm (armv7hf). FROM the gcc75-build-arm CI
+# base + Conan. Sources are NOT baked - drivers mount the repo at run time.
 # -arm and -arm64 are identical except ARG BASE_IMAGE; keep them in sync.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc75-build-arm:0.1.0
 
-# Stage 1 — carry gcc 8.4 from the x86_64 base as the build-context compiler
+# Stage 1 - carry gcc 8.4 from the x86_64 base as the build-context compiler
 # (this base's system gcc is 6.3 < 7, which abseil rejects). cp -aL dereferences
 # symlinks so the COPY into stage 2 can't dangle.
 FROM ${X64_BASE_IMAGE} AS x64_native_tc
@@ -24,7 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /work/conan-recipes
 
 # Python 3.11 + Conan, offline from packages-linux/ (Stretch ships 3.5; Conan 2
-# needs >=3.7). No venv — ensurepip is broken in the standalone tarball.
+# needs >=3.7). No venv - ensurepip is broken in the standalone tarball.
 COPY packages-linux /work/conan-recipes/packages-linux
 RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C /opt \
     && ln -sf /opt/python/bin/python3 /usr/local/bin/python3 \

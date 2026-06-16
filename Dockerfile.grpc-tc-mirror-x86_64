@@ -1,5 +1,5 @@
-# grpc-tc-mirror build container — x86_64. FROM the gcc84 CI base + Conan.
-# Single stage (base already ships gcc 8.4). Sources are NOT baked — drivers
+# grpc-tc-mirror build container - x86_64. FROM the gcc84 CI base + Conan.
+# Single stage (base already ships gcc 8.4). Sources are NOT baked - drivers
 # mount the repo at /work/conan-recipes at run time.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
@@ -19,7 +19,7 @@ RUN set -e; \
     done
 
 # Python 3.11 + Conan, offline from packages-linux/ (Stretch ships 3.5; Conan 2
-# needs >=3.7). No venv — ensurepip is broken in the standalone tarball.
+# needs >=3.7). No venv - ensurepip is broken in the standalone tarball.
 COPY packages-linux /work/conan-recipes/packages-linux
 RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C /opt \
     && ln -sf /opt/python/bin/python3 /usr/local/bin/python3 \
