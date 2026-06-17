@@ -35,11 +35,7 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && ln -sf /opt/python/bin/conan /usr/local/bin/conan \
     && conan --version
 
-# PROFILE/PROFILE_BUILD здесь не вшиваются: какой профиль собирать — решение
-# шага сборки, оно передаётся в рантайме (TeamCity / драйверы test-astra через
-# -e PROFILE / -e PROFILE_BUILD). Образ — это окружение, а не конфиг сборки.
-# Вшитый профиль был бы мёртвым состоянием (теперь ничего не собирается само),
-# а на ARM-образах ещё и не тем (x86_64) host-профилем.
+# PROFILE не вшиваем — его задаёт шаг сборки (-e PROFILE / -e PROFILE_BUILD).
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
 
 # Bake the ProGet backup-sources line so a fresh/absent cache volume already has
@@ -48,8 +44,4 @@ RUN mkdir -p /root/.conan2 \
     && printf 'core.sources:download_urls=["%s", "origin"]\n' "$PROGET_SOURCES_URL" \
         >> /root/.conan2/global.conf
 
-# Только окружение сборки — образ предназначен быть ЧАСТЬЮ CI-агента, а не
-# запускать сборку сам. grpc собирает внешний шаг (TeamCity или драйверы
-# test-astra), который монтирует репо и передаёт свою команду. CMD намеренно
-# не задаём — образ это лишь слои окружения, дефолтная команда наследуется
-# от базового образа.
+# CMD не задаём — образ это только окружение агента, команду даёт шаг сборки.
