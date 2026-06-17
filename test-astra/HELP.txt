@@ -1781,3 +1781,20 @@ step and send it back so the next step can be picked.
      Env: REGISTRY (default proget.inc.elara.local/main) + MIRROR_VER (default
      0.1.0) form the image name grpc-tc-mirror-<arch>:<ver>; falls back to the
      bare grpc-tc-mirror-<arch> tag from test_all_profiles.sh. IMAGE overrides it.
+
+[22] Build the grpc/1.60.1 line (GR910 parity) on all arches.
+
+     run_grpc_1601_upstream.sh is now arch-aware (ARCH=x86_64|arm|arm64|all).
+     arm/arm64 cross-build on linaro 7.5: host profile = ARM, build context =
+     x86_64, toolchain passed via CONAN_USER_TOOLCHAIN. It self-wraps into the
+     per-arch grpc-tc-mirror image (builds it from the Dockerfile if missing).
+     Pinned deps: protobuf 4.25.2, abseil 20230802.1, re2 20230301, c-ares
+     1.25.0, openssl 1.1.11 (openssl-1x/), zlib 1.3.0.
+
+         sudo bash -c 'cd /home/user/conan-master && ARCH=all ./test-astra/run_grpc_1601_upstream.sh'
+         # one arch:  ARCH=arm64 ./test-astra/run_grpc_1601_upstream.sh
+
+     Output: output-grpc-1601-<arch>/*.nupkg (7 per arch), cache volume
+     conan-cache-grpc-1601-<arch>. NOTE: ARM at the 1.60 line is bring-up —
+     abseil 20230802.1 may need an aarch64 binutils-2.32 patch like the one the
+     1.78 line carries (abseil/patches/20250127.0-...). First arm64 run will tell.
