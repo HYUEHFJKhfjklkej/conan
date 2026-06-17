@@ -1761,7 +1761,23 @@ step and send it back so the next step can be picked.
      Consumer/acceptance half stays run_prebake.sh (fresh pull of a PUBLISHED
      tag + e2e 7 .nupkg). prebake_push.sh E2E=1 just invokes it per arch.
 
-     The image now also bakes core.sources:download_urls into
-     /root/.conan2/global.conf (from PROGET_SOURCES_URL). It covers a plain
-     `docker run` (no volume) and a FRESH named cache volume; a REUSED volume
-     shadows the layer, so ensure_proget.sh still re-asserts on every start.
+     The image does NOT bake core.sources:download_urls anymore — a bind-mounted
+     cache shadows the layer anyway. ensure_proget.sh writes the line at run time
+     (it reads PROGET_SOURCES_URL, still set as ENV in the image).
+
+[21] Sanity-check a built grpc-tc-mirror image — build ONE package in it.
+
+     After building the images (HELP [20], PUSH=0) verify each one works without
+     waiting for the full 7-package tree: build just zlib (~1 min) per arch.
+     Driver: test-astra/smoke_build_pkg.sh <arch> [pkg] [ver]. It picks the host
+     profile per arch (linaro toolchain comes from the profile's [conf], so a
+     direct zlib build cross-compiles for arm/arm64), runs `conan create` in the
+     image with the repo mounted. Ephemeral (--rm, no cache volume) = fresh build.
+
+         sudo bash -c 'cd /home/user/conan-master && ./test-astra/smoke_build_pkg.sh all'
+         sudo bash -c 'cd /home/user/conan-master && ./test-astra/smoke_build_pkg.sh x86_64'
+         # other package: ./test-astra/smoke_build_pkg.sh arm openssl 3.4.5
+
+     Env: REGISTRY (default proget.inc.elara.local/main) + MIRROR_VER (default
+     0.1.0) form the image name grpc-tc-mirror-<arch>:<ver>; falls back to the
+     bare grpc-tc-mirror-<arch> tag from test_all_profiles.sh. IMAGE overrides it.
