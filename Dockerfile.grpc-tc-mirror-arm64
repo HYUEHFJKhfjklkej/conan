@@ -1,6 +1,4 @@
-# grpc-tc-mirror build container - arm64 (aarch64). FROM the gcc75-build-arm64
-# CI base + Conan. Sources are NOT baked - drivers mount the repo at run time.
-# -arm and -arm64 are identical except ARG BASE_IMAGE; keep them in sync.
+# grpc-tc-mirror build env (arm64): gcc75-build-arm64 base + Conan; repo mounted at run time.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc75-build-arm64:0.1.0
 

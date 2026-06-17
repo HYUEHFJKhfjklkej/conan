@@ -1,6 +1,4 @@
-# grpc-tc-mirror build container - x86_64. FROM the gcc84 CI base + Conan.
-# Single stage (base already ships gcc 8.4). Sources are NOT baked - drivers
-# mount the repo at /work/conan-recipes at run time.
+# grpc-tc-mirror build env (x86_64): gcc84 CI base + Conan; repo mounted at run time.
 # X64_BASE_IMAGE здесь не используется (single-stage) — объявлен лишь чтобы
 # поглотить build-arg, который prebake_push.sh шлёт во все арки (нужен в arm/arm64).
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
