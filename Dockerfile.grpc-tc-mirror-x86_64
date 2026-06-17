@@ -16,8 +16,7 @@ RUN set -e; \
         set -- $a; [ -e "$1" ] || ln -sf "$2" "$1"; \
     done
 
-# Python 3.11 + Conan, offline from packages-linux/ (Stretch ships 3.5; Conan 2
-# needs >=3.7). No venv - ensurepip is broken in the standalone tarball.
+# Python 3.11 + Conan офлайн из packages-linux/ (Stretch несёт 3.5, Conan 2 хочет >=3.7).
 COPY packages-linux /work/conan-recipes/packages-linux
 RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C /opt \
     && ln -sf /opt/python/bin/python3 /usr/local/bin/python3 \
