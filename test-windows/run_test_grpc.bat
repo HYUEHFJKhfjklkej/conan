@@ -131,8 +131,8 @@ if "%EXITCODE%"=="0" (
 ) else (
     echo [DONE] FAILED with code %EXITCODE%
 )
-:: CI / TeamCity sets CI=1 (test_win.bat does) to skip the interactive
-:: pause — otherwise the build step hangs forever waiting for a keypress.
+:: CI / TeamCity (и test_win.bat) ставят CI=1, чтобы пропустить интерактивный
+:: pause — иначе шаг сборки виснет навсегда в ожидании нажатия клавиши.
 if not defined CI (
     echo Press any key to close this window...
     pause >nul

@@ -1,28 +1,27 @@
 #!/bin/bash
-# proget_push_nupkg.sh — push built legacy .nupkg files to a ProGet NuGet
-# feed. Default feed is a SANDBOX one (nuget-sandbox) so experiments never
-# touch the production feed the downstream products consume — publishing
-# there (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1) is the lead's call.
+# proget_push_nupkg.sh — залить собранные legacy .nupkg в NuGet-фид ProGet.
+# По умолчанию фид SANDBOX (nuget-sandbox), чтобы эксперименты не трогали
+# production-фид downstream-продуктов — публикация туда (overwrite vs
+# LEGACY_NUPKG_VERSION_SUFFIX=.1) решается лидом.
 #
-# Push endpoint per Inedo docs:
-#     PUT https://<host>/nuget/<feed>/package   (body = the .nupkg)
-# UNVERIFIED until run once against the real ProGet.
+# Push-эндпоинт (Inedo docs):
+#     PUT https://<host>/nuget/<feed>/package   (тело = .nupkg)
+# Не проверено на живом ProGet.
 #
-# Usage (dev-VM):
+# Использование (dev-VM):
 #   PROGET_API_KEY=<key> ./test-astra/proget_push_nupkg.sh output-grpc-1601-upstream
 #   PROGET_API_KEY=<key> NUGET_FEED=nuget-sandbox ./test-astra/proget_push_nupkg.sh output/
 #
 # Env:
-#   PROGET_URL       default http://proget.inc.elara.local
-#   NUGET_FEED       default nuget-sandbox (create first: Feeds -> Create
-#                    New Feed -> NuGet). NEVER point this at the production
-#                    feed without the lead's sign-off.
-#   PROGET_API_KEY   API key with Feed API rights (sent as X-ApiKey and
-#                    X-NuGet-ApiKey — different ProGet versions read
-#                    different headers)
-#   PROGET_USER/PROGET_PASS   basic-auth alternative
+#   PROGET_URL       по умолч. http://proget.inc.elara.local
+#   NUGET_FEED       по умолч. nuget-sandbox (создать: Feeds -> Create New
+#                    Feed -> NuGet). НИКОГДА не указывать на production-фид
+#                    без согласия лида.
+#   PROGET_API_KEY   ключ с правами Feed API (шлётся как X-ApiKey и
+#                    X-NuGet-ApiKey — разные версии ProGet читают разные заголовки)
+#   PROGET_USER/PROGET_PASS   альтернатива через basic-auth
 #   PROGET_INSECURE  1 = curl -k
-#   DRY_RUN          1 = print PUTs, no network
+#   DRY_RUN          1 = печатать PUT'ы, без сети
 
 set -uo pipefail
 

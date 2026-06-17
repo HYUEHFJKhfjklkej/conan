@@ -1,16 +1,16 @@
 #!/bin/bash
 # ============================================
 #  Полный тест Conan на Astra Linux 1.8
-#  1. Собирает gtest из оригинальных исходников
-#  2. Прогоняет тесты потребителя
-#  3. Упаковывает в legacy zip-формат
+#  1. Сборка gtest из оригинальных исходников
+#  2. Тесты потребителя
+#  3. Упаковка в legacy zip-формат
 # ============================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Активировать venv если есть
+# Активировать venv, если есть
 if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
     source "$ROOT_DIR/venv/bin/activate"
 fi

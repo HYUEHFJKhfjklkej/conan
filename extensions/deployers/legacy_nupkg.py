@@ -7,9 +7,9 @@ Conan deployer: упаковка зависимостей в legacy NuGet-фор
         --deployer=legacy_nupkg \
         --deployer-folder=output/
 
-Берёт каждый dependency из install-графа, находит в кеше Release и Debug
-варианты (по settings.build_type), генерит .targets/.nuspec/CMakeLists.var,
-кладёт бинари и заголовки, упаковывает в .nupkg.
+Для каждого dependency из install-графа находит в кеше Release- и Debug-варианты
+(по settings.build_type), генерит .targets/.nuspec/CMakeLists.var, кладёт бинари и
+заголовки, упаковывает в .nupkg.
 """
 import json
 import os
@@ -21,51 +21,46 @@ import zipfile
 # Маппинг имён Conan → legacy
 LEGACY_NAME_MAP = {
     "gtest": "googletest",
-    # Replace our upstream-built `abseil` package with the legacy Elara
-    # `absl` slot so downstream consumers (exceptions/googletest tied to
-    # `absl:0.2.0`) pick up the upstream binaries — which include the
-    # missing `cord` components.
+    # Подменяем наш upstream-сборку `abseil` на legacy Elara-слот `absl`, чтобы
+    # downstream (exceptions/googletest, завязанные на `absl:0.2.0`) брал upstream-
+    # бинари — в них есть недостающие `cord`-компоненты.
     "abseil": "absl",
-    # The conan recipe is `c-ares` (the conan-center name), but the legacy
-    # Elara slot is `cares` — no dash. Critical: downstream
-    # ResolveDependencies.cmake emits `add_definitions(-D${_name}_..._DEFINE)`
-    # WITHOUT sanitizing the package name (only the component name gets
-    # `-`->`_`). A dash there yields a broken `-Dc-ares_..._DEFINE` flag ->
-    # `<command-line>: expected ',' or '...' before '-' token`.
+    # Conan-рецепт зовётся `c-ares` (имя conan-center), но legacy Elara-слот —
+    # `cares`, без дефиса. Важно: downstream ResolveDependencies.cmake генерит
+    # `add_definitions(-D${_name}_..._DEFINE)` БЕЗ sanitize имени пакета (на `_`
+    # меняется только имя компонента). Дефис здесь даёт битый флаг
+    # `-Dc-ares_..._DEFINE` -> `<command-line>: expected ',' or '...' before '-' token`.
     "c-ares": "cares",
 }
 
-# When emitting `${project_name}_dependencies` entries inside another
-# package's CMakeLists.var, the dep name is taken from this map if
-# present, else falls back to LEGACY_NAME_MAP, else to the Conan name.
+# Имя dep для записей `${project_name}_dependencies` в чужом CMakeLists.var:
+# сначала этот map, иначе LEGACY_NAME_MAP, иначе Conan-имя.
 LEGACY_DEP_NAME_MAP = {
 }
 
-# Override the version used in .nupkg filename, .nuspec <version>, and
-# every _dependencies entry that references the package. The Conan
-# cache still keys by the real upstream version (`20240116.2`); this
-# only changes what the deployed artifact advertises.
+# Переопределяет версию в имени .nupkg, в .nuspec <version> и в каждой записи
+# _dependencies, ссылающейся на пакет. Conan-кеш по-прежнему ключуется реальной
+# upstream-версией (`20240116.2`); меняется только то, что объявляет артефакт.
 LEGACY_DEP_VERSION_MAP = {
-    # Pretend our abseil/20240116.2 is absl/0.2.0 so it slots in as a
-    # higher version (with .1 suffix) than the legacy `absl/0.2.0`
-    # already in ProGet, taking precedence in downstream ResolveDependencies.
+    # Выдаём наш abseil/20240116.2 за absl/0.2.0, чтобы он встал как более высокая
+    # версия (с суффиксом .1), чем legacy `absl/0.2.0` уже в ProGet, и победил в
+    # downstream ResolveDependencies.
     "abseil": "0.2.0",
 }
 
-# Version suffix applied to every emitted .nupkg + nuspec + _dependencies
-# entry, sourced from env LEGACY_NUPKG_VERSION_SUFFIX. Use when uploading
-# upstream-mirror artifacts to a ProGet feed that already carries the
-# same versions from a different source (Bitbucket forks) — the suffix
-# disambiguates without renaming packages. Example values: ".1",
-# "-elara1". Default empty → behavior unchanged.
+# Суффикс версии для каждого .nupkg + nuspec + записи _dependencies, из env
+# LEGACY_NUPKG_VERSION_SUFFIX. Нужен при заливке upstream-mirror артефактов в
+# ProGet-feed, где те же версии уже есть из другого источника (Bitbucket-форки):
+# суффикс разводит их без переименования пакетов. Примеры: ".1", "-elara1".
+# По умолчанию пусто → поведение не меняется.
 VERSION_SUFFIX = os.environ.get("LEGACY_NUPKG_VERSION_SUFFIX", "")
 
 # Маппинг ОС: Conan settings.os → legacy os-короткое
 OS_SHORT = {"Linux": "lin", "Windows": "win", "Macos": "mac"}
 
-# Arch shorthand differs per OS — derived from real CI artifact naming
-# observed in TeamCity (see photo_index.md, photo_2026-04-27_17-31-50.jpg):
-#   googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg          (Linux: full arch)
+# Короткое имя arch зависит от ОС — выведено из реальных имён CI-артефактов в
+# TeamCity (см. photo_index.md, photo_2026-04-27_17-31-50.jpg):
+#   googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg          (Linux: полный arch)
 #   googletest.lin.gcc84.shared.i686.1.15.2.nupkg            (Linux: x86 → i686)
 #   googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg      (Linux: armv7hf → arm)
 #   googletest.lin.gcc75.shared.arm64-linaro.1.15.2.nupkg    (Linux: armv8   → arm64)
@@ -91,18 +86,18 @@ KEEPDIR_CONTENT = (
 
 
 def _short_compiler(compiler, version):
-    """Map (compiler, version) → CI-style short form.
+    """(compiler, version) → короткая CI-форма.
 
-    Real CI artifact names from TeamCity (see photo_index.md):
-      gcc 8   → 'gcc8'    (e.g. abseil.lin.gcc8.static.x86_64.20250127.0.nupkg)
-      gcc 8.4 → 'gcc84'   (e.g. googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg)
-      gcc 7.5 → 'gcc75'   (e.g. googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg)
-      gcc 9.3 → 'gcc93'   (e.g. googletest.lin.gcc93.shared.x64-e3300.1.15.2.nupkg)
-      msvc 142 → 'v142'   (e.g. googletest.win.v142.shared.x64.1.15.2.nupkg)
+    Реальные имена CI-артефактов из TeamCity (см. photo_index.md):
+      gcc 8   → 'gcc8'    (abseil.lin.gcc8.static.x86_64.20250127.0.nupkg)
+      gcc 8.4 → 'gcc84'   (googletest.lin.gcc84.shared.x86_64.1.15.2.nupkg)
+      gcc 7.5 → 'gcc75'   (googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg)
+      gcc 9.3 → 'gcc93'   (googletest.lin.gcc93.shared.x64-e3300.1.15.2.nupkg)
+      msvc 142 → 'v142'   (googletest.win.v142.shared.x64.1.15.2.nupkg)
 
-    Astra is handled separately — see _resolve_os_short(): the Astra CI
-    artifact (googletest.astra.gcc.static.x86_64) drops the gcc version
-    entirely. Caller must pass LEGACY_OS_SHORT=astra env to opt in.
+    Astra обрабатывается отдельно — см. _resolve_os_short(): её артефакт
+    (googletest.astra.gcc.static.x86_64) вообще без версии gcc. Включается
+    через env LEGACY_OS_SHORT=astra.
     """
     if compiler == "msvc":
         return f"v{version}"
@@ -113,12 +108,11 @@ def _short_compiler(compiler, version):
 
 
 def _resolve_os_short(os_name):
-    """Resolve OS shortname, allowing env override for Astra (and similar).
+    """Короткое имя ОС с возможностью env-override для Astra (и подобных).
 
-    Conan doesn't natively distinguish AstraLinux from generic Linux, so the
-    orchestrator script (test_all_profiles.sh) sets LEGACY_OS_SHORT=astra
-    when building with the astra-gcc profile. Without override, falls back
-    to standard Linux/Windows/Macos mapping.
+    Conan не отличает AstraLinux от обычного Linux, поэтому orchestrator-скрипт
+    (test_all_profiles.sh) ставит LEGACY_OS_SHORT=astra при сборке профилем
+    astra-gcc. Без override — обычный маппинг Linux/Windows/Macos.
     """
     override = os.environ.get("LEGACY_OS_SHORT", "").strip().lower()
     if override:
@@ -127,12 +121,12 @@ def _resolve_os_short(os_name):
 
 
 def _resolve_arch_with_toolchain(arch, os_name):
-    """Append '-linaro' suffix when the user_toolchain points to a Linaro
-    cmake file — matches CI naming for cross-compiled builds:
+    """Добавляет суффикс '-linaro', когда user_toolchain указывает на Linaro
+    cmake-файл — как в CI-именах cross-сборок:
       googletest.lin.gcc75.shared.arm-linaro.1.15.2.nupkg
       googletest.lin.gcc75.shared.arm64-linaro.1.15.2.nupkg
-    Detection is by env CONAN_USER_TOOLCHAIN (set per-arch by the
-    orchestrator script), so native x86_64/i686 builds are unaffected.
+    Определяется по env CONAN_USER_TOOLCHAIN (ставит orchestrator-скрипт
+    под каждую arch), так что нативные x86_64/i686 не затрагиваются.
     """
     base = _arch_short(arch, os_name)
     user_tc = os.environ.get("CONAN_USER_TOOLCHAIN", "")
@@ -270,71 +264,66 @@ def _generate_cmakelists_var(legacy_name, version, components, platforms, deps=N
 
 
 def _is_lib_file(fname):
-    """Recognize static/shared/import libraries including versioned shared
-    objects (e.g. libfoo.so.0.1.2). The simple tail-extension test misses
-    those because `'libfoo.so.0.1.2'.split('.')[-1]` is '2'."""
-    # Static + Windows imports + macOS dylib + bare .so / .dll.
+    """Распознаёт static/shared/import-библиотеки, включая версионированные .so
+    (libfoo.so.0.1.2). Простая проверка расширения их теряет, т.к.
+    `'libfoo.so.0.1.2'.split('.')[-1]` == '2'."""
+    # Static + Windows-import + macOS dylib + голые .so / .dll.
     if fname.endswith((".a", ".lib", ".dll", ".dylib", ".so")):
         return True
-    # Versioned ELF shared object: libfoo.so.0, libfoo.so.0.1.2, etc.
+    # Версионированный ELF .so: libfoo.so.0, libfoo.so.0.1.2 и т.п.
     if ".so." in fname:
         return True
     return False
 
 
-# Aliases for libraries whose upstream filename ('libz.so') doesn't match
-# the legacy package name ('zlib'). Downstream Elara CMake framework
-# emits `-l<pkg_name>` on the link line, so the lib must also exist
-# under that name. Resolved as additional symlinks alongside the
-# original files (originals are kept too, so `-lz` still works).
+# Алиасы для библиотек, чьё upstream-имя ('libz.so') не совпадает с legacy-именем
+# пакета ('zlib'). Downstream Elara CMake-фреймворк генерит `-l<pkg_name>` в
+# линковке, поэтому либа должна существовать и под этим именем. Делаются как
+# доп. симлинки рядом с оригиналами (оригиналы остаются, чтобы `-lz` тоже работал).
 LIB_FILENAME_ALIASES = {
-    "zlib": {"z": "zlib"},     # libz.so       -> libzlib.so       (symlink)
+    "zlib": {"z": "zlib"},     # libz.so       -> libzlib.so       (симлинк)
                                 # libz.so.1.3.0 -> libzlib.so.1.3.0
-    # Elara protobuf fork splits upstream's `libprotoc.so` (compiler
-    # library with CommandLineInterface, parsers, code generators) into
-    # a separately-named `libprotolib.a`. Downstream profibus_dp_ui_plugin
-    # and others link `-lprotolib` directly. We ship the same code as
-    # `libprotoc.so`; aliasing creates `libprotolib.so` -> `libprotoc.so`
-    # symlink so the legacy name resolves without patching consumer code.
-    # Verified on IN-658 el_conf build 2026-05-26.
+    # Elara-форк protobuf выделяет upstream `libprotoc.so` (compiler-либа с
+    # CommandLineInterface, парсерами, кодогенераторами) в отдельную
+    # `libprotolib.a`. Downstream (profibus_dp_ui_plugin и др.) линкуют
+    # `-lprotolib` напрямую. Мы поставляем тот же код как `libprotoc.so`; алиас
+    # создаёт симлинк `libprotolib.so` -> `libprotoc.so`, чтобы legacy-имя
+    # резолвилось без правки кода потребителей. Проверено на IN-658 el_conf 2026-05-26.
     "protobuf": {"protoc": "protolib"},
 }
 
-# Packages whose libs have a name prefix that downstream Elara CMake
-# framework does NOT include — strip the prefix by creating an alias
-# symlink. Example: upstream abseil ships `libabsl_strings.so`, but the
-# Elara `absl/0.2.0` slot has `libstrings.so` — downstream resolver
-# emits `-lstrings`, so we mint that symlink alongside the original.
+# Пакеты, чьи либы имеют префикс в имени, который downstream Elara CMake-фреймворк
+# НЕ использует — срезаем префикс алиас-симлинком. Пример: upstream abseil даёт
+# `libabsl_strings.so`, а legacy-слот `absl/0.2.0` — `libstrings.so`; downstream-
+# резолвер генерит `-lstrings`, поэтому делаем такой симлинк рядом с оригиналом.
 LIB_FILENAME_PREFIX_STRIP = {
     "abseil": "absl_",          # libabsl_<X>.so -> lib<X>.so
 }
 
-# abseil is deployed differently from the rest — see abseil/conanfile.py.
-# The Elara CMake framework expects abseil as 21 coarse component libs
-# (`-lstrings`, `-lrandom`, ... — one per absl/<subdir>/), matching the
-# legacy `absl/0.2.0` slot. abseil/conanfile.py aggregates those into
-# `lib/legacy-coarse/`; its native ~150 fine libs stay in `lib/` for
-# Conan consumers. For abseil the deployer packages that coarse set.
+# abseil деплоится иначе остальных — см. abseil/conanfile.py. Elara CMake-фреймворк
+# ждёт abseil как 21 крупный component-либ (`-lstrings`, `-lrandom`, ... — по одному
+# на absl/<subdir>/), как в legacy-слоте `absl/0.2.0`. abseil/conanfile.py
+# агрегирует их в `lib/legacy-coarse/`; нативные ~150 мелких либ остаются в `lib/`
+# для Conan-потребителей. Для abseil deployer упаковывает именно крупный набор.
 LEGACY_LIBDIR_OVERRIDE = {"abseil": "legacy-coarse"}
 
-# All Elara legacy artifacts emit the `.shared.<arch>.` slot tag — this is
-# the DynamicRT runtime slot in legacy CI naming (paired with GR113 on
-# TeamCity). The libraries inside are always static `.a` regardless; the
-# tag selects which runtime-CRT slot the downstream resolver
-# (ResolveDependencies.cmake / FindInstalledPackage.cmake in el_conf,
-# grpc_sdk, sura) reads. Override via env `LEGACY_NUPKG_LINKAGE=static`
-# for the StaticRT slot (GR121-equivalent — currently not used by IN-658).
+# Все legacy-артефакты Elara несут slot-тег `.shared.<arch>.` — это DynamicRT-слот
+# рантайма в legacy CI-именовании (на TeamCity в паре с GR113). Содержимое всегда
+# статические `.a`; тег лишь выбирает, какой runtime-CRT слот читает downstream-
+# резолвер (ResolveDependencies.cmake / FindInstalledPackage.cmake в el_conf,
+# grpc_sdk, sura). Override через env `LEGACY_NUPKG_LINKAGE=static` для StaticRT-
+# слота (аналог GR121 — IN-658 его сейчас не использует).
 #
-# Per-package overrides remain in LEGACY_LINKAGE_OVERRIDE for historical
-# exceptions; today all packages map to "shared", so the dict is empty.
+# Per-package оверрайды лежат в LEGACY_LINKAGE_OVERRIDE для исторических исключений;
+# сегодня все пакеты → "shared", поэтому словарь пуст.
 LEGACY_LINKAGE_OVERRIDE = {}
 
 
 def _add_lib_aliases(dst, pkg_name):
-    """Create alias symlinks alongside the real libraries. Two mechanisms:
-    1. LIB_FILENAME_ALIASES — explicit per-package base→alias rename.
-    2. LIB_FILENAME_PREFIX_STRIP — drop a known prefix from every lib name.
-    Originals are kept untouched so both naming conventions work."""
+    """Создаёт алиас-симлинки рядом с реальными библиотеками. Два механизма:
+    1. LIB_FILENAME_ALIASES — явное переименование base→alias на пакет.
+    2. LIB_FILENAME_PREFIX_STRIP — срезать известный префикс из имени каждой либы.
+    Оригиналы не трогаются, чтобы оба варианта именования работали."""
     if not os.path.isdir(dst):
         return
     aliases = LIB_FILENAME_ALIASES.get(pkg_name)
@@ -342,7 +331,7 @@ def _add_lib_aliases(dst, pkg_name):
         for fname in list(os.listdir(dst)):
             if not fname.startswith("lib"):
                 continue
-            stem_and_ext = fname[3:]  # strip 'lib'
+            stem_and_ext = fname[3:]  # срезаем 'lib'
             for base, alias in aliases.items():
                 if stem_and_ext == base or stem_and_ext.startswith(base + "."):
                     new_fname = "lib" + alias + stem_and_ext[len(base):]
@@ -370,17 +359,17 @@ def _add_lib_aliases(dst, pkg_name):
 
 def _copy_libs(src_lib, dst, pkg_name=None):
     if not os.path.isdir(src_lib):
-        # Still create dst so the empty `-d/` directory is preserved by
-        # downstream `.keepdir` logic — the legacy CMake framework expects
-        # the directory to exist even if Debug libs are unavailable.
+        # Всё равно создаём dst, чтобы пустую `-d/` сохранила downstream-логика
+        # `.keepdir` — legacy CMake-фреймворк ждёт существования каталога даже
+        # если Debug-либ нет.
         os.makedirs(dst, exist_ok=True)
         return 0
     n = 0
     os.makedirs(dst, exist_ok=True)
     for f in os.listdir(src_lib):
         sf = os.path.join(src_lib, f)
-        # Preserve symlinks instead of dereferencing them: libfoo.so ->
-        # libfoo.so.X.Y.Z must stay a link in the .nupkg.
+        # Сохраняем симлинки, не разыменовывая: libfoo.so -> libfoo.so.X.Y.Z
+        # должен остаться ссылкой внутри .nupkg.
         if os.path.islink(sf) and _is_lib_file(f):
             link_target = os.readlink(sf)
             link_path = os.path.join(dst, f)
@@ -413,46 +402,44 @@ def _list_libs(src_lib):
 
 
 def _legacy_component_names(libs, pkg_name):
-    """Map raw library basenames (from _list_libs, e.g. 'z', 'absl_strings')
-    to the names the downstream Elara framework expects in the `components`
-    list of CMakeLists.var.
+    """Преобразует сырые basename'ы либ (из _list_libs, напр. 'z', 'absl_strings')
+    в имена, которые downstream Elara-фреймворк ждёт в списке `components`
+    CMakeLists.var.
 
-    Must mirror the FILE renaming done by _add_lib_aliases — otherwise
-    ResolveDependencies.cmake (foreach over `components`, line ~306) builds
-    an IMPORTED target under the UPSTREAM name ('z') while consumers link
-    the LEGACY name ('zlib'). CMake then degrades the unknown name to a
-    bare link flag -> `ld: cannot find -lzlib`.
+    Должно зеркалить переименование ФАЙЛОВ из _add_lib_aliases — иначе
+    ResolveDependencies.cmake (foreach по `components`, ~строка 306) создаст
+    IMPORTED-таргет под UPSTREAM-именем ('z'), а потребители линкуют LEGACY-имя
+    ('zlib'). CMake тогда сводит неизвестное имя к голому флагу -> `ld: cannot
+    find -lzlib`.
     """
     aliases = LIB_FILENAME_ALIASES.get(pkg_name, {})
     prefix = LIB_FILENAME_PREFIX_STRIP.get(pkg_name)
     out = []
     for lib in libs:
         if lib in aliases:
-            # Emit BOTH the alias AND the original — downstream consumers
-            # may pin either name (e.g. for protobuf some pin `protoc` and
-            # others pin `protolib`; both must resolve). The alias file is
-            # a symlink to the original (see _add_lib_aliases), so both
-            # find_library() calls succeed.
+            # Эмитим И алиас, И оригинал — потребители могут пинить любое имя
+            # (напр. для protobuf одни пинят `protoc`, другие `protolib`; оба
+            # должны резолвиться). Файл-алиас — симлинк на оригинал (см.
+            # _add_lib_aliases), так что оба find_library() сработают.
             out.append(aliases[lib])
             out.append(lib)
         elif prefix and lib.startswith(prefix):
             out.append(lib[len(prefix):])
         else:
             out.append(lib)
-    # Dedup but preserve insertion order (legacy framework iterates `components`
-    # in order; doesn't matter for correctness but cleaner CMakeLists.var).
+    # Dedup с сохранением порядка вставки (фреймворк идёт по `components` по
+    # порядку; на корректность не влияет, но CMakeLists.var чище).
     seen = set()
     return [x for x in out if not (x in seen or seen.add(x))]
 
 
-# Build-tool executables each package ships in lib/native/<variant>/ (like the
-# legacy TeamCity packages). They live in the Conan package's bin/; the deployer
-# copies them next to the libs AND lists them as components so the Elara
-# framework's find_program (GenerateGrpcCpp.cmake) locates the version-matched
-# protoc / grpc_cpp_plugin instead of falling back to system tools of the wrong
-# version (system protoc -> `google/protobuf/runtime_version.h` not found;
-# system grpc_cpp_plugin -> wrong gRPC ABI). Verified end-to-end on el_conf,
-# 2026-06-02.
+# Build-tool исполняемые, которые пакет кладёт в lib/native/<variant>/ (как legacy
+# TeamCity-пакеты). Лежат в bin/ Conan-пакета; deployer копирует их рядом с либами
+# И перечисляет как components, чтобы find_program Elara-фреймворка
+# (GenerateGrpcCpp.cmake) нашёл версионно-совпадающие protoc / grpc_cpp_plugin, а не
+# свалился на системные другой версии (системный protoc ->
+# `google/protobuf/runtime_version.h` not found; системный grpc_cpp_plugin ->
+# неверный gRPC ABI). Проверено end-to-end на el_conf, 2026-06-02.
 LEGACY_BIN_TOOLS = {
     "grpc": ("grpc_cpp_plugin",),
     "protobuf": ("protoc",),
@@ -460,12 +447,12 @@ LEGACY_BIN_TOOLS = {
 
 
 def _target_binutils_prefix(arch, user_toolchain):
-    """Binutils prefix for the *target* linker. Empty for native x86_64/i686.
+    """Binutils-префикс для линкера *цели*. Пусто для нативных x86_64/i686.
 
-    For Linaro ARM cross-builds the deployer must use the cross `ld` to merge
-    ARM relocatable objects (host `ld` rejects a foreign EM_ARM/EM_AARCH64).
-    Detection mirrors _resolve_arch_with_toolchain: a Linaro user_toolchain in
-    the conf marks an ARM cross run.
+    Для Linaro ARM cross-сборок deployer обязан использовать cross `ld`, чтобы
+    слить ARM relocatable-объекты (хостовый `ld` отвергает чужой EM_ARM/EM_AARCH64).
+    Определяется как в _resolve_arch_with_toolchain: Linaro user_toolchain в conf
+    означает ARM cross-прогон.
     """
     a = str(arch)
     if "linaro" in (user_toolchain or "").lower():
@@ -477,33 +464,32 @@ def _target_binutils_prefix(arch, user_toolchain):
 
 
 def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
-    """Merge grpc's separate `libupb*.a` archives into `libgrpc.a`, then
-    replace them with a single EMPTY `libupb.a` stub — so the package ships a
-    SELF-CONTAINED `libgrpc.a` PLUS a no-op `upb` component, byte-structurally
-    like the legacy TeamCity grpc package (which folded upb in and exposed only
-    a tiny stub upb).
+    """Сливает отдельные архивы grpc `libupb*.a` в `libgrpc.a`, затем заменяет их
+    одной ПУСТОЙ заглушкой `libupb.a` — так пакет несёт САМОДОСТАТОЧНУЮ `libgrpc.a`
+    ПЛЮС no-op компонент `upb`, байт-структурно как legacy TeamCity grpc-пакет
+    (он вшивал upb внутрь и выставлял лишь крошечную заглушку upb).
 
-    Why the fold is required (proven end-to-end on dev-astra18-13, 2026-06-02):
-    the legacy Elara framework (`ResolveDependencies.cmake`) flat-links each
-    component `.a` with no dependency graph / link order. grpc upstream splits
-    upb into overlapping per-feature archives (`libupb_json_lib.a`, ...) and the
-    package also carries an ~8KB stub `libupb.a`. A flat consumer then either:
-      - links the stub libupb.a  -> `undefined reference to upb_Encode/...`, or
-      - links the real upb libs  -> `multiple definition of google_protobuf_*`
-        (`descriptor.upb_minitable.c.o` is duplicated in both upb and libgrpc.a).
-    Partial-linking (`ld -r ... -z muldefs`) flattens grpc + upb into one
-    relocatable object, de-duplicating the overlapping descriptor minitables
-    (identical objects, first wins), yielding a libgrpc.a that links cleanly.
+    Зачем fold (доказано end-to-end на dev-astra18-13, 2026-06-02): legacy Elara-
+    фреймворк (`ResolveDependencies.cmake`) flat-линкует каждый компонент-`.a` без
+    графа зависимостей / порядка линковки. Upstream grpc дробит upb на
+    пересекающиеся per-feature архивы (`libupb_json_lib.a`, ...), и пакет также
+    несёт ~8KB заглушку `libupb.a`. Flat-потребитель тогда:
+      - линкует заглушку libupb.a -> `undefined reference to upb_Encode/...`, либо
+      - линкует реальные upb-либы  -> `multiple definition of google_protobuf_*`
+        (`descriptor.upb_minitable.c.o` дублируется в upb и libgrpc.a).
+    Partial-линк (`ld -r ... -z muldefs`) сплющивает grpc + upb в один relocatable-
+    объект, дедуплицируя пересекающиеся descriptor minitables (идентичные объекты,
+    первый побеждает), и даёт чисто линкующуюся libgrpc.a.
 
-    Why the EMPTY stub is required (2026-06-03): downstream consumers
-    (grpc_sdk, the el_conf chain, ... — many of them) carry a historical `upb`
-    link component in their OWN CMakeLists.var, left from when grpc shipped a
-    standalone upb. Deleting every libupb*.a (as the fold does) leaves that
-    reference dangling -> `ld: cannot find -lupb` at link time. The empty stub
-    keeps `upb` resolvable as a benign component (`find_library` finds it,
-    `_list_libs` re-emits `upb`, ld links it as a no-op) while the real upb
-    symbols stay folded inside libgrpc.a. Empty => zero duplicate symbols, so
-    no multiple-def — the fix lives entirely on our side, consumers untouched.
+    Зачем ПУСТАЯ заглушка (2026-06-03): downstream-потребители (grpc_sdk, цепочка
+    el_conf и многие др.) несут исторический link-компонент `upb` в СВОЁМ
+    CMakeLists.var — остаток от времён, когда grpc поставлял отдельный upb. Удаление
+    всех libupb*.a (как делает fold) оставляет эту ссылку висящей -> `ld: cannot find
+    -lupb` при линковке. Пустая заглушка держит `upb` резолвимым как безвредный
+    компонент (`find_library` находит, `_list_libs` снова эмитит `upb`, ld линкует
+    как no-op), а реальные upb-символы остаются внутри libgrpc.a. Пустая => ноль
+    дублей символов, нет multiple-def — фикс целиком на нашей стороне, потребителей
+    не трогаем.
     """
     if not os.path.isdir(lib_dir):
         return
@@ -524,10 +510,10 @@ def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
     os.remove(combined)
     for ulib in upb_libs:
         os.remove(ulib)
-    # Leave an EMPTY libupb.a stub so the legacy `upb` link component that
-    # downstream consumers reference still resolves (see docstring). `!<arch>\n`
-    # is a valid empty GNU `ar` archive: ld links it as a no-op, find_library()
-    # finds it by name, and _list_libs() re-emits `upb` as a grpc component.
+    # Оставляем ПУСТУЮ заглушку libupb.a, чтобы link-компонент `upb`, на который
+    # ссылаются downstream-потребители, по-прежнему резолвился (см. docstring).
+    # `!<arch>\n` — валидный пустой GNU `ar`-архив: ld линкует как no-op,
+    # find_library() находит по имени, _list_libs() снова эмитит `upb`.
     stub = os.path.join(lib_dir, "libupb.a")
     with open(stub, "wb") as _stub_f:
         _stub_f.write(b"!<arch>\n")
@@ -538,22 +524,21 @@ def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
 
 
 def _make_keepdirs(*dirs):
-    """Ensure each dir exists in the staged tree, and emit a .keepdir
-    marker IFF the dir is otherwise empty. The marker is only needed
-    so ZipFile retains the dir (it drops empty dirs); when the dir
-    already has real content, the marker is dead weight — and worse,
-    downstream tooling that globs the dir (e.g. Elara framework
-    collecting all files under `proto/` to feed protoc) treats the
-    .keepdir file as a regular entry and breaks. Verified on IN-658
-    el_conf build: sura_connector_client cmake configure failed with
-    `google/protobuf/timestamp.proto: File not found` until .keepdir
-    was removed from `proto/` (2026-05-25)."""
+    """Гарантирует, что каждый каталог есть в staged-дереве, и кладёт маркер
+    .keepdir ТОЛЬКО если каталог иначе пуст. Маркер нужен лишь чтобы ZipFile
+    сохранил каталог (пустые он выкидывает); если в каталоге уже есть реальное
+    содержимое, маркер — мёртвый груз и хуже того: downstream-тулинг, который
+    глобит каталог (напр. Elara-фреймворк собирает все файлы под `proto/` для
+    protoc), принимает .keepdir за обычный файл и ломается. Проверено на IN-658
+    el_conf: sura_connector_client cmake-конфиг падал с
+    `google/protobuf/timestamp.proto: File not found`, пока .keepdir не убрали
+    из `proto/` (2026-05-25)."""
     for d in dirs:
         os.makedirs(d, exist_ok=True)
         contents = [f for f in os.listdir(d) if f != ".keepdir"]
         if contents:
-            # Dir already has real content — drop a stale .keepdir if
-            # one was made earlier in this same deploy, and skip.
+            # В каталоге уже есть реальное содержимое — удаляем устаревший
+            # .keepdir, если он создан раньше в этом же деплое, и пропускаем.
             stale = os.path.join(d, ".keepdir")
             if os.path.isfile(stale):
                 os.remove(stale)
@@ -572,11 +557,10 @@ def deploy(graph, output_folder, **kwargs):
 
     for require, dep in deps:
         name = dep.ref.name
-        # `version_real` matches what is in the Conan cache (used for
-        # cache lookups via `_find_debug_package_path` etc).
-        # `version` is what we EMIT (filename, nuspec, _dependencies):
-        # LEGACY_DEP_VERSION_MAP override (if any) + ProGet-conflict
-        # VERSION_SUFFIX appended.
+        # `version_real` — то, что в Conan-кеше (для cache-lookup'ов через
+        # `_find_debug_package_path` и т.п.). `version` — то, что мы ЭМИТИМ (имя
+        # файла, nuspec, _dependencies): override LEGACY_DEP_VERSION_MAP (если
+        # есть) + VERSION_SUFFIX для разводки ProGet-конфликтов.
         version_real = str(dep.ref.version)
         version = LEGACY_DEP_VERSION_MAP.get(name, version_real) + VERSION_SUFFIX
         legacy_name = LEGACY_NAME_MAP.get(name, name)
@@ -588,21 +572,19 @@ def deploy(graph, output_folder, **kwargs):
         arch = _resolve_arch_with_toolchain(s.arch, os_name)
         build_type = str(s.build_type)
 
-        # The legacy CI naming uses linkage as a RUNTIME-CRT slot tag
-        # (shared = DynamicRT / GR113; static = StaticRT / GR121), NOT as
-        # a description of the library content (which is always `.a` in
-        # the post-IN-658 migration). Default: "shared" (DynamicRT slot
-        # consumed by downstream el_conf, grpc_sdk, sura).
-        # Override via env LEGACY_NUPKG_LINKAGE=static for GR121 slot.
-        # Per-package overrides take precedence (today none — see
-        # LEGACY_LINKAGE_OVERRIDE comment above).
+        # В legacy CI-именовании linkage — slot-тег RUNTIME-CRT (shared =
+        # DynamicRT / GR113; static = StaticRT / GR121), а НЕ описание содержимого
+        # либы (оно всегда `.a` после IN-658). По умолчанию "shared" (DynamicRT-
+        # слот, который читают el_conf, grpc_sdk, sura). Override через env
+        # LEGACY_NUPKG_LINKAGE=static для слота GR121. Per-package оверрайды имеют
+        # приоритет (сегодня их нет — см. коммент к LEGACY_LINKAGE_OVERRIDE выше).
         linkage = os.environ.get("LEGACY_NUPKG_LINKAGE", "shared").strip() or "shared"
         if linkage not in ("shared", "static"):
             linkage = "shared"
         linkage = LEGACY_LINKAGE_OVERRIDE.get(name, linkage)
 
         os_short = _resolve_os_short(os_name)
-        # Astra CI convention: drop gcc version (astra.gcc.static.x86_64).
+        # Соглашение Astra CI: версию gcc опускаем (astra.gcc.static.x86_64).
         if os_short == "astra" and compiler == "gcc":
             compiler_short = "gcc"
         else:
@@ -628,8 +610,8 @@ def deploy(graph, output_folder, **kwargs):
             )
             debug_pkg = release_pkg
 
-        # Staging — unique per pkg_id; final archive packs from this dir
-        # so root entries (.nuspec, CMakeLists.var, ...) land at zip root.
+        # Staging — уникален на pkg_id; финальный архив пакуется из этого каталога,
+        # чтобы корневые записи (.nuspec, CMakeLists.var, ...) легли в корень zip.
         staging = os.path.join(output_folder, "staging", pkg_id)
         if os.path.isdir(staging):
             shutil.rmtree(staging)
@@ -641,33 +623,32 @@ def deploy(graph, output_folder, **kwargs):
         if os.path.exists(src_include):
             shutil.copytree(src_include, dst_include)
 
-        # 1b. proto/ — legacy layout ships `.proto` files (protobuf
-        # well-knowns: timestamp.proto, duration.proto, ...; grpc plugin
-        # protos) in a separate top-level `proto/` tree with the same
-        # relative path structure as `include/`. Upstream protobuf installs
-        # them into `<prefix>/include/google/protobuf/*.proto`, so mirror
-        # any `*.proto` we copied above into `proto/` to match what the
-        # legacy Elara framework's `protobuf_generate_grpc_cpp()` consumes
-        # (`--proto_path=<pkg>/proto`). Without this, downstream `.proto`
-        # files that `import "google/protobuf/timestamp.proto";` fail with
-        # `File not found` during protoc invocation in el_conf builds.
+        # 1b. proto/ — legacy-layout кладёт `.proto`-файлы (protobuf well-known'ы:
+        # timestamp.proto, duration.proto, ...; protos grpc-плагина) в отдельное
+        # top-level дерево `proto/` с той же относительной структурой, что и
+        # `include/`. Upstream protobuf ставит их в
+        # `<prefix>/include/google/protobuf/*.proto`, поэтому зеркалим все
+        # скопированные выше `*.proto` в `proto/` под то, что потребляет
+        # `protobuf_generate_grpc_cpp()` legacy Elara-фреймворка
+        # (`--proto_path=<pkg>/proto`). Без этого downstream `.proto`, которые
+        # `import "google/protobuf/timestamp.proto";`, падают `File not found`
+        # при вызове protoc в el_conf-сборках.
         #
-        # EXCLUDE upstream-only extras the Elara legacy fork strips:
-        #   - `**/compiler/plugin.proto` — protoc plugin API; not in legacy
-        #     .nupkg, and its presence breaks downstream protoc when it
-        #     resolves transitive imports (verified IN-658 el_conf build,
-        #     2026-05-25 — see test-astra/diff_two_dirs.sh).
-        #   - `**/java/...` — Java-specific well-knowns like
-        #     `java_features.proto` (edition-2023 syntax that older protoc
-        #     can't parse); legacy doesn't ship them and they're irrelevant
-        #     to C++ consumers.
-        # Legacy protobuf 4.25.2 nupkg ships exactly 12 well-known .proto
-        # files under `proto/google/protobuf/`; we match.
+        # ИСКЛЮЧАЕМ upstream-only лишнее, которое legacy-форк Elara срезает:
+        #   - `**/compiler/plugin.proto` — protoc plugin API; нет в legacy .nupkg,
+        #     и его наличие ломает downstream protoc при резолве транзитивных
+        #     import'ов (проверено IN-658 el_conf, 2026-05-25 —
+        #     см. test-astra/diff_two_dirs.sh).
+        #   - `**/java/...` — Java-специфичные well-known'ы вроде
+        #     `java_features.proto` (синтаксис edition-2023, который старый protoc
+        #     не парсит); legacy их не поставляет, для C++-потребителей не нужны.
+        # Legacy protobuf 4.25.2 nupkg несёт ровно 12 well-known .proto под
+        # `proto/google/protobuf/`; совпадаем.
         dst_proto = os.path.join(staging, "proto")
         _PROTO_EXCLUDE_DIRS = {"compiler", "java"}
         if os.path.isdir(src_include):
             for root, dirs, files in os.walk(src_include):
-                # Prune excluded subdirs in-place (os.walk respects this).
+                # Срезаем исключённые подкаталоги на месте (os.walk это учитывает).
                 dirs[:] = [d for d in dirs if d not in _PROTO_EXCLUDE_DIRS]
                 for fname in files:
                     if not fname.endswith(".proto"):
@@ -678,8 +659,8 @@ def deploy(graph, output_folder, **kwargs):
                     shutil.copy2(os.path.join(root, fname), target)
 
         # 2. lib/native/{,-d}/
-        # abseil ships its legacy coarse libs in a lib/ sub-folder
-        # (LEGACY_LIBDIR_OVERRIDE); everything else uses lib/ directly.
+        # abseil кладёт legacy-крупные либы в подпапку lib/
+        # (LEGACY_LIBDIR_OVERRIDE); остальные используют lib/ напрямую.
         _lib_sub = LEGACY_LIBDIR_OVERRIDE.get(name)
 
         def _libdir(pkg_root):
@@ -691,22 +672,21 @@ def deploy(graph, output_folder, **kwargs):
         n_rel = _copy_libs(_libdir(release_pkg), _staging_rel_libdir, pkg_name=name)
         n_dbg = _copy_libs(_libdir(debug_pkg), _staging_dbg_libdir, pkg_name=name)
 
-        # grpc: fold the separate upb static archives into libgrpc.a so the
-        # legacy flat-linking framework sees a self-contained libgrpc.a, exactly
-        # like the legacy TeamCity package. Operates on the staged copy only;
-        # the upstream Conan package folder is untouched. See
-        # _fold_upb_into_libgrpc for the full why.
+        # grpc: вшиваем отдельные статические архивы upb в libgrpc.a, чтобы
+        # legacy flat-линкующий фреймворк видел самодостаточную libgrpc.a, как в
+        # legacy TeamCity-пакете. Работаем только над staged-копией; upstream
+        # Conan-пакет не трогаем. Полное «зачем» — в _fold_upb_into_libgrpc.
         if name == "grpc":
             _ld = _target_binutils_prefix(
                 s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld"
-            # Release fold is required. _fold_upb_into_libgrpc only mutates the
-            # dir AFTER `ld -r` succeeds, so a failure leaves the dir intact.
+            # Release-fold обязателен. _fold_upb_into_libgrpc меняет каталог только
+            # ПОСЛЕ успешного `ld -r`, так что падение оставляет каталог целым.
             _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output)
-            # Debug libgrpc.a is huge (~1.4 GB static+debug); `ld -r` on it can
-            # exhaust RAM on a CI agent. Make it non-fatal: if it fails, ship the
-            # debug variant unfolded (release is what consumers link in Release
-            # builds). Debug consumers would then hit upb refs — acceptable until
-            # we split the fold or stream it.
+            # Debug libgrpc.a огромна (~1.4 GB static+debug); `ld -r` по ней может
+            # исчерпать RAM на CI-агенте. Делаем не-фатальным: при падении грузим
+            # debug-вариант без fold (в Release-сборках потребители линкуют
+            # release). Debug-потребители тогда упрутся в upb-ссылки — приемлемо,
+            # пока fold не разбит или не стримится.
             try:
                 _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output)
             except Exception as _fold_err:
@@ -714,15 +694,15 @@ def deploy(graph, output_folder, **kwargs):
                     f"legacy_nupkg: debug libgrpc.a upb-fold skipped ({_fold_err}); "
                     "release variant is folded, debug shipped as-is")
 
-        # Ship build-tool executables (grpc -> grpc_cpp_plugin, protobuf ->
-        # protoc) in lib/native/<suffix>/, matching the legacy packages. The
-        # Elara framework's GenerateGrpcCpp.cmake locates the version-matched
-        # protoc + grpc_cpp_plugin; without them codegen falls back to system
-        # tools of the wrong version. Source is the Conan package's bin/ (needs a
-        # build that actually kept the binary — protobuf must be built with
-        # protobuf_BUILD_PROTOC_BINARIES=ON, which the recipe sets).
-        # NOTE for ARM cross: ships the HOST-arch binary; an x86_64 cross
-        # consumer needs the build-context binary — revisit for the ARM path.
+        # Кладём build-tool исполняемые (grpc -> grpc_cpp_plugin, protobuf ->
+        # protoc) в lib/native/<suffix>/, как legacy-пакеты. GenerateGrpcCpp.cmake
+        # Elara-фреймворка находит версионно-совпадающие protoc + grpc_cpp_plugin;
+        # без них кодоген сваливается на системные инструменты другой версии.
+        # Источник — bin/ Conan-пакета (нужна сборка, реально сохранившая бинарь —
+        # protobuf должен собираться с protobuf_BUILD_PROTOC_BINARIES=ON, что
+        # рецепт и ставит).
+        # ВНИМАНИЕ для ARM cross: кладёт бинарь HOST-arch; x86_64 cross-потребителю
+        # нужен бинарь build-context — пересмотреть для ARM-ветки.
         for _tool in LEGACY_BIN_TOOLS.get(name, ()):
             for _src_pkg, _dst in ((release_pkg, _staging_rel_libdir),
                                    (debug_pkg, _staging_dbg_libdir)):
@@ -733,13 +713,12 @@ def deploy(graph, output_folder, **kwargs):
                     shutil.copy2(_src_tool, _dst_tool)
                     os.chmod(_dst_tool, 0o755)
 
-        # Component names must use the LEGACY naming (zlib, not z) — see
-        # _legacy_component_names. The .so files themselves are aliased by
-        # _add_lib_aliases inside _copy_libs above. Read from the STAGING dir
-        # (post-fold): the upb FEATURE libs (libupb_json_lib, ...) are folded
-        # into libgrpc.a, leaving only the single empty `libupb.a` stub -> `upb`
-        # is emitted as one benign component so consumers resolve it (see
-        # _fold_upb_into_libgrpc).
+        # Имена компонентов — LEGACY (zlib, не z), см. _legacy_component_names.
+        # Сами .so алиасятся в _add_lib_aliases внутри _copy_libs выше. Читаем из
+        # STAGING-каталога (после fold): feature-либы upb (libupb_json_lib, ...)
+        # вшиты в libgrpc.a, остаётся единственная пустая заглушка `libupb.a` ->
+        # `upb` эмитится одним безвредным компонентом, чтобы потребители его
+        # резолвили (см. _fold_upb_into_libgrpc).
         libs = _legacy_component_names(_list_libs(_staging_rel_libdir), name)
 
         # 3. .targets
@@ -748,9 +727,9 @@ def deploy(graph, output_folder, **kwargs):
                   "w", encoding="utf-8") as f:
             f.write(_generate_targets(legacy_name, os_short, compiler_short, linkage, arch, libs))
 
-        # 4. .nuspec — NuGet/ProGet require it at archive root, not in nuget/.
-        # Apply the same name+version remap that _dependencies uses, so the
-        # .nuspec advertises the slots the downstream feed actually serves.
+        # 4. .nuspec — NuGet/ProGet требуют его в корне архива, не в nuget/.
+        # Применяем тот же remap имени+версии, что и _dependencies, чтобы .nuspec
+        # объявлял слоты, которые реально отдаёт downstream-feed.
         nuspec_deps = []
         for _, d in dep.dependencies.host.items():
             dep_n = LEGACY_DEP_NAME_MAP.get(
@@ -763,11 +742,11 @@ def deploy(graph, output_folder, **kwargs):
             f.write(_generate_nuspec(legacy_name, version, os_short, compiler_short,
                                      linkage, arch, nuspec_deps))
 
-        # 5. .keepdir markers
-        # `lib/native/<lib_suffix>{,-d}` must survive ZIP archiving even
-        # when empty (ZipFile drops empty dirs). Downstream
-        # ResolveDependencies.cmake checks the path exists and fails
-        # hard ("Unable to find debug version of <pkg>") otherwise.
+        # 5. .keepdir-маркеры
+        # `lib/native/<lib_suffix>{,-d}` должны пережить ZIP-архивацию даже
+        # пустыми (ZipFile выкидывает пустые каталоги). Иначе downstream
+        # ResolveDependencies.cmake проверяет наличие пути и падает
+        # ("Unable to find debug version of <pkg>").
         _make_keepdirs(
             os.path.join(staging, "lib", "net461"),
             os.path.join(staging, "lib", "native", lib_suffix),
@@ -782,24 +761,23 @@ def deploy(graph, output_folder, **kwargs):
 
         # 6. CMakeLists.var
         components = list(libs) if libs else [name]
-        # grpc_cpp_plugin / protoc are EXECUTABLES (no .a/.so) so _list_libs
-        # skips them — but the legacy CMakeLists.var lists them as components so
-        # the Elara framework (GenerateGrpcCpp.cmake's find_program) locates the
-        # version-matched tool in lib/native/<variant>. Without the component
-        # entry, dropping the file alone is invisible. Added to CMakeLists.var
-        # only, NOT to the Windows .targets lib list (not link libraries).
+        # grpc_cpp_plugin / protoc — ИСПОЛНЯЕМЫЕ (нет .a/.so), поэтому _list_libs
+        # их пропускает; но legacy CMakeLists.var перечисляет их как components,
+        # чтобы Elara-фреймворк (find_program в GenerateGrpcCpp.cmake) нашёл
+        # версионно-совпадающий инструмент в lib/native/<variant>. Без component-
+        # записи просто положить файл недостаточно — его не видно. Добавляем
+        # только в CMakeLists.var, НЕ в lib-список Windows .targets (это не link-либы).
         for _tool in LEGACY_BIN_TOOLS.get(name, ()):
             if os.path.isfile(os.path.join(_staging_rel_libdir, _tool)) \
                     and _tool not in components:
                 components.append(_tool)
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
-        # Direct deps of THIS package only (not the whole transitive closure):
-        # downstream Elara CMake framework (ResolveDependencies.cmake in
-        # grpc_sdk and friends) resolves transitives by walking each
-        # consumed package's own _dependencies var. Format that framework
-        # expects: `<legacy_name>:<version>` per line, matching the
-        # legacy_name + version of the corresponding .nupkg in the feed.
+        # Только прямые deps ЭТОГО пакета (не весь транзитивный замыкатель):
+        # downstream Elara-фреймворк (ResolveDependencies.cmake в grpc_sdk и др.)
+        # резолвит транзитивы, обходя _dependencies каждого потреблённого пакета.
+        # Формат, который ждёт фреймворк: `<legacy_name>:<version>` на строку,
+        # совпадает с legacy_name + version соответствующего .nupkg в feed.
         var_deps = []
         for _, d in dep.dependencies.host.items():
             dep_legacy_name = LEGACY_DEP_NAME_MAP.get(
@@ -807,29 +785,28 @@ def deploy(graph, output_folder, **kwargs):
             dep_version = (LEGACY_DEP_VERSION_MAP.get(d.ref.name, str(d.ref.version))
                            + VERSION_SUFFIX)
             var_deps.append(f"{dep_legacy_name}:{dep_version}")
-        # Extra pseudo-deps that downstream ResolveDependencies.cmake
-        # expects (because the legacy Elara grpc/1.60.1 fork shipped them
-        # as separate packages) but upstream grpc/protobuf 1.60.1/4.25.2
-        # have vendored internally. Only emitted for grpc 1.60.x. These
-        # refer to packages from the legacy Bitbucket feed in ProGet
-        # (not produced by this build), so VERSION_SUFFIX is NOT applied.
+        # Доп. псевдо-deps, которых ждёт downstream ResolveDependencies.cmake
+        # (legacy Elara-форк grpc/1.60.1 поставлял их отдельными пакетами), а
+        # upstream grpc/protobuf 1.60.1/4.25.2 вендорят внутри. Эмитим только для
+        # grpc 1.60.x. Это пакеты из legacy Bitbucket-feed в ProGet (этой сборкой
+        # не производятся), поэтому VERSION_SUFFIX НЕ применяется.
         if name == "grpc" and version.startswith("1.60."):
-            # address_sorting stays a separate legacy package (links cleanly as
-            # its own .a). upb is NOT emitted as a dependency: it is folded into
-            # libgrpc.a by _fold_upb_into_libgrpc, which also leaves an empty
-            # libupb.a stub so `upb` ships as a self-contained no-op COMPONENT of
-            # grpc — consumers that reference `upb` resolve it from grpc itself.
-            # Re-adding `upb:0.2.0` as a dep would pull the legacy standalone
-            # libupb.a (real symbols), re-duplicating the google_protobuf
-            # descriptor minitables already inside the folded libgrpc.a ->
-            # multiple-definition at link time.
+            # address_sorting остаётся отдельным legacy-пакетом (чисто линкуется
+            # своей .a). upb как dependency НЕ эмитим: он вшит в libgrpc.a через
+            # _fold_upb_into_libgrpc, который оставляет пустую заглушку libupb.a,
+            # так что `upb` идёт самодостаточным no-op КОМПОНЕНТОМ grpc —
+            # потребители, ссылающиеся на `upb`, резолвят его из самого grpc.
+            # Возврат `upb:0.2.0` в deps подтянул бы legacy standalone libupb.a
+            # (реальные символы) и снова продублировал бы google_protobuf
+            # descriptor minitables, уже лежащие в свёрнутой libgrpc.a ->
+            # multiple-definition при линковке.
             var_deps.append("address_sorting:1.0.0")
         with open(os.path.join(staging, "CMakeLists.var"), "w", encoding="utf-8") as f:
             f.write(_generate_cmakelists_var(legacy_name, version, components, platforms, var_deps))
 
         # 7. LICENSE.txt — некоторые рецепты (openssl) кладут в licenses/ не только
         # файлы, но и подпапки (licenses/external/...). Берём только plain-файлы;
-        # последний выигрывает (одного файла достаточно для legacy-формата).
+        # побеждает последний (одного файла достаточно для legacy-формата).
         src_lic = os.path.join(release_pkg, "licenses")
         dst_lic = os.path.join(staging, "LICENSE.txt")
         copied = False
@@ -842,9 +819,9 @@ def deploy(graph, output_folder, **kwargs):
         if not copied:
             open(dst_lic, "w").close()
 
-        # 8. .nupkg — pack from `staging` so .nuspec lands at archive root
-        # (was packing from parent `staging/`, leaving an extra <variant_dir>/
-        # wrapper that broke ProGet upload and downstream CMakeLists.var resolution).
+        # 8. .nupkg — пакуем из `staging`, чтобы .nuspec лёг в корень архива
+        # (раньше паковали из родительского `staging/`, оставляя лишний слой-
+        # обёртку <variant_dir>/, ломавший заливку в ProGet и резолв CMakeLists.var).
         nupkg = os.path.join(output_folder, f"{pkg_id}.{version}.nupkg")
         with zipfile.ZipFile(nupkg, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(staging):

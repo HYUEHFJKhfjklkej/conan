@@ -1,57 +1,57 @@
 #!/bin/bash
-# Rewire one dependency entry inside a legacy .nupkg.
+# Переписывает одну запись зависимости внутри legacy .nupkg.
 #
-# Why this exists
+# Зачем это нужно
 # ---------------
-# The upstream-mirror Conan build of grpc/1.60.1 deploys abseil under the
-# `absl:0.2.0.1` slot (LEGACY_DEP_VERSION_MAP "abseil"->"0.2.0" plus
-# VERSION_SUFFIX ".1" in extensions/deployers/legacy_nupkg.py). So grpc and
-# protobuf resolve `absl:0.2.0.1` — the good abseil, with `cord` and the
-# matching `ABSL_OPTION_INLINE_NAMESPACE_NAME`.
+# Conan-сборка grpc/1.60.1 из upstream-mirror кладёт abseil в слот
+# `absl:0.2.0.1` (LEGACY_DEP_VERSION_MAP "abseil"->"0.2.0" плюс
+# VERSION_SUFFIX ".1" в extensions/deployers/legacy_nupkg.py). Поэтому grpc и
+# protobuf резолвят `absl:0.2.0.1` — правильный abseil, с `cord` и
+# совпадающим `ABSL_OPTION_INLINE_NAMESPACE_NAME`.
 #
-# But the legacy Bitbucket packages `upb` -> `utf8_range` were NOT rebuilt;
-# their CMakeLists.var `_dependencies` still name the OLD `absl:0.2.0`
-# (and `utf8_range:0.1.0`). The Elara ResolveDependencies framework
-# resolves every `_dependencies` entry literally — so `utf8_range` drags
-# the old abseil back onto the link line next to the new one. Two abseil
-# packages, inline-namespace mismatch, `undefined reference to
-# absl::lts_NNNNNNNN::...` at link time.
+# Но legacy-пакеты с Bitbucket `upb` -> `utf8_range` НЕ пересобраны; их
+# CMakeLists.var `_dependencies` всё ещё называют СТАРЫЙ `absl:0.2.0`
+# (и `utf8_range:0.1.0`). Фреймворк Elara ResolveDependencies резолвит
+# каждую запись `_dependencies` буквально — поэтому `utf8_range` тащит
+# старый abseil обратно на link line рядом с новым. Два пакета abseil,
+# несовпадение inline-namespace, `undefined reference to
+# absl::lts_NNNNNNNN::...` при линковке.
 #
-# Symptom in the consumer resolve log (grpc_sdk): BOTH
+# Симптом в resolve-логе consumer (grpc_sdk): присутствуют ОБА
 #   Found installed package 'absl.lin.gcc84.shared.x86_64.0.2.0.1'
 #   Found installed package 'absl.lin.gcc84.shared.x86_64.0.2.0'
-# appear — the second one pulled in under `Find dependencies for utf8_range`.
+# — второй подтянут под `Find dependencies for utf8_range`.
 #
-# This script surgically repoints ONE dependency token in a legacy
-# .nupkg's CMakeLists.var + .nuspec, and bumps the package's own version
-# so the patched artifact can be uploaded to ProGet next to the original.
+# Скрипт точечно перенаправляет ОДИН токен зависимости в CMakeLists.var +
+# .nuspec legacy .nupkg и бампит собственную версию пакета, чтобы
+# пропатченный артефакт можно было залить в ProGet рядом с оригиналом.
 #
 # Usage
 # -----
 #   patch_nupkg_dep.sh <in.nupkg> <old-dep> <new-dep> <new-self-version>
 #
-#   <old-dep> / <new-dep>   dependency token in CMakeLists.var form: name:version
-#   <new-self-version>      version the patched .nupkg advertises; MUST differ
-#                           from the original (ProGet versions are immutable)
+#   <old-dep> / <new-dep>   токен зависимости в форме CMakeLists.var: name:version
+#   <new-self-version>      версия пропатченного .nupkg; ДОЛЖНА отличаться от
+#                           оригинала (версии в ProGet неизменяемы)
 #
-# Fixing the utf8_range / upb / absl chain — TWO runs
-# ---------------------------------------------------
-#   # 1. utf8_range stops dragging the old abseil:
+# Починка цепочки utf8_range / upb / absl — ДВА прогона
+# -----------------------------------------------------
+#   # 1. utf8_range перестаёт тащить старый abseil:
 #   ./test-astra/patch_nupkg_dep.sh \
 #       utf8_range.lin.gcc84.shared.x86_64.0.1.0.nupkg \
 #       absl:0.2.0 absl:0.2.0.1 0.1.0.1
 #
-#   # 2. upb points at the patched utf8_range. Without this, step 1 is dead
-#   #    weight: the resolver matches name:version literally, so upb's
-#   #    `utf8_range:0.1.0` keeps resolving the UNPATCHED 0.1.0.
+#   # 2. upb указывает на пропатченный utf8_range. Без этого шаг 1 бесполезен:
+#   #    резолвер сопоставляет name:version буквально, поэтому `utf8_range:0.1.0`
+#   #    из upb продолжает резолвить НЕпропатченную 0.1.0.
 #   ./test-astra/patch_nupkg_dep.sh \
 #       upb.lin.gcc84.shared.x86_64.0.2.0.nupkg \
 #       utf8_range:0.1.0 utf8_range:0.1.0.1 0.2.0.1
 #
-# Then upload both produced .nupkg to ProGet, clear the consumer's stale
-# extracted package dirs, and re-run the grpc_sdk build.
+# Затем залить оба .nupkg в ProGet, вычистить у consumer устаревшие
+# распакованные каталоги пакетов и перезапустить сборку grpc_sdk.
 #
-# Exit codes: 0 ok / 1 usage or patch error.
+# Exit codes: 0 ok / 1 ошибка usage или патча.
 
 set -euo pipefail
 
@@ -74,11 +74,11 @@ NEW_DEP_VER="${NEW_DEP#*:}"
 [ "$OLD_DEP_NAME" = "$NEW_DEP_NAME" ] || \
     echo "NOTE: dep name changes ${OLD_DEP_NAME} -> ${NEW_DEP_NAME}; .nuspec <id> name segment is NOT rewritten"
 
-# regex-escape a literal for use inside a sed -E `s@...@...@` command
-# (dep tokens contain ':' so ':' cannot be the delimiter — we use '@').
+# экранируем литерал для regex внутри sed -E `s@...@...@`
+# (токены dep содержат ':', поэтому делимитером берём '@', а не ':').
 esc() { printf '%s' "$1" | sed 's/[][\.*^$(){}?+|@]/\\&/g'; }
 
-# in-place edit portable across GNU and BSD sed (no `sed -i`)
+# in-place правка, переносимая между GNU и BSD sed (без `sed -i`)
 sed_inplace() { local f="$1"; shift; sed -E "$@" "$f" > "$f.tmp" && mv "$f.tmp" "$f"; }
 
 OLD_DEP_RE="$(esc "$OLD_DEP")"
@@ -90,8 +90,8 @@ trap 'rm -rf "$WORK"' EXIT
 echo "[1/6] unpack $IN_NUPKG"
 unzip -q "$IN_NUPKG" -d "$WORK"
 
-# Legacy nupkgs put the control files at archive root; be tolerant of a
-# nested wrapper dir all the same.
+# Legacy nupkg держат control-файлы в корне архива; на всякий случай
+# допускаем и вложенный wrapper-каталог.
 CMV="$(find "$WORK" -name CMakeLists.var -type f | head -1)"
 NUSPEC="$(find "$WORK" -name '*.nuspec' -type f | head -1)"
 [ -n "$CMV" ]    || die "CMakeLists.var not found inside nupkg"
@@ -101,9 +101,9 @@ echo "      CMakeLists.var: $CMV_REL"
 echo "      nuspec        : $NUSPEC_REL"
 
 echo "[2/6] CMakeLists.var: ${OLD_DEP} -> ${NEW_DEP}"
-# Match the dep token only as a whole token: not preceded by an identifier
-# char, not followed by a digit or dot — so `absl:0.2.0` never matches
-# inside `absl:0.2.0.1`.
+# Матчим токен dep только целиком: без предшествующего символа идентификатора
+# и без последующей цифры/точки — чтобы `absl:0.2.0` не совпадал внутри
+# `absl:0.2.0.1`.
 sed_inplace "$CMV" "s@(^|[^A-Za-z0-9_])${OLD_DEP_RE}([^0-9.]|\$)@\1${NEW_DEP}\2@g"
 if grep -qE "(^|[^A-Za-z0-9_])${OLD_DEP_RE}([^0-9.]|$)" "$CMV"; then
     echo "      WARN: '${OLD_DEP}' still present after patch — unexpected"
@@ -115,8 +115,8 @@ fi
 sed -n '/_dependencies/,/)/p' "$CMV" | sed 's/^/        /'
 
 echo "[3/6] .nuspec: dependency '${OLD_DEP_NAME}' version ${OLD_DEP_VER} -> ${NEW_DEP_VER}"
-# Legacy .nuspec dep id is `<name>.<os>.<comp>.<linkage>.<arch>`; one capture
-# group spans the whole prefix so the platform suffix is kept intact.
+# id зависимости в legacy .nuspec: `<name>.<os>.<comp>.<linkage>.<arch>`; одна
+# capture-группа захватывает весь префикс, чтобы platform-суффикс не потерялся.
 sed_inplace "$NUSPEC" \
   "s@(<dependency[^>]*id=\"${OLD_DEP_NAME}[^\"]*\"[^>]*version=\")${OLD_DEP_VER_RE}(\")@\1${NEW_DEP_VER}\2@"
 if grep -qE "id=\"${OLD_DEP_NAME}[^\"]*\"[^>]*version=\"$(esc "$NEW_DEP_VER")\"" "$NUSPEC"; then

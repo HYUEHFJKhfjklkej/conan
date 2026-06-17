@@ -1,8 +1,8 @@
 @echo off
 :: ============================================
-::  Build zlib (canonical conan-center recipe)
-::  4 variants on Windows MSVC: static/Release, static/Debug, shared/Release, shared/Debug
-::  Each build runs test_package automatically.
+::  Сборка zlib (canonical-рецепт из conan-center).
+::  4 варианта на Windows MSVC: static/Release, static/Debug, shared/Release, shared/Debug.
+::  Каждая сборка автоматически прогоняет test_package.
 :: ============================================
 setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 

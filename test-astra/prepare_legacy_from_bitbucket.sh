@@ -33,18 +33,13 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Конфигурация. Формат каждой строки:
-#   "pkg_name|version|repo_url|branch_or_tag"
-#
-# pkg_name      — то имя что будет в Conan (и в выходном nupkg),
-#                 должно совпадать с тем что el_conf пишет в _dependencies
-#                 (absl, re2, cares, upb, address_sorting, grpc и т.д.).
-# version       — Elara internal version (например 0.2.0 для absl).
-# repo_url      — HTTPS URL Bitbucket-репозитория.
-# branch_or_tag — опционально; если пусто или placeholder — берёт HEAD.
-#
-# Поставь <PROJECT>, <REPO>, <TAG> на свои значения — что не подставишь
-# (останется placeholder), будет пропущено с пометкой SKIP.
+# Конфигурация. Формат строки: "pkg_name|version|repo_url|branch_or_tag"
+#   pkg_name      — имя в Conan и в выходном nupkg; должно совпадать с тем,
+#                   что el_conf пишет в _dependencies (absl, re2, cares, ...).
+#   version       — Elara internal version (например 0.2.0 для absl).
+#   repo_url      — HTTPS URL Bitbucket-репозитория.
+#   branch_or_tag — опционально; пусто или placeholder — берётся HEAD.
+# Незаполненные placeholder'ы (<PROJECT>/<TAG>) пропускаются с пометкой SKIP.
 # ---------------------------------------------------------------------------
 PACKAGES=(
     "absl|0.2.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/absl.git|<TAG_OR_BRANCH>"
@@ -58,9 +53,7 @@ PACKAGES=(
     "zlib|1.3.0|https://bitbucket.inc.elara.local/scm/<PROJECT>/zlib.git|<TAG_OR_BRANCH>"
 )
 
-# ---------------------------------------------------------------------------
-# Креды через env (не зашиваем в скрипт)
-# ---------------------------------------------------------------------------
+# Креды через env (не зашиваем в скрипт).
 BITBUCKET_USER="${BITBUCKET_USER:-}"
 BITBUCKET_PASS="${BITBUCKET_PASS:-}"
 
@@ -86,23 +79,20 @@ FORCE_REGEN="${FORCE_REGEN:-0}"
 
 mkdir -p "$LEGACY_DIR" "$CLONE_TMP"
 
-# URL-encode credentials so $ / @ / etc в пароле не ломают URL.
+# URL-encode кред: чтобы $ / @ и пр. в пароле не ломали URL.
 url_encode() {
     python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
 }
 encoded_user=$(url_encode "$BITBUCKET_USER")
 encoded_pass=$(url_encode "$BITBUCKET_PASS")
 
-# Сгенерировать имя класса PascalCase из snake_case имени.
+# PascalCase-имя класса из snake_case имени.
 class_name_for() {
     python3 -c "import sys; print(''.join(s.capitalize() for s in sys.argv[1].replace('-','_').split('_')))" "$1"
 }
 
-# ---------------------------------------------------------------------------
-# Шаблон conanfile.py: тонкая обёртка над Elara CMakeLists.
-# Если у конкретного pkg у Elara нестандартный build (autotools, custom
-# install layout) — после прогона скрипта откорректируй вручную.
-# ---------------------------------------------------------------------------
+# Шаблон conanfile.py: тонкая обёртка над Elara CMakeLists. Если у пакета
+# нестандартный build (autotools, custom layout) — поправь вручную после прогона.
 write_conanfile() {
     local pkg="$1"
     local dst_file="$2"
@@ -210,8 +200,8 @@ class ${class_name}Conan(ConanFile):
 EOF
 }
 
-# Простой conandata.yml — версия бандлится локально, URL/sha256 пустые
-# (на случай если кто-то захочет fallback к скачиванию).
+# Простой conandata.yml: версия бандлится локально, URL/sha256 пустые
+# (на случай fallback к скачиванию).
 write_conandata() {
     local ver="$1"
     local dst_file="$2"
@@ -227,9 +217,7 @@ sources:
 EOF
 }
 
-# ---------------------------------------------------------------------------
-# Основной цикл
-# ---------------------------------------------------------------------------
+# Основной цикл.
 success=()
 skipped=()
 failed=()
@@ -237,7 +225,7 @@ failed=()
 for entry in "${PACKAGES[@]}"; do
     IFS='|' read -r pkg ver url ref <<< "$entry"
 
-    # Фильтр через env
+    # Фильтр через env PKG_FILTER.
     if [ -n "$PKG_FILTER" ]; then
         case " $PKG_FILTER " in
             *" $pkg "*) ;;
@@ -280,7 +268,7 @@ for entry in "${PACKAGES[@]}"; do
     fi
 
     archive="$src_dir/$pkg-$ver.tar.gz"
-    # Упаковываем содержимое clone_dir (без .git) с префиксом <pkg>-<ver>/
+    # Упаковываем clone_dir (без .git) с префиксом <pkg>-<ver>/.
     (cd "$clone_dir" && tar czf "$archive" \
          --exclude='./.git' \
          --transform "s,^\.,$pkg-$ver," \
@@ -288,7 +276,7 @@ for entry in "${PACKAGES[@]}"; do
     archive_size=$(du -h "$archive" | cut -f1)
     echo "[OK] archive: $archive ($archive_size)"
 
-    # conanfile.py — генерируем только если нет (либо FORCE_REGEN=1)
+    # conanfile.py — генерируем только если нет (или FORCE_REGEN=1).
     if [ ! -f "$pkg_dir/conanfile.py" ] || [ "$FORCE_REGEN" = "1" ]; then
         write_conanfile "$pkg" "$pkg_dir/conanfile.py"
         echo "[OK] generated $pkg_dir/conanfile.py"
@@ -296,7 +284,7 @@ for entry in "${PACKAGES[@]}"; do
         echo "[KEEP] $pkg_dir/conanfile.py существует (FORCE_REGEN=1 чтобы пересоздать)"
     fi
 
-    # conandata.yml — тоже
+    # conandata.yml — аналогично.
     if [ ! -f "$pkg_dir/conandata.yml" ] || [ "$FORCE_REGEN" = "1" ]; then
         write_conandata "$ver" "$pkg_dir/conandata.yml"
     fi
@@ -305,9 +293,7 @@ for entry in "${PACKAGES[@]}"; do
     success+=("$pkg:$ver")
 done
 
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
+# Итог.
 echo
 echo "============================================="
 echo "Summary"

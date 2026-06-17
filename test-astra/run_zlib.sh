@@ -1,8 +1,8 @@
 #!/bin/bash
 # ============================================
-#  Build zlib (canonical conan-center recipe) in 4 variants:
+#  Сборка zlib (канонический рецепт conan-center) в 4 вариантах:
 #    static/Release, static/Debug, shared/Release, shared/Debug
-#  Each build runs test_package (consumer smoke test) automatically.
+#  Каждая сборка автоматически прогоняет test_package (smoke потребителя).
 # ============================================
 set -euo pipefail
 
@@ -50,6 +50,7 @@ conan list "zlib/1.3.1:*" 2>/dev/null || true
 
 echo ""
 echo "[INFO] Confirming upstream sources untouched:"
+# Проверка, что upstream-исходники не трогали: sha256 == conan-center conandata.yml
 SRC_TARBALL="$ROOT_DIR/zlib/src/zlib-1.3.1.tar.gz"
 if [ -f "$SRC_TARBALL" ]; then
     SHA=$(sha256sum "$SRC_TARBALL" | awk '{print $1}')

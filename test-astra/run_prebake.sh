@@ -1,33 +1,29 @@
 #!/bin/bash
-# Verifies that the published grpc-tc-mirror image in ProGet can produce
-# the seven .nupkg artefacts end-to-end (no test_arm_cross.sh scaffolding,
-# just `docker run` against the pinned tag). This is the gold-standard
-# acceptance test before handing the image off to TeamCity.
+# Проверяет, что опубликованный в ProGet образ grpc-tc-mirror собирает семь
+# .nupkg end-to-end (без обвязки test_arm_cross.sh, просто `docker run` по
+# закреплённому тегу). Эталонный acceptance-тест перед передачей образа в TeamCity.
 #
-# Usage:
+# Использование:
 #   ./run_prebake.sh arm
 #   ./run_prebake.sh arm64
 #   ./run_prebake.sh x86_64
 #
-# Required env:
-#   REGISTRY     ProGet hostname + main feed (e.g. proget.example/main).
-#                Default: proget.inc.elara.local/main
+# Обязательный env:
+#   REGISTRY     ProGet host + main feed (напр. proget.example/main).
+#                По умолч. proget.inc.elara.local/main
 #
-# Optional env:
-#   MIRROR_VER   Tag of grpc-tc-mirror-{arm,arm64,x86_64} to verify.
-#                Default: 0.1.0
-#   MIN_FREE_GB  Required free space in /var/lib/docker before launch.
-#                Default: 30
+# Опциональный env:
+#   MIRROR_VER   тег grpc-tc-mirror-{arm,arm64,x86_64} для проверки. По умолч. 0.1.0
+#   MIN_FREE_GB  требуемое свободное место в /var/lib/docker. По умолч. 30
 #
-# Output:
-#   Seven .nupkg files in output-${ARCH}-prebake/ on success.
+# Вывод:
+#   семь .nupkg в output-${ARCH}-prebake/ при успехе.
 #
-# Why this exists (and why not just `test_arm_cross.sh build`):
-#   test_arm_cross.sh rebuilds the mirror image at-call-time from
-#   Dockerfile.grpc-tc-mirror, so it always tests "image as it would
-#   build *now*". For the TC handoff we instead want to verify "image
-#   exactly as ProGet stores it" — that is, the published 0.1.0 tag,
-#   pulled fresh, no local layer cache assumed.
+# Зачем это (а не просто `test_arm_cross.sh build`): test_arm_cross.sh
+# пересобирает образ из Dockerfile.grpc-tc-mirror на месте, т.е. тестирует
+# "образ, как он собрался бы СЕЙЧАС". Для передачи в TC нужно проверить
+# "образ ровно как его хранит ProGet" — закреплённый тег 0.1.0, свежий pull,
+# без локального кэша слоёв.
 
 set -uo pipefail
 
@@ -48,7 +44,7 @@ case "$ARCH" in
         USER_TC="/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake"
         ;;
     x86_64)
-        # Native build — host profile = build profile, no cross toolchain.
+        # Нативная сборка: host-профиль = build-профиль, без cross-toolchain.
         PROFILE="/work/conan-recipes/profiles/lin-gcc84-x86_64"
         USER_TC=""
         ;;
@@ -62,10 +58,10 @@ REGISTRY="${REGISTRY:-proget.inc.elara.local/main}"
 MIRROR_VER="${MIRROR_VER:-0.1.0}"
 MIN_FREE_GB="${MIN_FREE_GB:-30}"
 
-# Backup-sources base URL (HELP [16]). Passed into the container EXPLICITLY:
-# a bare `-e VAR` with VAR unset on the host makes docker UNSET the image's
-# ENV default instead of inheriting it. `-` (not `:-`): explicit empty
-# string still disables backup-sources for this run.
+# Базовый URL backup-sources (HELP [16]). Прокидывается в контейнер ЯВНО:
+# голый `-e VAR` при незаданной VAR на хосте заставляет docker СБРОСИТЬ
+# дефолт из ENV образа вместо наследования. `-` (не `:-`): явная пустая
+# строка тоже отключает backup-sources для этого прогона.
 PROGET_SOURCES_URL="${PROGET_SOURCES_URL-http://proget.inc.elara.local/endpoints/conan-sources/content/}"
 PROFILE_BUILD="/work/conan-recipes/profiles/lin-gcc84-x86_64"
 
@@ -79,9 +75,9 @@ hdr() { printf "\n=== %s ===\n" "$1"; }
 pass() { printf "[PASS] %s\n" "$1"; }
 fail() { printf "[FAIL] %s\n" "$1" >&2; exit 1; }
 
-# Decide how to invoke docker. dev-astra has passwordless sudo; CI build
-# agents usually don't, but the build user is often in the `docker` group
-# (or runs as root). Try direct, then sudo -n; fail loudly if neither works.
+# Как вызывать docker. На dev-astra passwordless sudo; у CI-агентов обычно
+# нет, но build-юзер часто в группе `docker` (или работает как root). Пробуем
+# напрямую, затем sudo -n; если ничего не вышло — падаем с пояснением.
 if docker info >/dev/null 2>&1; then
     DOCKER=(docker)
 elif sudo -n docker info >/dev/null 2>&1; then
@@ -114,8 +110,8 @@ echo "CACHE_VOLUME  = $CACHE_VOLUME"
 echo "MIN_FREE_GB   = $MIN_FREE_GB"
 
 hdr "1. disk-space pre-flight"
-# The mirror writes ~5 GB of conan-cache + ~2 GB of compiler temporaries
-# into the docker storage partition. Bail out early if there isn't room.
+# Зеркало пишет ~5 GB conan-cache + ~2 GB временных файлов компилятора в
+# docker-раздел. Сразу выходим, если места не хватает.
 DOCKER_DIR="$("${DOCKER[@]}" info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
 FREE_KB=$(df --output=avail -k "$DOCKER_DIR" 2>/dev/null | tail -1 | tr -d ' ')
 FREE_GB=$(( FREE_KB / 1024 / 1024 ))
@@ -139,8 +135,8 @@ fi
 pass "${FREE_GB} GB free (>= ${MIN_FREE_GB} GB)"
 
 hdr "2. fresh pull from ProGet"
-# Drop any local copy first — we want to exercise the actual ProGet
-# round-trip, not a stale layer cache.
+# Сначала сносим локальную копию — нам нужен реальный round-trip с ProGet,
+# а не устаревший кэш слоёв.
 "${DOCKER[@]}" image rm "$IMAGE" >/dev/null 2>&1 || true
 if ! "${DOCKER[@]}" pull "$IMAGE"; then
     fail "docker pull $IMAGE — did the push complete, and is this host logged in to ProGet? Try: ${DOCKER[*]} login ${REGISTRY%%/*}"

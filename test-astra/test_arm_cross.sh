@@ -1,17 +1,17 @@
 #!/bin/bash
-# Tests the arm / arm64 cross-build path of grpc-tc-mirror.
+# Тест arm / arm64 кросс-сборки grpc-tc-mirror.
 #
-# Usage:
+# Запуск:
 #   ./test_arm_cross.sh smoke arm
 #   ./test_arm_cross.sh smoke arm64
 #   ./test_arm_cross.sh build arm
 #   ./test_arm_cross.sh build arm64
 #
-# `smoke` (~1-2 min) runs pre-flight + image diagnostics only.
-# `build` (~15-25 min) does the full Conan tree build and verifies
-# the seven .nupkg files and their TC-style names.
+# `smoke` (~1-2 мин) — только pre-flight + диагностика образа.
+# `build` (~15-25 мин) — полная сборка дерева Conan + проверка семи .nupkg и их
+# TC-имён.
 #
-# Required env: REGISTRY (e.g. proget.example/main)
+# Обязательный env: REGISTRY (напр. proget.example/main)
 
 set -uo pipefail
 
@@ -55,7 +55,7 @@ PROFILE_BUILD="/work/conan-recipes/profiles/lin-gcc84-x86_64"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# ----- helpers -----------------------------------------------------------
+# ----- хелперы -----------------------------------------------------------
 PASS=0
 FAIL=0
 pass() { echo "[PASS] $*"; PASS=$((PASS + 1)); }
@@ -71,7 +71,7 @@ require_env() {
 
 # ----- pre-flight --------------------------------------------------------
 hdr "Pre-flight"
-require_env REGISTRY
+require_env REGISTRY  # без него BASE_IMAGE/X64_BASE_IMAGE не соберутся
 pass "REGISTRY=$REGISTRY"
 
 if ! command -v docker >/dev/null; then
@@ -86,7 +86,7 @@ if ! sudo docker info >/dev/null 2>&1; then
 fi
 pass "docker daemon reachable"
 
-# ----- 1. base image is pullable ----------------------------------------
+# ----- 1. базовый образ скачивается -------------------------------------
 hdr "1. Base image $BASE_IMAGE"
 if sudo docker pull "$BASE_IMAGE" >/tmp/pull.log 2>&1; then
     pass "pulled"
@@ -96,7 +96,7 @@ else
     exit 1
 fi
 
-# ----- 2. base image diagnostics ----------------------------------------
+# ----- 2. диагностика базового образа -----------------------------------
 hdr "2. Base image probe"
 sudo docker run --rm "$BASE_IMAGE" bash -c '
     echo "--- uname"
@@ -143,13 +143,12 @@ else
     fail "no sysroot under /opt — cross-link will not find libc"
 fi
 
-# ----- 3. mirror docker build --------------------------------------------
+# ----- 3. docker build зеркала ------------------------------------------
 hdr "3. docker build grpc-tc-mirror for $ARCH"
 cd "$ROOT_DIR"
-# Pass X64_BASE_IMAGE for the multi-stage build (stage 1 carries
-# /usr/local/gcc-8.4 from the x86_64 CI image). $REGISTRY/library tag
-# scheme is the same one the arm/arm64 base images use; tag defaults
-# to 0.1.0 (avoid :latest because some ProGet feeds do not publish it).
+# X64_BASE_IMAGE для multi-stage сборки (stage 1 несёт /usr/local/gcc-8.4 из
+# x86_64 CI-образа). Схема тега $REGISTRY/library та же, что у arm/arm64 баз; тег
+# по умолчанию 0.1.0 (не :latest — часть ProGet-фидов его не публикует).
 X64_BASE_IMAGE_TAG="${X64_BASE_IMAGE_TAG:-0.1.0}"
 X64_BASE_IMAGE="${X64_BASE_IMAGE:-$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG}"
 if sudo docker build \
@@ -171,7 +170,7 @@ else
     exit 1
 fi
 
-# ----- smoke ends here ---------------------------------------------------
+# ----- smoke на этом заканчивается ---------------------------------------
 if [[ "$MODE" == "smoke" ]]; then
     echo ""
     echo "================ SMOKE SUMMARY ================"
@@ -183,7 +182,7 @@ if [[ "$MODE" == "smoke" ]]; then
     exit 0
 fi
 
-# ----- 4. full build (long) ---------------------------------------------
+# ----- 4. полная сборка (долго) -----------------------------------------
 hdr "4. Full Conan build (15-25 min)"
 mkdir -p "$ROOT_DIR/$OUTPUT_DIR"
 rm -f "$ROOT_DIR/$OUTPUT_DIR"/*.nupkg
@@ -203,7 +202,7 @@ then
     fi
 fi
 
-# ----- 5. verify .nupkg artefacts ---------------------------------------
+# ----- 5. проверка .nupkg-артефактов ------------------------------------
 hdr "5. Verify $OUTPUT_DIR/*.nupkg"
 expected_count=7
 actual_count=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR"/*.nupkg 2>/dev/null | wc -l)
@@ -213,12 +212,11 @@ else
     fail "expected $expected_count files, got $actual_count"
 fi
 
-# Each name must look like '<pkg>.lin.<compiler><ver>.<linkage>.<arch>[-linaro].<ver>.nupkg'
-# Default slot-tag is `shared` (DynamicRT — GR113-equivalent — where
-# downstream el_conf/grpc_sdk resolver looks); see INFRASTRUCTURE.md §3.7.
-# Brace covers `static` slot too for LEGACY_NUPKG_LINKAGE=static builds.
-# Schemes covered: x86_64-phase (lin.gcc.shared.x64.) and ARM cross
-# (lin.gcc75.shared.arm-linaro.) — and static equivalents.
+# Имя должно быть вида '<pkg>.lin.<compiler><ver>.<linkage>.<arch>[-linaro].<ver>.nupkg'.
+# Default slot-tag `shared` (DynamicRT — аналог GR113 — там и ищет downstream-
+# резолвер el_conf/grpc_sdk); см. INFRASTRUCTURE.md §3.7. Brace ловит и `static`
+# (LEGACY_NUPKG_LINKAGE=static). Покрыты схемы: x86_64-фаза (lin.gcc.shared.x64.) и
+# ARM-кросс (lin.gcc75.shared.arm-linaro.) — плюс static-аналоги.
 for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
     f=$(ls -1 "$ROOT_DIR/$OUTPUT_DIR/$pkg".lin.gcc*.{static,shared}."$ARCH_SHORT"*.nupkg 2>/dev/null | head -1)
     if [[ -n "$f" ]]; then
@@ -229,7 +227,7 @@ for pkg in grpc protobuf abseil openssl re2 c-ares zlib; do
     fi
 done
 
-# ----- summary -----------------------------------------------------------
+# ----- итог --------------------------------------------------------------
 echo ""
 echo "================ BUILD SUMMARY ================"
 echo " arch=$ARCH  pass=$PASS  fail=$FAIL"

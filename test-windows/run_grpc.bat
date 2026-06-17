@@ -1,8 +1,8 @@
 @echo off
 :: ============================================
-::  Build grpc 1.78.1 (canonical + offline) on Windows MSVC
-::  Pulls full dep tree: abseil, c-ares, openssl, protobuf, re2, zlib.
-::  4 variants — heavy: 30–60 min total.
+::  Сборка grpc 1.78.1 (canonical + offline) на Windows MSVC.
+::  Тянет всё дерево deps: abseil, c-ares, openssl, protobuf, re2, zlib.
+::  4 варианта — тяжело: 30–60 мин суммарно.
 :: ============================================
 setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
@@ -24,8 +24,8 @@ for /f "delims=" %%V in ('conan --version') do echo [INFO] %%V
 echo [INFO] Recipe: canonical from conan-center-index
 echo.
 
-:: Step 1: export every recipe so Conan can find them in --no-remote mode.
-:: Without this, `conan create grpc/` fails with "protobuf not resolved" etc.
+:: Шаг 1: экспортируем все рецепты, чтобы Conan нашёл их в режиме --no-remote.
+:: Без этого `conan create grpc/` падает с "protobuf not resolved" и т.п.
 echo ============================================
 echo  Step 1: Export all recipes to local cache
 echo ============================================

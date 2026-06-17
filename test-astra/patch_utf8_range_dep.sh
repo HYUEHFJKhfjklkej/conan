@@ -1,8 +1,8 @@
 #!/bin/bash
-# Patch utf8_range.<...>.0.1.0.nupkg so its CMakeLists.var _dependencies
-# refers to absl:0.2.0.1 (our upstream-mirror, has cord) instead of
-# absl:0.2.0 (legacy Bitbucket, missing cord). Bump version to 0.1.0.1
-# so it does not collide with the original in ProGet.
+# Патчит utf8_range.<...>.0.1.0.nupkg, чтобы его CMakeLists.var _dependencies
+# ссылался на absl:0.2.0.1 (наш upstream-mirror, с cord) вместо absl:0.2.0
+# (legacy Bitbucket, без cord). Бампит версию до 0.1.0.1, чтобы не
+# столкнуться с оригиналом в ProGet.
 #
 # Usage:
 #   ./test-astra/patch_utf8_range_dep.sh /path/to/utf8_range.lin.gcc84.shared.x86_64.0.1.0.nupkg
@@ -10,13 +10,13 @@
 # Output:
 #   ./utf8_range.lin.gcc84.shared.x86_64.0.1.0.1.nupkg
 #
-# Linkage tag (shared/static) is derived from the INPUT filename's 4th
-# dot-segment. Default is `shared` (DynamicRT slot — GR113-equivalent,
-# where downstream el_conf/grpc_sdk look). The script also handles a
-# static.x86_64 input if someone is targeting StaticRT (GR121) slot.
+# Тег linkage (shared/static) берётся из 4-го dot-сегмента имени ВХОДНОГО
+# файла. По умолчанию `shared` (слот DynamicRT — аналог GR113, куда смотрят
+# downstream el_conf/grpc_sdk). Скрипт также обрабатывает вход static.x86_64,
+# если кто-то целится в слот StaticRT (GR121).
 #
-# After running, upload the new .nupkg to ProGet (it does NOT replace
-# the old one — it adds a higher version that resolver will prefer).
+# После запуска залить новый .nupkg в ProGet (он НЕ заменяет старый —
+# добавляет более высокую версию, которую резолвер предпочтёт).
 
 set -euo pipefail
 
@@ -40,7 +40,7 @@ NEW_VER="0.1.0.1"
 OLD_ABSL_DEP="absl:0.2.0"
 NEW_ABSL_DEP="absl:0.2.0.1"
 
-# Derive linkage (static/shared) from input filename, default static.
+# Берём linkage (static/shared) из имени входного файла, по умолчанию shared.
 IN_BASENAME="$(basename "$IN_NUPKG")"
 LINKAGE="$(echo "$IN_BASENAME" | awk -F. '{print $4}')"
 case "$LINKAGE" in
@@ -79,9 +79,9 @@ NUSPEC=$(find "$WORK_DIR" -maxdepth 1 -name "*.nuspec" | head -1)
 if [ -z "$NUSPEC" ]; then
     echo "  WARN: no .nuspec in nupkg root"
 else
-    # bump <version>
+    # бампим <version>
     sed -i "s|<version>${OLD_VER}</version>|<version>${NEW_VER}</version>|" "$NUSPEC"
-    # bump absl dep version inside <dependencies>
+    # бампим версию dep absl внутри <dependencies>
     sed -i 's|<dependency id="absl"[^/]*version="0\.2\.0"[^/]*/>|<dependency id="absl" version="0.2.0.1" />|' "$NUSPEC"
     grep -E '<version>|<dependency' "$NUSPEC" | sed 's/^/    /'
 fi

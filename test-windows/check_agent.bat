@@ -1,11 +1,11 @@
 @echo off
 :: ============================================================
-::  TeamCity Windows agent readiness check for the grpc 1.60.1 Conan build.
-::  Reports [ OK ] / [WARN] / [FAIL] per prerequisite and exits with the
-::  number of REQUIRED items missing (0 = ready to run run_grpc_1601_win.bat).
+::  Проверка готовности Windows-агента TeamCity к сборке grpc 1.60.1 на Conan.
+::  По каждому пункту печатает [ OK ] / [WARN] / [FAIL], код возврата =
+::  числу отсутствующих REQUIRED-пунктов (0 = можно запускать run_grpc_1601_win.bat).
 ::
-::  Run from cmd.exe on the agent:   test-windows\check_agent.bat
-::  Nothing is installed/changed — read-only check.
+::  Запуск из cmd.exe на агенте:   test-windows\check_agent.bat
+::  Только проверка, ничего не ставит и не меняет.
 :: ============================================================
 setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
@@ -22,7 +22,7 @@ echo  repo: %ROOT_DIR%
 echo ============================================
 echo.
 
-:: ---------- Python 3.14 (REQUIRED: offline Conan bootstrap) ----------
+:: ---------- Python 3.14 (REQUIRED: offline-бутстрап Conan) ----------
 where python >nul 2>&1
 if errorlevel 1 (
     call :fail "Python" "not found - install Python 3.14.x and tick 'Add to PATH'"
@@ -33,7 +33,7 @@ for /f "tokens=2" %%v in ('python --version 2^>^&1') do set "PYVER=%%v"
 echo !PYVER!| findstr /b /l "3.14" >nul && (call :ok "Python" "!PYVER!") || (call :warn "Python" "found !PYVER! - offline wheels are cp314, need 3.14.x")
 :after_py
 
-:: ---------- MSVC v143 (REQUIRED: C++ compiler) ----------
+:: ---------- MSVC v143 (REQUIRED: компилятор C++) ----------
 if not exist "%VSWHERE%" (
     call :fail "MSVC C++" "vswhere not found - install VS2022 Build Tools 'Desktop development with C++'"
     goto :after_msvc
@@ -53,21 +53,21 @@ if errorlevel 1 (
     call :ok "CMake" "!CMVER!"
 )
 
-:: ---------- Perl (REQUIRED: openssl Configure) ----------
+:: ---------- Perl (REQUIRED: для openssl Configure) ----------
 set "PERLAT="
 where perl >nul 2>&1 && set "PERLAT=PATH"
 if not defined PERLAT if exist "C:\Strawberry\perl\bin\perl.exe" set "PERLAT=C:\Strawberry"
 if not defined PERLAT if exist "%ROOT_DIR%\tools\windows\strawberryperl\perl\bin\perl.exe" set "PERLAT=tools\windows\strawberryperl"
 if defined PERLAT (call :ok "Perl" "!PERLAT!") else (call :fail "Perl" "not found - Strawberry Perl at C:\Strawberry or tools\windows\strawberryperl\")
 
-:: ---------- NASM (REQUIRED: openssl asm) ----------
+:: ---------- NASM (REQUIRED: asm для openssl) ----------
 set "NASMAT="
 where nasm >nul 2>&1 && set "NASMAT=PATH"
 if not defined NASMAT if exist "C:\Program Files\NASM\nasm.exe" set "NASMAT=C:\Program Files\NASM"
 if not defined NASMAT if exist "%ROOT_DIR%\tools\windows\nasm\nasm.exe" set "NASMAT=tools\windows\nasm"
 if defined NASMAT (call :ok "NASM" "!NASMAT!") else (call :fail "NASM" "not found - nasm.exe at C:\Program Files\NASM or tools\windows\nasm\")
 
-:: ---------- Git (REQUIRED: TeamCity VCS checkout) ----------
+:: ---------- Git (REQUIRED: для VCS-checkout в TeamCity) ----------
 where git >nul 2>&1
 if errorlevel 1 (
     call :fail "Git" "not found - needed for TeamCity source checkout"
@@ -77,14 +77,14 @@ if errorlevel 1 (
     call :ok "Git" "!GITVER!"
 )
 
-:: ---------- Offline Conan source in packages\ (REQUIRED) ----------
+:: ---------- Offline-исходник Conan в packages\ (REQUIRED) ----------
 if exist "%ROOT_DIR%\packages\conan-2.29.0.tar.gz" (
     call :ok "packages offline conan" "conan-2.29.0.tar.gz present"
 ) else (
     call :fail "packages offline conan" "conan-2.29.0.tar.gz missing - git pull the repo"
 )
 
-:: ---------- Conan (optional: driver bootstraps it) ----------
+:: ---------- Conan (опционально: драйвер сам ставит) ----------
 where conan >nul 2>&1
 if errorlevel 1 (
     call :warn "Conan" "not on PATH - run_grpc_1601_win.bat installs it offline from packages\ (needs Python)"
@@ -94,7 +94,7 @@ if errorlevel 1 (
     call :ok "Conan" "!CNVER!"
 )
 
-:: ---------- TeamCity agent (informational) ----------
+:: ---------- TeamCity-агент (информационно) ----------
 if exist "C:\BuildAgent\conf\buildAgent.properties" (
     call :ok "TeamCity agent" "C:\BuildAgent present"
 ) else (
@@ -115,7 +115,7 @@ echo ============================================
 if not defined CI if not defined TEAMCITY_VERSION pause
 endlocal & exit /b %FAILS%
 
-:: ----- helpers -----
+:: ----- вспомогательные процедуры -----
 :ok
 echo [ OK ] %~1: %~2
 exit /b 0

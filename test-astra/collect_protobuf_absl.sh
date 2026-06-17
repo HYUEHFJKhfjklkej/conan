@@ -1,28 +1,26 @@
 #!/bin/bash
-# One-shot collector for the protobuf <-> abseil link-failure context.
-# Dumps every piece of evidence into a single text file so you can paste
-# it back in a single message.
+# Однопроходный сборщик контекста link-фейла protobuf <-> abseil.
+# Складывает все улики в один текстовый файл, чтобы переслать одним сообщением.
 #
-# What it grabs (all read-only, no docker, no conan-create):
-#   - host / conan / cmake / gcc / ld versions
-#   - relevant env vars (CONAN_*, PROFILE*, REGISTRY, etc.)
-#   - every protobuf build dir under /root/.conan2/p/b/proto*/b:
-#       CMakeCache.txt (filtered), flags.make for libprotoc/protoc/libprotobuf,
-#       protoc link.txt, conan_toolchain.cmake (filtered),
-#       last lines of CMakeOutput.log / CMakeError.log
-#   - every abseil/absl package dir under /root/.conan2/p:
-#       lib/ layout, conaninfo.txt, nm-defined absl::lts_* tags,
-#       nm-undefined absl::lts_* tags
-#   - command_line_interface.cc.o undefined-ref summary
-#   - all conanfile.py `requires(...absl|abseil...)` lines in the tree
-#   - conan list output for abseil/absl/protobuf
+# Что собирает (всё read-only, без docker и conan-create):
+#   - версии host / conan / cmake / gcc / ld
+#   - нужные env-переменные (CONAN_*, PROFILE*, REGISTRY и т.д.)
+#   - каждый build-dir protobuf под /root/.conan2/p/b/proto*/b:
+#       CMakeCache.txt (отфильтрован), flags.make для libprotoc/protoc/libprotobuf,
+#       protoc link.txt, conan_toolchain.cmake (отфильтрован),
+#       хвост CMakeOutput.log / CMakeError.log
+#   - каждый пакет abseil/absl под /root/.conan2/p:
+#       раскладка lib/, conaninfo.txt, теги absl::lts_* (defined и undefined по nm)
+#   - сводку undefined-ref из command_line_interface.cc.o
+#   - все строки `requires(...absl|abseil...)` в conanfile.py по дереву
+#   - вывод conan list для abseil/absl/protobuf
 #
 # Usage:
-#   ./test-astra/collect_protobuf_absl.sh                # default OUT path
+#   ./test-astra/collect_protobuf_absl.sh                # путь OUT по умолчанию
 #   OUT=/tmp/my.txt ./test-astra/collect_protobuf_absl.sh
 #   BUILD_DIR=/.../proto<hash>/b ./test-astra/collect_protobuf_absl.sh
 #
-# Exit codes: always 0 unless the OUT file cannot be written.
+# Exit codes: всегда 0, кроме случая когда файл OUT не записывается.
 
 set -uo pipefail
 
@@ -30,10 +28,10 @@ CONAN_ROOT="${CONAN_ROOT:-/root/.conan2}"
 TS="$(date +%Y%m%d-%H%M%S)"
 OUT="${OUT:-/tmp/protobuf-absl-collect-$TS.txt}"
 
-# Write to OUT; mirror banner to stderr so the user can see progress.
+# Пишем в OUT; баннер дублируем в stderr, чтобы видеть прогресс.
 : > "$OUT" || { echo "cannot write $OUT" >&2; exit 1; }
 
-# section helpers ----------------------------------------------------------
+# хелперы секций -----------------------------------------------------------
 S() { echo ""; echo "================================================================"; echo "== $*"; echo "================================================================"; }
 SUB() { echo ""; echo "---- $* ----"; }
 RUN() {
@@ -51,7 +49,7 @@ echo "pwd:        $(pwd)"
 echo "conan_root: $CONAN_ROOT"
 echo "out:        $OUT"
 
-# ---- [0] am I inside docker? --------------------------------------------
+# ---- [0] внутри docker или нет? ------------------------------------------
 S "[0] docker / host detection (the answer to 'is this in the mirror?')"
 SUB "/.dockerenv marker"
 if [ -e /.dockerenv ]; then
@@ -79,7 +77,7 @@ ldd --version 2>/dev/null | head -1
 SUB "mounts that look like conan-cache volumes"
 mount 2>/dev/null | grep -E 'conan|/root/\.conan2|/work' | head -10
 
-# ---- [0b] toolchain & env -----------------------------------------------
+# ---- [0b] toolchain и env ------------------------------------------------
 S "[0b] versions & environment"
 RUN "conan --version" conan --version
 RUN "cmake --version" cmake --version
@@ -89,7 +87,7 @@ RUN "python3 --version" python3 --version
 SUB "env (CONAN_*, PROFILE*, REGISTRY, IMAGE_TAG, BUILD_DIR)"
 env | grep -E '^(CONAN_|PROFILE|REGISTRY|IMAGE_TAG|BUILD_DIR|HOME|PATH=)' | sort
 
-# ---- [1] active conan profile -------------------------------------------
+# ---- [1] активный conan-профиль ------------------------------------------
 S "[1] conan profile show (host & build)"
 if command -v conan >/dev/null 2>&1; then
     RUN "conan profile show -pr lin-gcc84-x86_64" \
@@ -100,7 +98,7 @@ else
     echo "conan not on PATH"
 fi
 
-# ---- [2] every protobuf build dir ---------------------------------------
+# ---- [2] все build-dir protobuf ------------------------------------------
 S "[2] protobuf build dirs under $CONAN_ROOT/p/b/proto*/b"
 mapfile -t PROTO_BUILDS < <(ls -dt "$CONAN_ROOT"/p/b/proto*/b 2>/dev/null)
 if [ -n "${BUILD_DIR:-}" ]; then
@@ -193,7 +191,7 @@ for B in "${PROTO_BUILDS[@]:-}"; do
     fi
 done
 
-# ---- [3] every abseil/absl package in cache -----------------------------
+# ---- [3] все пакеты abseil/absl в кэше -----------------------------------
 S "[3] abseil/absl packages under $CONAN_ROOT/p/"
 mapfile -t ABSL_DIRS < <(ls -dt "$CONAN_ROOT"/p/absei*/p "$CONAN_ROOT"/p/absl*/p 2>/dev/null | sort -u)
 if [ "${#ABSL_DIRS[@]}" -eq 0 ]; then
@@ -219,7 +217,7 @@ for A in "${ABSL_DIRS[@]:-}"; do
     elif [ -f "$A/conaninfo.txt" ]; then
         cat "$A/conaninfo.txt"
     else
-        # walk up — Conan 2 may place conaninfo elsewhere
+        # идём вверх по дереву — Conan 2 может класть conaninfo в другом месте
         find "$A/.." -maxdepth 2 -name conaninfo.txt 2>/dev/null | head -3 | while read -r I; do
             echo "== $I =="
             cat "$I"
@@ -256,7 +254,7 @@ for A in "${ABSL_DIRS[@]:-}"; do
     fi
 done
 
-# ---- [4] all recipes' requires for absl/abseil --------------------------
+# ---- [4] requires на absl/abseil во всех рецептах -------------------------
 S "[4] all conanfile.py requires(...absl|abseil...) in tree"
 for ROOT in \
     "$HOME/conan-master" \
@@ -282,7 +280,7 @@ if command -v conan >/dev/null 2>&1; then
     RUN "conan list 'protobuf/*#*:*'" conan list 'protobuf/*#*:*'
 fi
 
-# ---- [6] tail of any nearby build logs ----------------------------------
+# ---- [6] хвосты ближайших build-логов ------------------------------------
 S "[6] any build log tails in /tmp /work /root"
 for LOG in /tmp/*.log /tmp/*conan* /work/*.log /root/*.log; do
     [ -f "$LOG" ] || continue
@@ -292,7 +290,7 @@ for LOG in /tmp/*.log /tmp/*conan* /work/*.log /root/*.log; do
     fi
 done
 
-# ---- [7] git status of conan-master / conan-recipes ---------------------
+# ---- [7] git status деревьев conan-master / conan-recipes ----------------
 S "[7] git status of recipe trees"
 for ROOT in \
     "$HOME/conan-master" \

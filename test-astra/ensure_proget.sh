@@ -1,29 +1,29 @@
 #!/bin/bash
-# ensure_proget.sh — idempotent per-run ProGet wiring for the conan home.
-# Called by the build drivers right after conan lands on PATH. Safe to run
-# anywhere: with no PROGET_/CONAN_REMOTE env set it is a no-op, so the Mac
-# and bare dev-VM keep working exactly as before.
+# ensure_proget.sh — идемпотентная привязка ProGet к conan home на каждый прогон.
+# Вызывается build-драйверами сразу после появления conan в PATH. Безопасен
+# везде: без env PROGET_/CONAN_REMOTE это no-op, так что Mac и голая dev-VM
+# работают как раньше.
 #
-# Relationship to the baked global.conf: Dockerfile.grpc-tc-mirror bakes the
-# backup-sources line into the image's /root/.conan2/global.conf, which covers
-# a plain `docker run` (no volume) and a FRESH named volume (Docker seeds an
-# empty volume from the image layer). But a REUSED conan-cache-* volume mounted
-# over /root/.conan2 shadows that layer and carries its own global.conf, and
-# `docker volume rm` / FRESH_CACHE resets it. So this script re-asserts the
-# line on every driver start — that is the one layout that survives all cases,
-# including the bare dev-VM / Mac where there is no image at all.
+# Связь с запечённым global.conf: Dockerfile.grpc-tc-mirror зашивает строку
+# backup-sources в /root/.conan2/global.conf образа. Это покрывает обычный
+# `docker run` (без volume) и СВЕЖИЙ named volume (Docker засевает пустой volume
+# из слоя образа). Но ПЕРЕИСПОЛЬЗОВАННЫЙ conan-cache-* volume, смонтированный
+# поверх /root/.conan2, перекрывает этот слой и несёт свой global.conf, а
+# `docker volume rm` / FRESH_CACHE его сбрасывает. Поэтому скрипт переустанавливает
+# строку на каждом старте драйвера — единственная схема, переживающая все случаи,
+# включая голую dev-VM / Mac, где образа нет вообще.
 #
 # Env:
-#   PROGET_SOURCES_URL     backup-sources base, e.g.
+#   PROGET_SOURCES_URL     база backup-sources, напр.
 #                          http://proget.inc.elara.local/endpoints/conan-sources/content/
-#                          (Dockerfile.grpc-tc-mirror sets this by default;
-#                          override with -e PROGET_SOURCES_URL="" to disable)
-#   CONAN_REMOTE           remote name to register (e.g. proget); empty = skip
-#   CONAN_REMOTE_URL       remote URL, e.g. http://proget.inc.elara.local/conan/conan
-#   CONAN_REMOTE_INSECURE  1 = pass --insecure (self-signed TLS)
+#                          (Dockerfile.grpc-tc-mirror задаёт по умолчанию;
+#                          отключить через -e PROGET_SOURCES_URL="")
+#   CONAN_REMOTE           имя remote для регистрации (напр. proget); пусто = пропустить
+#   CONAN_REMOTE_URL       URL remote, напр. http://proget.inc.elara.local/conan/conan
+#   CONAN_REMOTE_INSECURE  1 = передать --insecure (самоподписанный TLS)
 #
-# Auth for the remote is conan-native, no wiring needed here:
-#   CONAN_LOGIN_USERNAME / CONAN_PASSWORD env vars, or `conan remote login`.
+# Аутентификация remote — нативная для conan, здесь не настраивается:
+#   env CONAN_LOGIN_USERNAME / CONAN_PASSWORD, либо `conan remote login`.
 
 set -uo pipefail
 

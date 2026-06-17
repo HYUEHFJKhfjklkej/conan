@@ -1,9 +1,7 @@
 #!/bin/bash
-# ============================================
-#  Build gtest (canonical conan-center recipe) in 4 variants:
-#    static/Release, static/Debug, shared/Release, shared/Debug
-#  Each build runs test_package (consumer smoke test) automatically.
-# ============================================
+# Сборка gtest (канонический conan-center рецепт) в 4 вариантах:
+# static/Release, static/Debug, shared/Release, shared/Debug.
+# Каждая сборка автоматически прогоняет test_package (consumer smoke).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,6 +47,7 @@ echo "[INFO] Conan cache after builds:"
 conan list "gtest/1.15.2:*" 2>/dev/null || true
 
 echo ""
+# Сверяем, что upstream-исходники не тронуты.
 echo "[INFO] Confirming upstream sources untouched:"
 SRC_TARBALL="$ROOT_DIR/gtest/src/v1.15.2.tar.gz"
 if [ -f "$SRC_TARBALL" ]; then

@@ -1,23 +1,23 @@
 @echo off
 :: ============================================================
-::  Windows MSVC build of the grpc/1.60.1 tree (legacy GR113/GR120 parity).
-::  Native sibling of test-astra/run_grpc_1601_upstream.sh — no Docker on
-::  Windows, builds directly on the agent with MSVC.
+::  Сборка дерева grpc/1.60.1 на Windows MSVC (паритет с legacy GR113/GR120).
+::  Нативный аналог test-astra/run_grpc_1601_upstream.sh — на Windows без
+::  Docker, собирает прямо на агенте через MSVC.
 ::
-::  Versions (exactly the grpc/1.60.x line, same as the Linux driver):
+::  Версии (ровно линия grpc/1.60.x, как у Linux-драйвера):
 ::    grpc 1.60.1, protobuf 4.25.2, abseil 20230802.1, re2 20230301,
-::    c-ares 1.25.0, openssl 1.1.1 (recipe dir openssl-1x\), zlib 1.3.0
-::  -> 7 legacy .nupkg in output-grpc-1601-win\ via the deployer.
+::    c-ares 1.25.0, openssl 1.1.1 (каталог рецепта openssl-1x\), zlib 1.3.0
+::  -> 7 legacy .nupkg в output-grpc-1601-win\ через deployer.
 ::
-::  Prereqs on the agent: MSVC toolset for the profile + Conan 2.29.0
-::  (run test-windows\setup.bat first). Run from a terminal (no pause).
+::  Требуется на агенте: MSVC-toolset под профиль + Conan 2.29.0
+::  (сначала test-windows\setup.bat). Запуск из терминала (без pause).
 ::
 ::  Usage:    test-windows\run_grpc_1601_win.bat
 ::  Env:
-::    PROFILE_NAME      default win-v143-x64 (also win-v142-x64, win-v142-x86)
-::    OUTPUT_DIR        default <repo>\output-grpc-1601-win
-::    SHARED            default False (content static .a)
-::    SKIP_CACHE_CLEAN  set to 1 to skip the `conan remove *` cache wipe
+::    PROFILE_NAME      по умолчанию win-v143-x64 (ещё win-v142-x64, win-v142-x86)
+::    OUTPUT_DIR        по умолчанию <repo>\output-grpc-1601-win
+::    SHARED            по умолчанию False (контент — статические .a)
+::    SKIP_CACHE_CLEAN  =1 чтобы пропустить очистку кэша `conan remove *`
 :: ============================================================
 setlocal ENABLEEXTENSIONS
 
@@ -40,9 +40,9 @@ if "%OUTPUT_DIR%"=="" set OUTPUT_DIR=%ROOT_DIR%\output-grpc-1601-win
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 :: -----------------------------------------------------------
-:: Ensure Conan is available. A clean TC agent may not have it; install it
-:: offline from packages\ (no internet). Needs Python on the agent. If the
-:: agent has neither, provision it once (see [FAIL] message below).
+:: Убедиться, что Conan есть. На чистом TC-агенте его может не быть — ставим
+:: офлайн из packages\ (без интернета). Нужен Python на агенте. Если нет ни
+:: того ни другого — разово подготовить агент (см. [FAIL] ниже).
 :: -----------------------------------------------------------
 where conan >nul 2>&1 || (
     echo [INFO] conan not on PATH - installing offline from packages\ ...
@@ -64,8 +64,8 @@ for /f "tokens=*" %%v in ('conan --version 2^>^&1') do echo [INFO] Conan:    %%v
 echo.
 
 :: -----------------------------------------------------------
-:: Step 0.5: wipe the Conan cache (protobuf package_id can be silently
-:: reused across option sets — same reason the Linux 1601 driver does it).
+:: Шаг 0.5: чистим кэш Conan (package_id protobuf может молча переиспользоваться
+:: между наборами опций — по той же причине это делает Linux-драйвер 1601).
 :: -----------------------------------------------------------
 if not "%SKIP_CACHE_CLEAN%"=="1" (
     echo ============================================
@@ -151,7 +151,7 @@ echo [INFO] Generated .nupkg files:
 dir /b "%OUTPUT_DIR%\*.nupkg"
 
 set /a COUNT=0
-:: deployer emits LEGACY names (LEGACY_NAME_MAP): abseil->absl, c-ares->cares
+:: deployer выдаёт LEGACY-имена (LEGACY_NAME_MAP): abseil->absl, c-ares->cares
 for %%P in (grpc protobuf absl re2 cares openssl zlib) do (
     if exist "%OUTPUT_DIR%\%%P.win.*.nupkg" (
         set /a COUNT+=1

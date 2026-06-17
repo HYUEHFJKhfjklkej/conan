@@ -1,47 +1,46 @@
 #!/bin/bash
-# Diagnostic for `protoc` failing to link with abseil — the
+# Диагностика фейла линковки `protoc` с abseil — ошибки вида
 # `undefined reference to absl::lts_NNNNNNNN::ByAnyChar::Find(
-#    absl::lts_NNNNNNNN::string_view, unsigned long)` family of errors
-# in command_line_interface.cc.o.
+#    absl::lts_NNNNNNNN::string_view, unsigned long)` в
+# command_line_interface.cc.o.
 #
-# Read first
-# ----------
-# This repo has seen this error twice for two different root causes —
-# the script prints which one you're in.
+# Прочти сначала
+# --------------
+# В этом репозитории ошибка встречалась дважды по двум разным причинам —
+# скрипт печатает, в какой именно ты находишься.
 #
-#   (A) Inline-namespace mismatch.  abseil bakes its LTS tag into the
-#       inline namespace via ABSL_OPTION_INLINE_NAMESPACE_NAME (see
-#       absl/base/options.h). For 20230802.1 that name is `lts_20230802`.
-#       If `legacy/absl/0.2.0` (or any non-matching abseil) ends up on
-#       the link line — e.g. built with `lts_20240116` — protoc's TUs
-#       (compiled against headers that declared `lts_20230802`) ask for
-#       symbols the .a does not export, and the linker fails on every
-#       absl call. This is what `fix_legacy_protobuf_absl.sh` repairs
-#       by swapping `legacy/protobuf`'s requires from `absl/0.2.0` →
-#       `abseil/20230802.1`.
+#   (A) Несовпадение inline-namespace. abseil зашивает свой LTS-тег в
+#       inline namespace через ABSL_OPTION_INLINE_NAMESPACE_NAME (см.
+#       absl/base/options.h). Для 20230802.1 это `lts_20230802`. Если на
+#       link line попадает `legacy/absl/0.2.0` (или любой несовпадающий
+#       abseil, напр. собранный с `lts_20240116`), то TU protoc
+#       (скомпилированные под заголовки с `lts_20230802`) просят символы,
+#       которых нет в .a, и линкер падает на каждом вызове absl. Это
+#       чинит `fix_legacy_protobuf_absl.sh`, меняя в `legacy/protobuf`
+#       requires с `absl/0.2.0` → `abseil/20230802.1`.
 #
-#   (B) cppstd mismatch on `absl::string_view`. At c++17 abseil aliases
-#       absl::string_view to std::string_view (mangling uses
-#       std::basic_string_view). At c++<17 it is abseil's own class
-#       (mangling uses absl::lts_*::string_view). If only some of the
-#       string-typed signatures fail and the LTS tag in the symbol
-#       matches the one in the .a, this is the case — not (A).
+#   (B) Несовпадение cppstd на `absl::string_view`. На c++17 abseil
+#       алиасит absl::string_view в std::string_view (mangling через
+#       std::basic_string_view). На c++<17 это собственный класс abseil
+#       (mangling через absl::lts_*::string_view). Если падает только
+#       часть string-сигнатур, а LTS-тег в символе совпадает с тегом
+#       в .a — это случай (B), а не (A).
 #
-# (A) is the common one in this repo. (B) is a secondary check.
+# (A) — частый случай в этом репозитории, (B) — вторичная проверка.
 #
 # Usage
 # -----
-# Run inside the same container/shell where the link failed (REGISTRY
-# mirror image for a CI repro, or the dev-VM for a local repro), from
-# any cwd — the script discovers the build dir under /root/.conan2/p/b.
+# Запускать в том же контейнере/шелле, где упала линковка (REGISTRY
+# mirror-образ для CI-репро или dev-VM для локального), из любого cwd —
+# скрипт сам находит build-dir под /root/.conan2/p/b.
 #
-#   ./test-astra/diag_protobuf_absl.sh        # auto-detect build dir
+#   ./test-astra/diag_protobuf_absl.sh        # автодетект build-dir
 #   BUILD_DIR=/path/to/proto<hash>/b ./test-astra/diag_protobuf_absl.sh
 #
 # Exit codes
-#   0  diagnostic ran end-to-end; verdict printed
-#   2  no protobuf build dir found in /root/.conan2/p/b (build never started)
-#   3  no abseil/absl package found in /root/.conan2/p (abseil never installed)
+#   0  диагностика прошла до конца, вердикт напечатан
+#   2  нет build-dir protobuf в /root/.conan2/p/b (сборка не стартовала)
+#   3  нет пакета abseil/absl в /root/.conan2/p (abseil не установлен)
 
 set -uo pipefail
 
@@ -53,7 +52,7 @@ echo " conan root: $CONAN_ROOT"
 echo "================================================================"
 echo ""
 
-# ---- [1] locate protobuf build dir ----------------------------------
+# ---- [1] находим build-dir protobuf ---------------------------------
 echo "== [1] protobuf build dir =="
 if [ -n "${BUILD_DIR:-}" ]; then
     BUILD="$BUILD_DIR"
@@ -71,9 +70,8 @@ echo "all candidates:"
 ls -1d "$CONAN_ROOT"/p/b/proto*/b 2>/dev/null | sed 's/^/    /'
 echo ""
 
-# ---- [2] which LTS tag command_line_interface.cc actually wants -----
-# Pull from CMake's saved error output if any, else read the .o
-# directly to see the inline-namespace tag mangled into the calls.
+# ---- [2] какой LTS-тег реально хочет command_line_interface.cc ------
+# Читаем .o напрямую, чтобы увидеть inline-namespace тег в манглинге вызовов.
 echo "== [2] inline namespace tag baked into command_line_interface.cc.o =="
 CLI_OBJ="$BUILD/CMakeFiles/libprotoc.dir/src/google/protobuf/compiler/command_line_interface.cc.o"
 if [ -f "$CLI_OBJ" ]; then
@@ -92,7 +90,7 @@ else
 fi
 echo ""
 
-# ---- [3] which LTS tag is actually inside the abseil .a we link to --
+# ---- [3] какой LTS-тег реально внутри abseil .a, к которому линкуемся -
 echo "== [3] inline namespace tag exported by each abseil .a in cache =="
 ABSL_P_DIRS=$(ls -dt "$CONAN_ROOT"/p/absei*/p "$CONAN_ROOT"/p/absl*/p 2>/dev/null | sort -u)
 if [ -z "$ABSL_P_DIRS" ]; then
@@ -119,8 +117,8 @@ for ABSL in $ABSL_P_DIRS; do
 done
 echo ""
 
-# ---- [4] check which abseil ref the protobuf recipe pulls -----------
-# both for the canonical protobuf recipe and the legacy one
+# ---- [4] какой abseil тянет рецепт protobuf -------------------------
+# и для канонического protobuf, и для legacy
 echo "== [4] which abseil version protobuf is required to use =="
 for RECIPE in \
     "$HOME/conan-master/protobuf/conanfile.py" \
@@ -140,7 +138,7 @@ do
 done
 echo ""
 
-# ---- [5] -std= flags that landed on the failing TU ------------------
+# ---- [5] флаги -std=, попавшие в падающий TU ------------------------
 echo "== [5] -std= flag that CMake actually emitted (cppstd cross-check) =="
 for f in \
     "$BUILD/CMakeFiles/libprotoc.dir/flags.make" \
@@ -156,7 +154,7 @@ do
 done
 echo ""
 
-# ---- [6] CMakeCache.txt: did the Conan toolchain land? --------------
+# ---- [6] CMakeCache.txt: дошёл ли Conan-toolchain? ------------------
 echo "== [6] CMakeCache.txt — toolchain and CXX_STANDARD =="
 if [ -f "$BUILD/CMakeCache.txt" ]; then
     grep -E \
@@ -167,7 +165,7 @@ else
 fi
 echo ""
 
-# ---- [7] full list of abseil/absl package_ids in cache --------------
+# ---- [7] полный список package_id abseil/absl в кэше ----------------
 echo "== [7] every abseil/absl in cache with its build settings =="
 if command -v conan >/dev/null 2>&1; then
     conan list 'abseil/*#*:*' 'absl/*#*:*' -f json 2>/dev/null \
@@ -191,7 +189,7 @@ else
 fi
 echo ""
 
-# ---- [8] verdict ----------------------------------------------------
+# ---- [8] вердикт ----------------------------------------------------
 echo "== [8] verdict — cross-read [2] vs [3] first, [5] second =="
 cat <<'EOF'
     Read the LTS tags in [2] (what protoc refs) and [3] (what each

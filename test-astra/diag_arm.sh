@@ -1,16 +1,15 @@
 #!/bin/bash
-# Manual minimal-build diagnostic for armv7hf cross when test_arm_cross.sh
-# build keeps hitting policy_checks.h "GCC 7 or higher".
+# Ручная минимальная диагностика armv7hf-кросса, когда сборка через
+# test_arm_cross.sh упирается в policy_checks.h "GCC 7 or higher".
 #
-# Bypasses test_arm_cross.sh entirely — runs a single docker container,
-# explicit -e CONAN_USER_TOOLCHAIN, builds top-level abseil only.
-# 5-7 minutes on a native ARM CI runner.
+# Обходит test_arm_cross.sh: один docker-контейнер, явный -e CONAN_USER_TOOLCHAIN,
+# собирает только верхний abseil. 5-7 минут на нативном ARM CI-раннере.
 #
 # Usage:  ./test-astra/diag_arm.sh
-# Reads:  IMAGE_TAG   (default grpc-tc-mirror-arm)
-#         VOL_NAME    (default conan-cache-arm-diag — kept SEPARATE from
-#                      the conan-cache-arm volume that test_arm_cross.sh
-#                      writes to, so this run does not interfere)
+# Reads:  IMAGE_TAG   (по умолчанию grpc-tc-mirror-arm)
+#         VOL_NAME    (по умолчанию conan-cache-arm-diag — ОТДЕЛЬНЫЙ от
+#                      conan-cache-arm, в который пишет test_arm_cross.sh,
+#                      чтобы этот прогон не мешал)
 
 set -uo pipefail
 

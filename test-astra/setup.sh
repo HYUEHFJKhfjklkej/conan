@@ -67,14 +67,12 @@ if [ -d "$ROOT_DIR/packages-linux" ]; then
     PKGS="$ROOT_DIR/packages-linux"
     echo "[INFO] Using packages-linux/ (source distributions)"
 
-    # Сначала установить build-зависимости (setuptools, wheel, pip)
-    # без них pip не может собрать .tar.gz пакеты
+    # Сначала build-зависимости (setuptools, wheel, pip) — без них pip не соберёт .tar.gz
     echo "[INFO] Installing build dependencies..."
     pip install --no-index --find-links="$PKGS" pip setuptools wheel 2>/dev/null || true
 
-    # Теперь установить Conan со всеми зависимостями.
-    # --upgrade обязателен: без него pip видит уже стоящий conan (любой версии)
-    # как "already satisfied" и не поднимает версию после bump'а тарбола.
+    # --upgrade обязателен: иначе pip видит уже стоящий conan как "already satisfied"
+    # и не поднимает версию после bump'а тарбола.
     echo "[INFO] Installing Conan..."
     pip install --no-index --find-links="$PKGS" --upgrade conan
 elif [ -d "$ROOT_DIR/packages" ]; then

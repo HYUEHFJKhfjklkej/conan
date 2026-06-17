@@ -15,13 +15,13 @@ pushd "%ROOT_DIR%"
 set EXITCODE=0
 if not exist output mkdir output
 
-:: Активировать venv если есть
+:: Активировать venv, если есть
 if exist venv\Scripts\activate.bat (
     call venv\Scripts\activate.bat
 )
 
 :: Профиль Windows. По умолчанию VS 2022 (v143/MSVC 194).
-:: Можно переопределить:  set PROFILE_NAME=win-v142-x64  и потом run_test.bat
+:: Переопределить:  set PROFILE_NAME=win-v142-x64  затем run_test.bat
 if "%PROFILE_NAME%"=="" set PROFILE_NAME=win-v143-x64
 set PROFILE=%ROOT_DIR%\profiles\%PROFILE_NAME%
 if not exist "%PROFILE%" (

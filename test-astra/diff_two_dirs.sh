@@ -1,19 +1,17 @@
 #!/bin/bash
-# Exhaustive comparator of two directory trees — finds *any* difference
-# (content, permissions, owner, xattr, ACL, symlinks, encoding, line
-# endings, SELinux context, extra/missing files).
+# Исчерпывающее сравнение двух деревьев каталогов — ищет ЛЮБОЕ отличие
+# (содержимое, права, владелец, xattr, ACL, симлинки, кодировка,
+# переводы строк, SELinux-контекст, лишние/недостающие файлы).
 #
-# Use when two trees look identical but downstream tooling treats them
-# differently. The classic case in IN-658: two `proto/` dirs with
-# bit-identical .proto files (md5 matches) where one works with protoc
-# and one doesn't.
+# Нужно, когда два дерева выглядят одинаково, но downstream-тулинг ведёт
+# себя по-разному. Классика IN-658: два `proto/` с побитово одинаковыми
+# .proto (md5 совпадает), где один работает с protoc, а другой нет.
 #
 # Usage:
 #   ./test-astra/diff_two_dirs.sh <good-dir> <bad-dir>
 #
-# Output is grouped by check; "[OK]" means both trees match on that
-# axis, "[DIFF]" prints the difference. Exit code = number of failing
-# checks.
+# Вывод сгруппирован по проверкам: "[OK]" — деревья совпали по этой оси,
+# "[DIFF]" печатает отличие. Exit code = число провалившихся проверок.
 
 set -u
 
@@ -43,7 +41,7 @@ diff_() {
     FAILS=$((FAILS+1))
 }
 
-# ---------------------------------------------------------------- 1. tree
+# ---------------------------------------------------------------- 1. дерево
 section "1. file tree (names + types)"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -57,7 +55,7 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- 2. file content
+# ---------------------------------------------------------------- 2. содержимое
 section "2. file content (md5)"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -71,7 +69,7 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- 3. perms
+# ---------------------------------------------------------------- 3. права
 section "3. permissions (mode bits)"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -85,7 +83,7 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- 4. owner/group
+# ---------------------------------------------------------------- 4. владелец/группа
 section "4. owner / group"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -99,7 +97,7 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- 5. symlinks
+# ---------------------------------------------------------------- 5. симлинки
 section "5. symlinks"
 SG=$(cd "$GOOD" && find . -type l 2>/dev/null | wc -l)
 SB=$(cd "$BAD"  && find . -type l 2>/dev/null | wc -l)
@@ -135,7 +133,7 @@ else
     TB="$(mktemp)"
     ( cd "$GOOD" && find . -type f -exec getfattr -d --absolute-names {} \; 2>/dev/null ) > "$TG"
     ( cd "$BAD"  && find . -type f -exec getfattr -d --absolute-names {} \; 2>/dev/null ) > "$TB"
-    # Strip the absolute prefix so we can diff relative trees
+    # убираем абсолютный префикс, чтобы сравнивать относительные деревья
     sed -i "s|$GOOD|<root>|g" "$TG"
     sed -i "s|$BAD|<root>|g" "$TB"
     if diff -q "$TG" "$TB" >/dev/null 2>&1; then
@@ -193,7 +191,7 @@ else
     rm -f "$TG" "$TB"
 fi
 
-# ---------------------------------------------------------------- 9. file type (file command)
+# ---------------------------------------------------------------- 9. тип файла (file)
 section "9. file(1) type"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -207,13 +205,13 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- 10. line endings + BOM
+# ---------------------------------------------------------------- 10. переводы строк + BOM
 section "10. line endings (CRLF) + BOM"
 detect_le() {
     local dir="$1"
     cd "$dir" || return
     find . -type f -print0 | while IFS= read -r -d '' f; do
-        # CR count vs LF count — if any CR then CRLF
+        # счёт CR против LF — если есть CR, значит CRLF
         cr=$(tr -cd '\r' < "$f" | wc -c)
         lf=$(tr -cd '\n' < "$f" | wc -c)
         bom=""
@@ -240,7 +238,7 @@ rm -f "$TG" "$TB"
 
 # ---------------------------------------------------------------- 11. realpath
 section "11. canonical paths (symlink resolution)"
-# Show whether the tree itself sits on a symlink path
+# проверяем, не лежит ли само дерево на пути через симлинк
 RG=$(realpath "$GOOD")
 RB=$(realpath "$BAD")
 echo "  GOOD: $GOOD"
@@ -253,7 +251,7 @@ else
     diff_ "one or both root paths involve symlinks — protoc may fail on canonicalized form"
 fi
 
-# ---------------------------------------------------------------- 12. inode info
+# ---------------------------------------------------------------- 12. inode-инфо
 section "12. inode info (hardlinks, sparse)"
 TG="$(mktemp)"
 TB="$(mktemp)"
@@ -267,7 +265,7 @@ else
 fi
 rm -f "$TG" "$TB"
 
-# ---------------------------------------------------------------- summary
+# ---------------------------------------------------------------- итог
 echo
 echo "=================================================="
 if [ "$FAILS" = "0" ]; then

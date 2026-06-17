@@ -1,9 +1,7 @@
 #!/bin/bash
-# ============================================
-#  Build grpc 1.78.1 (canonical + offline) with full dep tree:
-#    abseil, c-ares, openssl, protobuf, re2, zlib (transitively).
-#  Heavy: each variant triggers ~6 package builds.
-# ============================================
+# Сборка grpc 1.78.1 (canonical + offline) с полным деревом зависимостей:
+# abseil, c-ares, openssl, protobuf, re2, zlib (транзитивно).
+# Тяжело: каждый вариант тянет ~6 сборок пакетов.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,7 +19,7 @@ echo "[INFO] Conan: $(conan --version)"
 echo "[INFO] Recipe: canonical from conan-center-index"
 echo ""
 
-# Step 1: export every recipe so Conan can find them in --no-remote mode
+# Шаг 1: экспортируем каждый рецепт, чтобы Conan нашёл их в режиме --no-remote.
 echo "============================================"
 echo " Step 1: Export all recipes to local cache"
 echo "============================================"

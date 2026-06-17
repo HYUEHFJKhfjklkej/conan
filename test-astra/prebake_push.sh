@@ -1,40 +1,39 @@
 #!/bin/bash
-# prebake_push.sh — build the grpc-tc-mirror images and publish them to ProGet.
+# prebake_push.sh — собрать образы grpc-tc-mirror и опубликовать их в ProGet.
 #
-# This automates the manual runbook HELP [10] (build -> smoke -> push ->
-# verify pull) for one or all architectures. It is the "producer" half of the
-# pre-bake flow; run_prebake.sh is the "consumer/acceptance" half (fresh pull +
-# end-to-end build of the 7 .nupkg from the *published* tag). Set E2E=1 to chain
-# run_prebake.sh after each successful push.
+# Автоматизирует runbook HELP [10] (build -> smoke -> push -> verify pull) для
+# одной или всех архитектур. Это "producer"-половина pre-bake; run_prebake.sh —
+# "consumer/acceptance"-половина (свежий pull + сборка 7 .nupkg из опубликованного
+# тега). E2E=1 — запускать run_prebake.sh после каждого успешного push.
 #
-# Closed-network note: both base images come from ProGet, never Docker Hub. The
-# host must be `docker login`-ed to the registry with push rights on
-# main/library/* (admin, or a service account with Feed Administrator on `main`).
-# ProGet is only reachable from the dev-VM, so this runs there, not on the Mac.
+# Closed-network: оба базовых образа берутся из ProGet, не из Docker Hub. Хост
+# должен быть `docker login` в registry с правами push на main/library/* (admin
+# или сервис-аккаунт с Feed Administrator на `main`). ProGet доступен только с
+# dev-VM, поэтому запуск там, не на Mac.
 #
-# Usage (dev-VM):
-#   sudo docker login proget.inc.elara.local          # once per shell
-#   ./test-astra/prebake_push.sh                       # all three arches
-#   ./test-astra/prebake_push.sh x86_64                # one arch
-#   ./test-astra/prebake_push.sh arm arm64             # a subset
-#   PUSH=0 ./test-astra/prebake_push.sh x86_64         # build + smoke only
-#   E2E=1  ./test-astra/prebake_push.sh arm64          # + acceptance build
-#   DRY_RUN=1 ./test-astra/prebake_push.sh             # print, don't execute
+# Использование (dev-VM):
+#   sudo docker login proget.inc.elara.local          # один раз на сессию
+#   ./test-astra/prebake_push.sh                       # все три арки
+#   ./test-astra/prebake_push.sh x86_64                # одна арка
+#   ./test-astra/prebake_push.sh arm arm64             # подмножество
+#   PUSH=0 ./test-astra/prebake_push.sh x86_64         # только build + smoke
+#   E2E=1  ./test-astra/prebake_push.sh arm64          # + acceptance-сборка
+#   DRY_RUN=1 ./test-astra/prebake_push.sh             # печать, без выполнения
 #
 # Env:
-#   REGISTRY            ProGet host + main feed. Default proget.inc.elara.local/main
-#   MIRROR_VER          Tag to build/push. Default 0.1.0. Bump (0.2.0, ...) on
-#                       any Dockerfile/toolchain/Conan change — never overwrite.
-#   X64_BASE_IMAGE_TAG  gcc84-build-x86_64 tag. Default 0.1.0.
-#   ARM_BASE_IMAGE_TAG  gcc75-build-arm tag. Default 0.1.0.
-#   ARM64_BASE_IMAGE_TAG gcc75-build-arm64 tag. Default 0.1.0.
-#   PUSH                1 = push (default). 0 = build + smoke only.
-#   VERIFY_PULL         1 = drop local image + pull back after push (default).
-#                       0 = skip (faster, but doesn't prove the round-trip).
-#   E2E                 1 = run run_prebake.sh <arch> after push (full 7-nupkg
-#                       acceptance, ~15-25 min/arch). Default 0.
+#   REGISTRY            ProGet host + main feed. По умолч. proget.inc.elara.local/main
+#   MIRROR_VER          Тег для build/push. По умолч. 0.1.0. Бампить (0.2.0, ...)
+#                       при любом изменении Dockerfile/toolchain/Conan — не перезаписывать.
+#   X64_BASE_IMAGE_TAG  тег gcc84-build-x86_64. По умолч. 0.1.0.
+#   ARM_BASE_IMAGE_TAG  тег gcc75-build-arm. По умолч. 0.1.0.
+#   ARM64_BASE_IMAGE_TAG тег gcc75-build-arm64. По умолч. 0.1.0.
+#   PUSH                1 = push (по умолч.). 0 = только build + smoke.
+#   VERIFY_PULL         1 = снести локальный образ и pull обратно после push (по умолч.).
+#                       0 = пропустить (быстрее, но не проверяет round-trip).
+#   E2E                 1 = run_prebake.sh <arch> после push (полный acceptance
+#                       7 nupkg, ~15-25 мин/арка). По умолч. 0.
 #   NO_CACHE            1 = docker build --no-cache.
-#   DRY_RUN            1 = print every docker command, execute nothing.
+#   DRY_RUN            1 = печатать каждую docker-команду, ничего не выполнять.
 
 set -uo pipefail
 
@@ -61,9 +60,9 @@ fail() { printf "[FAIL] %s\n" "$1" >&2; exit 1; }
 
 X64_BASE="$REGISTRY/library/gcc84-build-x86_64:$X64_BASE_IMAGE_TAG"
 
-# Decide how to invoke docker (direct, then sudo -n). Same logic as
-# run_prebake.sh — dev-astra has passwordless sudo; CI agents are often in the
-# docker group. Skipped entirely under DRY_RUN so the Mac can lint the flow.
+# Как вызывать docker (напрямую, затем sudo -n). Та же логика, что в
+# run_prebake.sh: на dev-astra passwordless sudo, CI-агенты обычно в docker-группе.
+# Под DRY_RUN пропускается — чтобы Mac мог прогнать поток вхолостую.
 if [ "$DRY_RUN" = "1" ]; then
     DOCKER=(docker)
 elif docker info >/dev/null 2>&1; then
@@ -79,7 +78,7 @@ EOF
     exit 1
 fi
 
-# run <docker args...> — execute, or just print under DRY_RUN.
+# run <docker args...> — выполнить, либо только напечатать под DRY_RUN.
 run() {
     if [ "$DRY_RUN" = "1" ]; then
         printf '    DRY_RUN: %s' "${DOCKER[*]}"
@@ -90,21 +89,20 @@ run() {
     "${DOCKER[@]}" "$@"
 }
 
-# base_image_for <arch> -> echoes the Stage-2 BASE_IMAGE for that arch.
+# base_image_for <arch> -> печатает Stage-2 BASE_IMAGE для этой арки.
 base_image_for() {
     case "$1" in
-        x86_64) echo "$X64_BASE" ;;  # native: Stage 1 and 2 share the gcc84 image
+        x86_64) echo "$X64_BASE" ;;  # native: Stage 1 и 2 используют один gcc84-образ
         arm)    echo "$REGISTRY/library/gcc75-build-arm:$ARM_BASE_IMAGE_TAG" ;;
         arm64)  echo "$REGISTRY/library/gcc75-build-arm64:$ARM64_BASE_IMAGE_TAG" ;;
         *)      return 1 ;;
     esac
 }
 
-# smoke_one <arch> <image> — sanity-check a built image before pushing. Catches
-# the usual breakage: /opt/x64-native-gcc missing from Stage 2, python3/conan
-# not on PATH, baked global.conf absent. For arm/arm64 it also asserts the
-# linaro cross-gcc is present; x86_64 has no cross toolchain so that check is
-# skipped there.
+# smoke_one <arch> <image> — проверить собранный образ перед push. Ловит типовые
+# поломки: нет /opt/x64-native-gcc в Stage 2, python3/conan не в PATH, нет
+# вшитого global.conf. Для arm/arm64 дополнительно проверяет наличие linaro
+# cross-gcc; у x86_64 cross-toolchain'а нет, эта проверка пропускается.
 smoke_one() {
     local arch="$1" image="$2"
     hdr "smoke $image"

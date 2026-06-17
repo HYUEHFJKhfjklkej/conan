@@ -12,7 +12,7 @@
 # который ожидает protoc).
 #
 # Запуск (от обычного user'a; sudo внутри для docker):
-#   bash transfer-to-dev-vm/fix_legacy_protobuf_absl.sh
+#   bash test-astra/fix_legacy_protobuf_absl.sh
 #
 # Идемпотентно: бэкапит .bak.<ts>, повторный запуск ничего не сломает.
 #

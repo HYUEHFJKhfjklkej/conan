@@ -1,35 +1,34 @@
 #!/bin/bash
-# Full grpc/1.78.1 tree (newest line, upstream sources) → .nupkg
+# Полное дерево grpc/1.78.1 (новейшая линия, upstream-исходники) → .nupkg
 #
-# Twin of run_grpc_1601_upstream.sh, but pinned to the NEWEST grpc the
-# recipes carry (1.78.1) and its modern transitive stack. Canonical
-# conan-recipes/<pkg> sources (fetched from upstream github via
-# conandata.yml). Result: 7 .nupkg in the current deployer naming
-# scheme (<pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg).
+# Близнец run_grpc_1601_upstream.sh, но на САМЫЙ НОВЫЙ grpc из рецептов (1.78.1)
+# и его современный транзитивный стек. Канонические conan-recipes/<pkg>
+# (исходники с upstream github через conandata.yml). Результат: 7 .nupkg в
+# текущей схеме имён deployer'а (<pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg).
 #
-# Versions (exactly what grpc/conanfile.py resolves for grpc>1.69.0,
-# the `grpc_version > "1.60.0"` first branch at conanfile.py:109):
+# Версии (ровно то, что grpc/conanfile.py резолвит для grpc>1.69.0 — первая
+# ветка `grpc_version > "1.60.0"` в conanfile.py:109):
 #   grpc        1.78.1
 #   protobuf    5.29.6
-#   abseil      20250127.0   (deployer slots it as absl/0.2.0)
+#   abseil      20250127.0   (deployer слотит как absl/0.2.0)
 #   re2         20251105
-#   c-ares      1.34.6       (deployer renames to cares)
+#   c-ares      1.34.6       (deployer переименовывает в cares)
 #   openssl     3.4.5        (recipe dir: openssl/, name=openssl)
 #   zlib        1.3.1
 #
-# Self-wraps in `docker run grpc-tc-mirror` exactly like
-# run_grpc_1601_upstream.sh. Never runs natively on the dev-VM.
+# Сам оборачивается в `docker run grpc-tc-mirror`, как run_grpc_1601_upstream.sh.
+# Никогда не запускается напрямую на dev-VM.
 #
-# Usage:
+# Использование:
 #   ./test-astra/run_grpc_1781_upstream.sh
 #
-# Env overrides:
-#   MIRROR_IMAGE      docker image tag (default: grpc-tc-mirror)
-#   PROGET_BASE       base image for Dockerfile build (default: ProGet gcc84)
-#   CACHE_VOLUME      docker volume for /root/.conan2 (default: fresh)
-#   OUTPUT_DIR        host-relative output dir (default: output-grpc-1781-upstream)
-#   PROFILE           conan profile (default: profiles/lin-gcc84-x86_64)
-#   SHARED            shared opt for all deps (default: False — static)
+# Env-оверрайды:
+#   MIRROR_IMAGE      тег docker-образа (по умолч. grpc-tc-mirror)
+#   PROGET_BASE       базовый образ для docker build (по умолч. ProGet gcc84)
+#   CACHE_VOLUME      docker-volume под /root/.conan2 (по умолч. свежий)
+#   OUTPUT_DIR        выходная папка отн. репо (по умолч. output-grpc-1781-upstream)
+#   PROFILE           conan-профиль (по умолч. profiles/lin-gcc84-x86_64)
+#   SHARED            shared-опция для всех deps (по умолч. False — static)
 
 set -euo pipefail
 
@@ -45,24 +44,23 @@ X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
 BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1781-upstream}"
 SHARED="${SHARED:-False}"
-# Optional version suffix appended to every emitted .nupkg + nuspec +
-# CMakeLists.var _dependencies entry. Use when uploading to a ProGet feed
-# that already carries the same versions from a different source.
-# Example: LEGACY_NUPKG_VERSION_SUFFIX=.1
+# Опциональный суффикс версии, добавляемый к каждому .nupkg + nuspec + записи
+# _dependencies в CMakeLists.var. Нужен при заливке в ProGet-фид, где те же
+# версии уже лежат из другого источника. Пример: LEGACY_NUPKG_VERSION_SUFFIX=.1
 # (slot-tag `shared` = DynamicRT — содержимое всё равно static .a).
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
-# Backup-sources base URL (HELP [16]). Passed into the container EXPLICITLY:
-# a bare `-e VAR` with VAR unset on the host makes docker UNSET the image's
-# ENV default instead of inheriting it. `-` (not `:-`): explicit empty
-# string still disables backup-sources for this run.
+# Базовый URL backup-sources (HELP [16]). Прокидывается в контейнер ЯВНО:
+# голый `-e VAR` при незаданной VAR на хосте заставляет docker СБРОСИТЬ
+# дефолт из ENV образа вместо наследования. `-` (не `:-`): явная пустая
+# строка тоже отключает backup-sources для этого прогона.
 PROGET_SOURCES_URL="${PROGET_SOURCES_URL-http://proget.inc.elara.local/endpoints/conan-sources/content/}"
 
-# Optional 1st arg: build + deploy only ONE package instead of the whole
-# grpc tree. The recipes are still all exported (cheap) so version ranges
-# resolve, but build/deploy targets just the requested ref.
-#   ./run_grpc_1781_upstream.sh            -> grpc/1.78.1  (full tree, 7 nupkg)
-#   ./run_grpc_1781_upstream.sh abseil     -> abseil only  (1 nupkg)
+# Опциональный 1-й аргумент: собрать + задеплоить ТОЛЬКО ОДИН пакет вместо
+# всего дерева grpc. Все рецепты всё равно экспортируются (дёшево), чтобы
+# резолвились version ranges, но build/deploy идёт только по запрошенному ref.
+#   ./run_grpc_1781_upstream.sh            -> grpc/1.78.1  (всё дерево, 7 nupkg)
+#   ./run_grpc_1781_upstream.sh abseil     -> только abseil (1 nupkg)
 declare -A TARGET_REFS=(
     [grpc]=grpc/1.78.1      [abseil]=abseil/20250127.0  [protobuf]=protobuf/5.29.6
     [re2]=re2/20251105      [c-ares]=c-ares/1.34.6      [zlib]=zlib/1.3.1
@@ -72,9 +70,7 @@ TARGET_REF="${TARGET_REFS[${1:-grpc}]:-grpc/1.78.1}"
 
 mkdir -p "$OUTPUT_DIR"
 
-# ----------------------------------------------------------------------
-# Docker self-wrap (same idiom as run_grpc_1601_upstream.sh).
-# ----------------------------------------------------------------------
+# Docker self-wrap (та же идиома, что в run_grpc_1601_upstream.sh).
 if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     echo "[INFO] Host run detected. Wrapping in docker run $MIRROR_IMAGE ..."
 
@@ -106,9 +102,7 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -c "bash ./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
 fi
 
-# ----------------------------------------------------------------------
-# Inside the mirror container from here.
-# ----------------------------------------------------------------------
+# Дальше — внутри контейнера-зеркала.
 if ! command -v conan >/dev/null 2>&1; then
     if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
         # shellcheck disable=SC1091
@@ -120,12 +114,12 @@ if ! command -v conan >/dev/null 2>&1; then
     exit 1
 fi
 
-# ProGet wiring (no-op without env): backup-sources global.conf line +
-# optional remote registration. See HELP [16]/[17].
+# Настройка ProGet (no-op без env): строка backup-sources в global.conf +
+# опциональная регистрация remote. См. HELP [16]/[17].
 bash "$ROOT_DIR/test-astra/ensure_proget.sh" || true
 
-# CONAN_REMOTE=<name> switches installs from --no-remote to -r <name>
-# (binaries reused from / uploadable to ProGet). Default: offline as before.
+# CONAN_REMOTE=<name> переключает install с --no-remote на -r <name>
+# (бинарники переиспользуются из / заливаются в ProGet). По умолч. offline.
 CONAN_REMOTE="${CONAN_REMOTE:-}"
 REMOTE_ARGS=(--no-remote)
 [ -n "$CONAN_REMOTE" ] && REMOTE_ARGS=(-r "$CONAN_REMOTE")
@@ -138,12 +132,9 @@ echo "[INFO] cache:           $(conan config home 2>/dev/null)"
 echo "[INFO] version_suffix:  '${LEGACY_NUPKG_VERSION_SUFFIX}'  (empty = no suffix)"
 echo ""
 
-# ----------------------------------------------------------------------
-# Step 0: pre-flight — refuse to run if any Elara-fork legacy/* package
-# (absl/0.2.0, cares/1.19.0, etc.) is already in cache. They would
-# resolve ahead of our upstream-pinned versions and reintroduce the
-# inline-namespace mismatch this script is designed to avoid.
-# ----------------------------------------------------------------------
+# Шаг 0: pre-flight — отказаться, если в кэше уже есть Elara-форк legacy/*
+# (absl/0.2.0, cares/1.19.0 и т.д.). Они резолвятся раньше наших upstream-версий
+# и возвращают inline-namespace mismatch, который этот скрипт призван избегать.
 echo "=================================================="
 echo "[STEP 0] pre-flight: no legacy/* in cache"
 echo "=================================================="
@@ -163,14 +154,11 @@ fi
 echo "[STEP 0] clean."
 echo ""
 
-# ----------------------------------------------------------------------
-# Step 0.5: nuke the cache so every build is from scratch. The recipe
-# `debug_suffix` option does not always force a new package_id in the
-# protobuf recipe — Conan can silently reuse a binary built with the
-# default options. Wiping the cache guarantees a fresh build each run.
-# Skippable via SKIP_CACHE_CLEAN=1 if you want to iterate faster (e.g.
-# tweaking the deployer only).
-# ----------------------------------------------------------------------
+# Шаг 0.5: чистим кэш, чтобы каждая сборка была с нуля. Опция `debug_suffix`
+# в рецепте protobuf не всегда форсит новый package_id — Conan может молча
+# переиспользовать бинарник с дефолтными опциями. Очистка кэша гарантирует
+# свежую сборку. Можно пропустить через SKIP_CACHE_CLEAN=1 (например, когда
+# правишь только deployer).
 if [ -z "${SKIP_CACHE_CLEAN:-}" ]; then
     echo "=================================================="
     echo "[STEP 0.5] wipe Conan cache (set SKIP_CACHE_CLEAN=1 to skip)"
@@ -179,11 +167,9 @@ if [ -z "${SKIP_CACHE_CLEAN:-}" ]; then
     echo ""
 fi
 
-# ----------------------------------------------------------------------
-# Step 1: export all 7 recipes at the exact versions grpc/1.78.1 resolves.
-# These match grpc/conanfile.py:109 (the `grpc_version > "1.69.0"`
-# branch) — the newest line the recipes support.
-# ----------------------------------------------------------------------
+# Шаг 1: экспорт всех 7 рецептов в версиях, которые резолвит grpc/1.78.1. Они
+# совпадают с grpc/conanfile.py:109 (ветка `grpc_version > "1.69.0"`) —
+# новейшая линия, поддерживаемая рецептами.
 echo "=================================================="
 echo "[STEP 1] conan export — 7 recipes, grpc/1.78.1 stack"
 echo "=================================================="
@@ -196,7 +182,7 @@ declare -A EXPORTS=(
     [openssl]=3.4.5
     [grpc]=1.78.1
 )
-# Stable export order: leaves before branches.
+# Стабильный порядок экспорта: листья раньше веток.
 for pkg in zlib abseil c-ares re2 protobuf openssl grpc; do
     ver="${EXPORTS[$pkg]}"
     echo "[EXPORT] $pkg/$ver  (from ./$pkg)"
@@ -204,22 +190,20 @@ for pkg in zlib abseil c-ares re2 protobuf openssl grpc; do
 done
 echo ""
 
-# ----------------------------------------------------------------------
-# Step 2: build the full tree Release + Debug (deployer needs both).
-# --build=missing tells Conan to compile any binary not in cache.
-# -o "*/*:shared=$SHARED" makes every dep follow the same linkage as
-# requested (downstream Elara products link statically -> default static .a).
-# ----------------------------------------------------------------------
+# Шаг 2: сборка всего дерева Release + Debug (deployer'у нужны оба).
+# --build=missing — Conan компилирует любой бинарник, которого нет в кэше.
+# -o "*/*:shared=$SHARED" — все deps в одной linkage (downstream Elara
+# линкуется статически -> по умолчанию static .a).
 echo "=================================================="
 echo "[STEP 2] build grpc/1.78.1 tree (Release + Debug)"
 echo "=================================================="
 for BT in Release Debug; do
     echo ""
     echo "------ build_type=$BT  ($TARGET_REF) ------"
-    # abseil static — legacy coarse 21-lib packaging only triggers on a
-    # static build (abseil/conanfile.py::_aggregate_legacy_coarse). The
-    # more-specific abseil/* pattern pins abseil static even if the user
-    # overrides SHARED=True (rare; default SHARED=False is already static).
+    # abseil static — legacy-упаковка из 21 крупной .a срабатывает только на
+    # static-сборке (abseil/conanfile.py::_aggregate_legacy_coarse). Отдельный
+    # паттерн abseil/* пинит abseil static, даже если задать SHARED=True
+    # (редко; дефолт SHARED=False и так static).
     conan install --requires="$TARGET_REF" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         --build=missing "${REMOTE_ARGS[@]}" \
@@ -232,18 +216,16 @@ echo ""
 echo "[STEP 2] full tree built."
 echo ""
 
-# ----------------------------------------------------------------------
-# Step 3: deployer → 7 legacy-named .nupkg.
-# ----------------------------------------------------------------------
+# Шаг 3: deployer → 7 .nupkg с legacy-именами.
 echo "=================================================="
 echo "[STEP 3] deploy $TARGET_REF -> legacy .nupkg into $OUTPUT_DIR/"
 echo "=================================================="
 rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,absl,re2,c-ares,cares,openssl,zlib}.*.nupkg
 
-# Deploy must target the SAME ref as Step 2 ($TARGET_REF) and repeat the
-# EXACT options Step 2 built with. There is no --build here, so a differing
-# package_id (notably a missing `abseil/*:shared=False`) makes Conan report
-# the binary as missing and abort. Single-package run -> 1 .nupkg; full -> 7.
+# Deploy должен указывать на ТОТ ЖЕ ref, что Шаг 2 ($TARGET_REF), и повторять
+# ТЕ ЖЕ опции. Здесь нет --build, поэтому при ином package_id (особенно без
+# `abseil/*:shared=False`) Conan сочтёт бинарник отсутствующим и упадёт.
+# Один пакет -> 1 .nupkg; всё дерево -> 7.
 conan install --requires="$TARGET_REF" \
     -pr:h="$PROFILE" -pr:b="$PROFILE" \
     "${REMOTE_ARGS[@]}" \
@@ -263,12 +245,10 @@ echo "[DONE] grpc/1.78.1 newest-line tree built."
 echo "Artifacts in $OUTPUT_DIR/ (legacy-named .nupkg)."
 echo "=================================================="
 
-# ----------------------------------------------------------------------
-# Step 4 (opt-in): publish the built conan packages to the remote.
-# Requires CONAN_REMOTE=<name> UPLOAD_AFTER=1 and auth (conan remote
-# login done once on the cache volume, or CONAN_LOGIN_USERNAME +
-# CONAN_PASSWORD in env). See HELP [17].
-# ----------------------------------------------------------------------
+# Шаг 4 (opt-in): публикация собранных conan-пакетов в remote. Нужны
+# CONAN_REMOTE=<name> UPLOAD_AFTER=1 и аутентификация (conan remote login
+# один раз на cache volume, либо CONAN_LOGIN_USERNAME + CONAN_PASSWORD в env).
+# См. HELP [17].
 if [ -n "$CONAN_REMOTE" ] && [ "${UPLOAD_AFTER:-0}" = "1" ]; then
     echo ""
     echo "=================================================="

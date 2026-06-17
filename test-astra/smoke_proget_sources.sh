@@ -1,43 +1,41 @@
 #!/bin/bash
-# smoke_proget_sources.sh — prove that a build inside the mirror container
-# pulls a package's sources from ProGet backup-sources (not the bundled
-# src/*.tar.gz baked into the image).
+# smoke_proget_sources.sh — проверяет, что сборка в контейнере зеркала тянет
+# исходники из ProGet backup-sources, а не из src/*.tar.gz, вшитого в образ.
 #
-# Why a dedicated docker script: the build runs in the container and the cache
-# lives on the conan-cache-* volume, BUT the bundled src/<pkg>-<ver>.tar.gz is
-# baked into the IMAGE LAYER (Dockerfile COPY <pkg> ...). source() prefers that
-# archive, so just wiping the volume is not enough — the bundled copy must also
-# be moved aside. We do it inside a throwaway `--rm` container: the image and
-# the host repo stay untouched, no restore needed.
+# Зачем отдельный docker-скрипт: сборка идёт в контейнере, кэш — на volume
+# conan-cache-*, НО вшитый src/<pkg>-<ver>.tar.gz лежит в слое образа (Dockerfile
+# COPY <pkg> ...). source() предпочитает этот архив, поэтому чистки volume мало —
+# вшитую копию надо ещё и отодвинуть. Делаем это в одноразовом `--rm` контейнере:
+# образ и хостовый репозиторий не трогаем, восстановление не нужно.
 #
-# What it does, all in one `docker run --rm`:
-#   1. ensure_proget.sh  -> (re)write core.sources:download_urls on the volume
-#   2. conan remove "<pkg>/*" -c                 (force source() to re-run)
-#   3. mv <pkg>/src <pkg>/src.off                (disable bundled fallback)
-#   4. HTTP-probe the exact blob URL (<base>/<sha256>) -> definitive code+size,
-#      and it leaves an entry in the conan-sources feed request log on ProGet
-#   5. conan create <pkg> ... --no-remote -vvv     (prints the source download
-#      URL; must now hit backup-sources, not the bundled archive)
-#   6. verdict from BOTH signals (HTTP 200 probe + conan -vvv fetch) -> PASS/FAIL
+# Что делает, всё в одном `docker run --rm`:
+#   1. ensure_proget.sh  -> (пере)записать core.sources:download_urls на volume
+#   2. conan remove "<pkg>/*" -c                 (заставить source() повториться)
+#   3. mv <pkg>/src <pkg>/src.off                (отключить вшитый fallback)
+#   4. HTTP-проба точного blob-URL (<base>/<sha256>) -> код+размер, плюс попадает
+#      в request-log фида conan-sources на ProGet
+#   5. conan create <pkg> ... --no-remote -vvv     (печатает URL загрузки исходника;
+#      теперь должен идти в backup-sources, не во вшитый архив)
+#   6. вердикт по ОБОИМ сигналам (HTTP 200 проба + conan -vvv) -> PASS/FAIL
 #
-# Auth for the probe (the conan download itself is anonymous backup-sources):
-#   PROGET_API_KEY  -> X-ApiKey header     | PROGET_USER/PROGET_PASS -> basic
-#   PROGET_INSECURE=1 -> curl -k (self-signed TLS)
+# Авторизация для пробы (сама загрузка conan — анонимная backup-sources):
+#   PROGET_API_KEY  -> заголовок X-ApiKey  | PROGET_USER/PROGET_PASS -> basic
+#   PROGET_INSECURE=1 -> curl -k (самоподписанный TLS)
 #
-# Usage:
+# Запуск:
 #   ./test-astra/smoke_proget_sources.sh                 # zlib/1.3.1, x86_64
 #   PKG=re2 VERSION=20230301 ./test-astra/smoke_proget_sources.sh
-#   FRESH_VOLUME=1 ./test-astra/smoke_proget_sources.sh  # wipe volume first
+#   FRESH_VOLUME=1 ./test-astra/smoke_proget_sources.sh  # сначала очистить volume
 #
 # Env:
-#   PKG            recipe dir / package name   (default zlib)
-#   VERSION        version to build            (default 1.3.1)
-#   IMAGE          mirror image tag            (default grpc-tc-mirror-x86_64)
-#   VOLUME         conan cache volume          (default conan-cache-x86_64)
-#   PROFILE        host+build profile          (default profiles/lin-gcc84-x86_64)
-#   PROGET_SOURCES_URL  override the image ENV default (passed through if set)
-#   FRESH_VOLUME   1 = `docker volume rm $VOLUME` before the run
-#   NO_SUDO        1 = drop the `sudo` prefix on docker
+#   PKG            каталог рецепта / имя пакета (default zlib)
+#   VERSION        версия для сборки            (default 1.3.1)
+#   IMAGE          тег образа зеркала           (default grpc-tc-mirror-x86_64)
+#   VOLUME         conan cache volume           (default conan-cache-x86_64)
+#   PROFILE        профиль host+build           (default profiles/lin-gcc84-x86_64)
+#   PROGET_SOURCES_URL  переопределяет ENV-дефолт образа (пробрасывается, если задан)
+#   FRESH_VOLUME   1 = `docker volume rm $VOLUME` перед прогоном
+#   NO_SUDO        1 = убрать префикс `sudo` у docker
 
 set -uo pipefail
 
@@ -64,20 +62,20 @@ if [ "${FRESH_VOLUME:-}" = "1" ]; then
     $SUDO docker volume rm "$VOLUME" >/dev/null 2>&1 || true
 fi
 
-# Pass PROGET_SOURCES_URL through only if the caller overrode it; otherwise the
-# image ENV default applies. Pass smoke params + optional ProGet auth through
-# as env vars (cleaner than string substitution into the INNER script).
+# PROGET_SOURCES_URL пробрасываем, только если вызывающий его переопределил;
+# иначе действует ENV-дефолт образа. Параметры smoke и опциональную ProGet-авторизацию
+# передаём через env (чище, чем подстановка строк в INNER-скрипт).
 PASS_ENV=(
     -e "SMOKE_PKG=$PKG"
     -e "SMOKE_VER=$VERSION"
     -e "SMOKE_PROFILE=$PROFILE"
-    # passthrough-if-set from the host env (no '=' -> inherit):
+    # проброс из хостового env, если задано (без '=' -> наследуется):
     -e PROGET_API_KEY -e PROGET_USER -e PROGET_PASS -e PROGET_INSECURE
 )
 [ -n "${PROGET_SOURCES_URL:-}" ] && PASS_ENV+=(-e "PROGET_SOURCES_URL=$PROGET_SOURCES_URL")
 
-# Single-quoted: nothing expands on the host. All vars resolve inside the
-# container at runtime from the -e passthrough above.
+# В одинарных кавычках: на хосте ничего не разворачивается. Все переменные
+# резолвятся внутри контейнера из -e выше.
 INNER='
 set -uo pipefail
 cd /work/conan-recipes
@@ -138,14 +136,14 @@ RC="${PIPESTATUS[0]}"
 echo ""
 echo "================ SMOKE VERDICT ================"
 
-# 1. Direct HTTP probe of the blob URL.
+# 1. Прямая HTTP-проба blob-URL.
 PROBE_LINE=$(grep "^PROGET_PROBE:" "$LOG" | tail -1)
 PROBE_URL=$(grep "^PROGET_PROBE_URL:" "$LOG" | tail -1 | sed 's/^PROGET_PROBE_URL: //')
 [ -n "$PROBE_LINE" ] && echo " probe: ${PROBE_LINE#PROGET_PROBE: }  ($PROBE_URL)"
 probe_ok=0
 echo "$PROBE_LINE" | grep -q "HTTP 200" && probe_ok=1
 
-# 2. conan -vvv actually fetched the source over the backup-sources URL.
+# 2. conan -vvv реально скачал исходник по backup-sources URL.
 conan_ok=0
 grep -Eq "conan-sources/content|backup remote|Sources downloaded|Source.*[Dd]ownload" "$LOG" && conan_ok=1
 

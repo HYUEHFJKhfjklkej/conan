@@ -1,10 +1,10 @@
 #!/bin/bash
 # ============================================
 #  Полный тест Conan для grpc на Linux/Astra
-#  1. Собирает grpc + 6 транзитивных deps Release+Debug (static)
-#  2. Упаковывает все 7 пакетов в legacy .nupkg через Conan-deployer
+#  1. Сборка grpc + 6 транзитивных deps Release+Debug (static)
+#  2. Упаковка всех 7 пакетов в legacy .nupkg через Conan-deployer
 #  Артефакты: output/{grpc,protobuf,abseil,re2,c-ares,openssl,zlib}.*.nupkg
-#  Heavy: ~15-25 минут на 8 ядрах (×2 build_type).
+#  ~15-25 минут на 8 ядрах (×2 build_type).
 # ============================================
 set -euo pipefail
 
@@ -18,10 +18,9 @@ fi
 PROFILE="${PROFILE:-$ROOT_DIR/profiles/astra-gcc}"
 [ -f "$PROFILE" ] || PROFILE="$ROOT_DIR/profiles/linux-gcc"
 
-# For cross-compilation (e.g. arm/arm64 on an x86_64 build host) callers
-# can set PROFILE_BUILD to a native profile so Conan picks the right
-# tooling for build-context dependencies. Defaults to PROFILE for native
-# builds where host == build.
+# Для кросс-сборки (arm/arm64 на x86_64-хосте) можно задать PROFILE_BUILD как
+# нативный профиль — тогда Conan берёт правильный тулчейн для build-context. По
+# умолчанию = PROFILE (нативная сборка, host == build).
 PROFILE_BUILD="${PROFILE_BUILD:-$PROFILE}"
 
 echo "[INFO] Profile (host):  $PROFILE"
@@ -29,17 +28,17 @@ echo "[INFO] Profile (build): $PROFILE_BUILD"
 echo "[INFO] Conan: $(conan --version)"
 echo ""
 
-# ProGet wiring (no-op without env): backup-sources global.conf line +
-# optional remote registration. See HELP [16]/[17].
+# Настройка ProGet (без env — no-op): строка backup-sources в global.conf +
+# опциональная регистрация remote. См. HELP [16]/[17].
 bash "$SCRIPT_DIR/ensure_proget.sh" || true
 
-# CONAN_REMOTE=<name> switches installs from --no-remote to -r <name>.
-# Default: offline, exactly as before.
+# CONAN_REMOTE=<name> переключает установку с --no-remote на -r <name>.
+# По умолчанию — offline.
 CONAN_REMOTE="${CONAN_REMOTE:-}"
 REMOTE_ARGS=(--no-remote)
 [ -n "$CONAN_REMOTE" ] && REMOTE_ARGS=(-r "$CONAN_REMOTE")
 
-# Step 1: export all recipes so --no-remote can find them
+# Шаг 1: экспортировать все рецепты, чтобы --no-remote их нашёл
 echo "============================================"
 echo " Step 1/3: Export all recipes to local cache"
 echo "============================================"
@@ -58,7 +57,7 @@ for pkg in zlib abseil c-ares re2 protobuf openssl grpc; do
 done
 echo ""
 
-# Step 2: build full dep tree Release + Debug (deployer needs both in cache)
+# Шаг 2: собрать всё дерево зависимостей Release + Debug (deployer'у нужны оба в кэше)
 echo "============================================"
 echo " Step 2/3: Build grpc tree Release + Debug"
 echo "============================================"
@@ -74,7 +73,7 @@ done
 echo "[OK] grpc tree built (Release+Debug, shared=$SHARED)"
 echo ""
 
-# Step 3: deployer → 7 legacy .nupkg
+# Шаг 3: deployer → 7 legacy .nupkg
 echo "============================================"
 echo " Step 3/3: Package full tree via deployer"
 echo "============================================"
@@ -101,7 +100,7 @@ echo " Артефакты: output/*.nupkg (7 файлов)"
 echo " Структура совпадает с TeamCity-форматом."
 echo "============================================"
 
-# Opt-in: publish built conan packages to the remote (HELP [17]).
+# Опционально: выложить собранные пакеты на remote (HELP [17]).
 if [ -n "$CONAN_REMOTE" ] && [ "${UPLOAD_AFTER:-0}" = "1" ]; then
     echo "[INFO] conan upload '*' -> remote '$CONAN_REMOTE'"
     conan upload "*" -r "$CONAN_REMOTE" --confirm

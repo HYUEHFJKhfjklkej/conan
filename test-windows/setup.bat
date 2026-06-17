@@ -24,8 +24,8 @@ if %errorlevel% neq 0 (
 for /f "delims=" %%V in ('python --version') do set PYVER=%%V
 echo [OK] %PYVER%
 
-:: Колёса в packages/ собраны под Python 3.14 (cp314 win_amd64)
-:: Если у вас другая версия — pip install ниже упадёт; используйте python 3.14
+:: Колёса в packages/ собраны под Python 3.14 (cp314 win_amd64).
+:: На другой версии pip install ниже упадёт — нужен python 3.14.
 
 :: Создать venv
 echo.
@@ -63,8 +63,8 @@ if errorlevel 1 (
 
 echo.
 echo [INFO] Installing Conan from local packages...
-:: --upgrade so a pre-existing Conan (e.g. an old 2.27.1 on the agent) is
-:: actually replaced by the 2.29.0 sdist in packages\ (mirrors setup.sh).
+:: --upgrade — чтобы уже стоящий Conan (например старый 2.27.1 на агенте)
+:: реально заменился на 2.29.0 sdist из packages\ (как в setup.sh).
 python -m pip install --upgrade conan
 if errorlevel 1 (
     echo [ERROR] Conan install failed
@@ -100,7 +100,7 @@ echo Next: test-windows\run_test_grpc.bat
 :END
 popd
 echo.
-:: CI / TeamCity sets CI=1 to skip the interactive pause (would hang the agent).
+:: CI / TeamCity ставят CI=1, чтобы пропустить pause (иначе агент зависнет).
 if not defined CI (
     echo Press any key to close...
     pause >nul

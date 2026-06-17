@@ -1,34 +1,34 @@
 #!/bin/bash
-# clear_cache.sh — wipe the Conan cache so a rebuild re-runs source() and can
-# pull tarballs from ProGet backup-sources instead of reusing what is cached.
+# clear_cache.sh — чистит кэш Conan, чтобы пересборка заново отработала source()
+# и могла тянуть тарболы из ProGet backup-sources вместо закэшированных.
 #
-# Two modes (auto-picked by env):
-#   venv   (default)  conan remove "<pattern>" -c        — bare dev-VM / Mac
-#   docker (VOLUME=)  sudo docker volume rm "<VOLUME>"   — mirror containers
+# Два режима (выбираются по env):
+#   venv   (по умолчанию)  conan remove "<pattern>" -c        — голая dev-VM / Mac
+#   docker (VOLUME=)       sudo docker volume rm "<VOLUME>"   — mirror-контейнеры
 #
-# IMPORTANT — clearing the cache is necessary but NOT sufficient to fetch from
-# ProGet. The recipe's source() prefers the bundled src/<pkg>-<ver>.tar.gz and
-# only falls into get() (-> backup-sources -> ProGet) when that file is absent.
-# To actually exercise the ProGet path you must ALSO move the bundled archive
-# aside, e.g.  `mv zlib/src zlib/src.off`  (restore afterwards). See HELP [16].
+# ВАЖНО: чистки кэша недостаточно, чтобы тянуть из ProGet. source() в рецепте
+# предпочитает локальный src/<pkg>-<ver>.tar.gz и уходит в get() (-> backup-sources
+# -> ProGet) только когда этого файла нет. Чтобы реально пройти путь через ProGet,
+# нужно ещё убрать локальный архив, напр. `mv zlib/src zlib/src.off` (потом вернуть).
+# См. HELP [16].
 #
 # Usage:
 #   ./test-astra/clear_cache.sh                 # venv: conan remove "*" -c
-#   ./test-astra/clear_cache.sh "zlib/*"        # venv: remove just zlib
+#   ./test-astra/clear_cache.sh "zlib/*"        # venv: только zlib
 #   VOLUME=conan-cache-x86_64 ./test-astra/clear_cache.sh   # docker volume
 #
 # Env:
-#   VOLUME   docker volume name to remove (switches to docker mode). Known:
+#   VOLUME   имя docker volume для удаления (включает docker-режим). Известные:
 #            conan-cache-x86_64 / -arm / -arm64 / -arm-diag /
 #            conan-cache-legacy-x86_64 / -grpc-1601-upstream / -grpc-1781-upstream
-#   NO_SUDO  1 = drop the `sudo` prefix on docker (rootless / already root)
+#   NO_SUDO  1 = убрать префикс `sudo` у docker (rootless / уже root)
 
 set -uo pipefail
 
 VOLUME="${VOLUME:-}"
 
 if [ -n "$VOLUME" ]; then
-    # ----- docker volume mode --------------------------------------------
+    # ----- docker volume режим -------------------------------------------
     SUDO="sudo"
     [ "${NO_SUDO:-}" = "1" ] && SUDO=""
     echo "[INFO] clear_cache: removing docker volume '$VOLUME'"
@@ -43,7 +43,7 @@ if [ -n "$VOLUME" ]; then
     exit 0
 fi
 
-# ----- venv (local conan) mode -------------------------------------------
+# ----- venv (локальный conan) режим --------------------------------------
 PATTERN="${1:-*}"
 
 command -v conan >/dev/null 2>&1 || {

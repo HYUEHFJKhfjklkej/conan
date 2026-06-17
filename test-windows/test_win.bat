@@ -1,20 +1,20 @@
 @echo off
 :: ============================================================
-::  TeamCity stage driver — native Windows MSVC build of the grpc tree.
-::  Non-interactive sibling of test-astra/test_x86_64.sh.
-::  Wraps run_test_grpc.bat: Conan-version guard -> build -> verify 7 .nupkg.
+::  Драйвер TeamCity-стадии — нативная сборка дерева grpc на Windows MSVC.
+::  Неинтерактивный аналог test-astra/test_x86_64.sh.
+::  Обёртка над run_test_grpc.bat: guard версии Conan -> сборка -> проверка 7 .nupkg.
 ::
 ::  Usage:
-::     test_win.bat smoke    :: version/profile guard only (no build)
-::     test_win.bat build    :: full build + verify (default)
+::     test_win.bat smoke    :: только guard версии/профиля (без сборки)
+::     test_win.bat build    :: полная сборка + проверка (по умолчанию)
 ::
 ::  Env:
-::     PROFILE_NAME   default win-v143-x64  (also win-v142-x64, win-v142-x86)
-::     EXPECT_CONAN   default 2.29.0 ; set to "any" to disable the guard.
-::                    packages\ ships conan-2.29.0.tar.gz; run setup.bat (which
-::                    pip-installs --upgrade) so the agent is on 2.29.0.
+::     PROFILE_NAME   по умолчанию win-v143-x64 (ещё win-v142-x64, win-v142-x86)
+::     EXPECT_CONAN   по умолчанию 2.29.0 ; "any" отключает guard.
+::                    packages\ содержит conan-2.29.0.tar.gz; setup.bat ставит
+::                    его через pip --upgrade, чтобы агент был на 2.29.0.
 ::
-::  Artefacts: output\<pkg>.win.v1xx.shared.x64.<ver>.nupkg  (7 files)
+::  Артефакты: output\<pkg>.win.v1xx.shared.x64.<ver>.nupkg  (7 файлов)
 :: ============================================================
 setlocal ENABLEEXTENSIONS
 
@@ -38,7 +38,7 @@ if not exist "%ROOT_DIR%\profiles\%PROFILE_NAME%" (
 
 if exist "%ROOT_DIR%\venv\Scripts\activate.bat" call "%ROOT_DIR%\venv\Scripts\activate.bat"
 
-:: ----- Conan version guard (the "moved to new Conan" check) -----
+:: ----- guard версии Conan (проверка "перешли на новый Conan") -----
 set CVER=
 for /f "tokens=3" %%v in ('conan --version 2^>nul') do set CVER=%%v
 echo [INFO] Conan: %CVER%   (expect %EXPECT_CONAN%)   profile %PROFILE_NAME%
@@ -54,7 +54,7 @@ if "%MODE%"=="smoke" (
     endlocal & exit /b 0
 )
 
-:: ----- full build (non-interactive; CI=1 skips run_test_grpc.bat pause) -----
+:: ----- полная сборка (неинтерактивно; CI=1 убирает pause в run_test_grpc.bat) -----
 set CI=1
 call "%SCRIPT_DIR%run_test_grpc.bat"
 set BUILDRC=%ERRORLEVEL%
@@ -63,7 +63,7 @@ if not "%BUILDRC%"=="0" (
     endlocal & exit /b %BUILDRC%
 )
 
-:: ----- verify the 7 .nupkg artefacts -----
+:: ----- проверка 7 артефактов .nupkg -----
 set /a COUNT=0
 for %%P in (grpc protobuf abseil openssl re2 c-ares zlib) do (
     if exist "%ROOT_DIR%\output\%%P.win.*.nupkg" (

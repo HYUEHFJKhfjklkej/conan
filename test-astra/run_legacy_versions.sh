@@ -33,10 +33,9 @@ PROFILE="profiles/lin-gcc84-x86_64"
 OUTPUT_DIR="output-legacy"
 MIRROR_IMAGE="${MIRROR_IMAGE:-grpc-tc-mirror}"
 # Closed-network dev-VM / Astra-агент: ни docker.io, ни pypi.org недоступны.
-# Поэтому ОБЕ ARG идут на один и тот же ProGet-образ:
-#   Stage 1 (x64_native_tc) — из него копируется /usr/local/gcc-8.4/
-#   Stage 2 (mirror)        — он же используется как база сборочной среды
-# (он одновременно содержит Debian Stretch + GCC 8.4 + cmake + protoc + Qt).
+# Поэтому ОБЕ ARG идут на один ProGet-образ (Debian Stretch + GCC 8.4 + cmake
+# + protoc + Qt): Stage 1 копирует из него /usr/local/gcc-8.4/, Stage 2
+# использует его же как базу сборочной среды.
 PROGET_BASE="${PROGET_BASE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
 X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
 BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
@@ -44,24 +43,17 @@ CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-legacy-x86_64}"
 
 mkdir -p "$OUTPUT_DIR"
 
-# ----------------------------------------------------------------------
 # Docker self-wrapping.
-#
-# Профиль lin-gcc84-x86_64 жёстко зашит на /opt/x64-native-gcc/bin/gcc —
-# этот путь существует только внутри Dockerfile.grpc-tc-mirror (Stage 1
-# копирует gcc 8.4 из ProGet-образа gcc84-build-x86_64). На голой dev-VM
-# этого пути НЕТ → cmake configure упадёт с
-#   "CMAKE_C_COMPILER /opt/x64-native-gcc/bin/gcc is not a full path".
-#
-# Поэтому если мы НЕ внутри контейнера mirror — обернуть себя в docker run.
-# Внутри контейнера флаг IN_MIRROR=1 пробрасывается через -e чтобы
-# рекурсии не было.
-# ----------------------------------------------------------------------
+# Профиль lin-gcc84-x86_64 жёстко зашит на /opt/x64-native-gcc/bin/gcc, а этот
+# путь есть только внутри Dockerfile.grpc-tc-mirror (Stage 1 копирует туда gcc
+# 8.4 из ProGet-образа). На голой dev-VM пути нет → cmake configure упадёт
+# ("CMAKE_C_COMPILER ... is not a full path"). Поэтому вне контейнера mirror
+# оборачиваем себя в docker run; флаг IN_MIRROR=1 внутри гасит рекурсию.
 if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     echo "[INFO] Запуск на host. Профиль lin-gcc84-x86_64 требует Docker-зеркала."
     echo "[INFO] Оборачиваю себя в docker run $MIRROR_IMAGE ..."
 
-    # Собираем образ-зеркало если он отсутствует.
+    # Собираем образ-зеркало, если его нет.
     if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
         echo "[INFO] Образ $MIRROR_IMAGE отсутствует — собираю..."
         echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
@@ -74,10 +66,10 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
             .
     fi
 
-    # Передаём cmd-line обратно нашему же скрипту внутри контейнера.
-    # ВАЖНО: bind-mount всего репо (не только output-legacy) — иначе
-    # контейнер использует копию скриптов из образа (та что была на
-    # момент docker build), и git pull на host'е не отражается внутри.
+    # Передаём cmd-line обратно тому же скрипту внутри контейнера.
+    # ВАЖНО: bind-mount всего репо (не только output-legacy) — иначе контейнер
+    # возьмёт копию скриптов из образа (на момент docker build), и git pull на
+    # host'е внутрь не попадёт.
     exec docker run --rm \
         -v "$ROOT_DIR:/work/conan-recipes" \
         -v "$CACHE_VOLUME:/root/.conan2" \
@@ -87,12 +79,9 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
         -c "./test-astra/$(basename "${BASH_SOURCE[0]}") $*"
 fi
 
-# ----------------------------------------------------------------------
-# Дальше — мы внутри Docker-зеркала (либо рукотворного хоста с GCC 8.4 в
-# нужном пути). В образе grpc-tc-mirror Conan уже установлен в /opt/python,
-# симлинк в /usr/local/bin, venv не нужен. На host'е (если кто-то очень
-# хочет) — попробуем venv.
-# ----------------------------------------------------------------------
+# Дальше — внутри Docker-зеркала (или хоста с GCC 8.4 в нужном пути). В образе
+# grpc-tc-mirror Conan уже в /opt/python (симлинк в /usr/local/bin), venv не
+# нужен. На host'е пробуем venv.
 if ! command -v conan >/dev/null 2>&1; then
     if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
         echo "[INFO] conan не в PATH — активирую venv автоматически"
@@ -118,8 +107,8 @@ export_one() {
     conan export "$recipe_dir/" --version="$version" --no-remote
 }
 
-# Auto-patch legacy/<pkg>/conanfile.py с тем что Elara legacy CMake требует.
-# Идемпотентно — если patches уже на месте, не трогает.
+# Auto-patch legacy/<pkg>/conanfile.py под требования Elara legacy CMake.
+# Идемпотентно: если правки уже на месте — не трогает.
 AUTO_PATCH_DONE=0
 auto_patch_legacy_recipes() {
     [ "$AUTO_PATCH_DONE" = "1" ] && return
@@ -259,10 +248,9 @@ PYAPPLY
     echo
 }
 
-# Распаковывает первый найденный legacy/<pkg>/src/*.tar.gz и копирует
-# cmake/PlatformHelper.cmake + cmake/InstallComponent.cmake + cmake/CMakeCommon.cmake
-# в /work/conan-recipes/output/legacy-helpers/<pkg>/. Цель — host видит
-# содержимое Elara cmake-хелперов и можно дальше править auto_patch по факту.
+# Распаковывает первый legacy/<pkg>/src/*.tar.gz и копирует cmake-хелперы
+# (PlatformHelper / InstallComponent / CMakeCommon) в output/legacy-helpers/<pkg>/,
+# чтобы host видел их содержимое и можно было править auto_patch по факту.
 HELPERS_DUMPED=0
 dump_legacy_helpers() {
     [ "$HELPERS_DUMPED" = "1" ] && return
@@ -292,10 +280,9 @@ dump_legacy_helpers() {
     echo
 }
 
-# Pre-export all legacy recipe versions into the local cache so that
-# version ranges declared by upstream recipes (protobuf -> abseil range,
-# grpc -> abseil/re2/c-ares ranges) can be resolved offline.
-# Without this, --no-remote dies with "Package 'X/[range]' not resolved".
+# Заранее экспортируем все legacy-версии в локальный кэш, чтобы version ranges
+# из upstream-рецептов (protobuf -> abseil, grpc -> abseil/re2/c-ares)
+# резолвились offline. Без этого --no-remote падает с "Package not resolved".
 PREP_DONE=0
 prep_recipes() {
     [ "$PREP_DONE" = "1" ] && return
@@ -304,11 +291,9 @@ prep_recipes() {
     echo "=========================================="
     echo "Step 0/N: Export all legacy recipes to local cache"
     echo "=========================================="
-    # Все 9 рецептов из legacy/<pkg> — клоны Bitbucket-форков Elara,
-    # созданы через test-astra/prepare_legacy_from_bitbucket.sh.
-    # Каждый export только если директория существует — позволяет
-    # запускать скрипт частично (например после прогона только
-    # absl/re2/cares).
+    # Все 9 рецептов legacy/<pkg> — клоны Bitbucket-форков Elara (созданы через
+    # prepare_legacy_from_bitbucket.sh). Экспортируем каждый только если папка
+    # есть — это позволяет запускать скрипт частично.
     [ -d legacy/absl ]            && export_one legacy/absl            0.2.0
     [ -d legacy/re2 ]             && export_one legacy/re2             0.2.0
     [ -d legacy/cares ]           && export_one legacy/cares           1.19.0
@@ -340,10 +325,9 @@ create_one() {
     echo "log -> $log_file"
     echo "=========================================="
     set +e
-    # abseil must be STATIC: the legacy Elara packaging (21 coarse .a per
-    # absl/<subdir>/, see abseil/conanfile.py::_aggregate_legacy_coarse)
-    # only triggers on a static build. The `abseil/*:` pattern is a no-op
-    # for recipes that don't pull abseil.
+    # abseil обязан быть STATIC: legacy-упаковка Elara (21 крупная .a, см.
+    # abseil/conanfile.py::_aggregate_legacy_coarse) срабатывает только на
+    # static-сборке. Паттерн `abseil/*:` — no-op для рецептов без abseil.
     conan create "$recipe_dir/" --version="$version" \
         -pr:h="$PROFILE" -pr:b="$PROFILE" \
         -s build_type="$build_type" \
@@ -401,14 +385,14 @@ build_openssl() {
 
 build_grpc() {
     prep_recipes
-    # Pulls abseil/20240116.2 + re2/20230301 + c-ares/1.25.0
-    # automatically via grpc/conanfile.py's "elif >= 1.60.0" branch.
+    # Автоматически тянет abseil/20240116.2 + re2/20230301 + c-ares/1.25.0
+    # через ветку "elif >= 1.60.0" в grpc/conanfile.py.
     create_one grpc 1.60.1 Release
     create_one grpc 1.60.1 Debug
 }
 
-# Build legacy Elara forks (cloned via prepare_legacy_from_bitbucket.sh).
-# Each builds in Release + Debug.
+# Сборка legacy Elara-форков (клонированы prepare_legacy_from_bitbucket.sh).
+# Каждый собирается в Release + Debug.
 build_legacy_absl()            { prep_recipes; create_one legacy/absl            0.2.0  Release; create_one legacy/absl            0.2.0  Debug; }
 build_legacy_re2()             { prep_recipes; create_one legacy/re2             0.2.0  Release; create_one legacy/re2             0.2.0  Debug; }
 build_legacy_cares()           { prep_recipes; create_one legacy/cares           1.19.0 Release; create_one legacy/cares           1.19.0 Debug; }
@@ -424,17 +408,16 @@ pack_deps() {
     echo "=========================================="
     echo "Deployer: упаковка legacy nupkg (6 deps без grpc) в $OUTPUT_DIR"
     echo "=========================================="
-    # Без grpc/1.60.1 — он требует opencensus-proto skачать с интернета
-    # (CMake `download_archive` срабатывает на gRPC <1.62, флаг
-    # gRPC_DOWNLOAD_ARCHIVES не поддерживается). На offline-агенте
-    # упрётся в timeout. См. отдельную задачу.
-    # Эти 6 nupkg сами по себе разблокируют el_conf VersionChecker:
-    # protobuf 4.25.2 + openssl 1.1.11 + zlib 1.3.0 закрывают конфликты,
-    # abseil/re2/c-ares идут как транзитивы protobuf'a.
-    # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
-    # --build=missing: forcing abseil static changes the package_id of every
-    # dependant (protobuf, re2, ...), so cached binaries built against a
-    # shared abseil no longer match — rebuild whatever is missing here.
+    # Без grpc/1.60.1: он тянет opencensus-proto из интернета (CMake
+    # `download_archive` на gRPC <1.62, флаг gRPC_DOWNLOAD_ARCHIVES не
+    # поддерживается) — на offline-агенте упрётся в timeout. См. отдельную задачу.
+    # Эти 6 nupkg сами разблокируют el_conf VersionChecker: protobuf 4.25.2 +
+    # openssl 1.1.11 + zlib 1.3.0 закрывают конфликты, abseil/re2/c-ares идут
+    # транзитивами protobuf'a.
+    # abseil static — deployer читает lib/legacy-coarse/ для abseil nupkg.
+    # --build=missing: форс abseil static меняет package_id всех зависимых
+    # (protobuf, re2, ...), бинарники под shared abseil перестают подходить —
+    # пересобираем недостающее здесь.
     conan install \
         --requires=protobuf/4.25.2 \
         --requires=openssl/1.1.11 \
@@ -454,7 +437,7 @@ pack_deps() {
     echo "=========================================="
     ls -lh "$OUTPUT_DIR/"*.nupkg 2>/dev/null || echo "    (пусто)"
 
-    # Sanity-check: .nuspec в корне zip?
+    # Sanity-check: .nuspec лежит в корне zip?
     echo
     echo "=== Sanity-check: .nuspec в корне у каждого pkg ==="
     for n in "$OUTPUT_DIR"/*.nupkg; do
@@ -476,13 +459,13 @@ pack_legacy_full() {
     echo "=========================================="
     echo "Deployer: full Elara-legacy pack via grpc/1.60.1 (Bitbucket fork)"
     echo "=========================================="
-    # legacy/grpc 1.60.1 (с Bitbucket) объявляет в requirements()
-    # весь Elara-стек: absl/0.2.0, re2/0.2.0, cares/1.19.0, upb/0.2.0,
+    # legacy/grpc 1.60.1 (с Bitbucket) объявляет в requirements() весь
+    # Elara-стек: absl/0.2.0, re2/0.2.0, cares/1.19.0, upb/0.2.0,
     # address_sorting/1.0.0, protobuf/4.25.2, openssl/1.1.11, zlib/1.3.0.
-    # Conan пройдёт по графу, deployer положит каждый в output-legacy/
-    # под legacy-именем.
-    # abseil static — deployer reads lib/legacy-coarse/ for the abseil nupkg.
-    # --build=missing: see pack_deps note (shared->static flips package_ids).
+    # Conan пройдёт по графу, deployer положит каждый в output-legacy/ под
+    # legacy-именем.
+    # abseil static — deployer читает lib/legacy-coarse/ для abseil nupkg.
+    # --build=missing: см. примечание в pack_deps (shared->static меняет package_id).
     conan install \
         --requires=grpc/1.60.1 \
         -pr:h="$PROFILE" -pr:b="$PROFILE" --no-remote \
@@ -499,7 +482,7 @@ pack_legacy_full() {
 cmd="${1:-all}"
 case "$cmd" in
     all)
-        # Default — собираем 3 upstream deps + pack без grpc 1.60.1.
+        # По умолчанию: 3 upstream deps + pack без grpc 1.60.1.
         prep_recipes
         build_zlib
         build_protobuf
@@ -508,7 +491,7 @@ case "$cmd" in
         ;;
     legacy-all)
         # Полный Elara-legacy стек (после prepare_legacy_from_bitbucket.sh):
-        # все 9 пакетов из Bitbucket-форков + pack через grpc/1.60.1.
+        # все 9 Bitbucket-форков + pack через grpc/1.60.1.
         prep_recipes
         build_legacy_zlib
         build_legacy_absl
