@@ -32,7 +32,6 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && ln -sf /opt/python/bin/conan /usr/local/bin/conan \
     && conan --version
 
-# PROFILE не вшиваем — его задаёт шаг сборки (-e PROFILE / -e PROFILE_BUILD).
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
 
 # Bake the ProGet backup-sources line so a fresh/absent cache volume already has
@@ -40,5 +39,3 @@ ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/co
 RUN mkdir -p /root/.conan2 \
     && printf 'core.sources:download_urls=["%s", "origin"]\n' "$PROGET_SOURCES_URL" \
         >> /root/.conan2/global.conf
-
-# CMD не задаём — образ это только окружение агента, команду даёт шаг сборки.
