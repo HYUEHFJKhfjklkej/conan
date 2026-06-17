@@ -1,6 +1,10 @@
 # grpc-tc-mirror build container - x86_64. FROM the gcc84 CI base + Conan.
 # Single stage (base already ships gcc 8.4). Sources are NOT baked - drivers
 # mount the repo at /work/conan-recipes at run time.
+# X64_BASE_IMAGE is unused in this single-stage file (no x64_native_tc stage —
+# the base already ships gcc 8.4). It is declared only to consume the build-arg
+# that prebake_push.sh passes uniformly to all three arches, so Docker doesn't
+# warn "build-arg X64_BASE_IMAGE not consumed". The arm/arm64 files do use it.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 FROM ${BASE_IMAGE}
@@ -30,7 +34,11 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && ln -sf /opt/python/bin/conan /usr/local/bin/conan \
     && conan --version
 
-ENV PROFILE=/work/conan-recipes/profiles/lin-gcc84-x86_64
+# No PROFILE/PROFILE_BUILD is baked here: the build profile is a build-step
+# decision passed at run time (TeamCity / test-astra drivers via -e PROFILE /
+# -e PROFILE_BUILD). The image is an environment, not a build config — baking a
+# profile would be dead state now that nothing auto-builds, and on the ARM
+# images it would even pin the wrong (x86_64) host profile.
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
 
 # Bake the ProGet backup-sources line so a fresh/absent cache volume already has
@@ -39,4 +47,8 @@ RUN mkdir -p /root/.conan2 \
     && printf 'core.sources:download_urls=["%s", "origin"]\n' "$PROGET_SOURCES_URL" \
         >> /root/.conan2/global.conf
 
-CMD ["bash", "-lc", "./test-astra/run_test_grpc.sh"]
+# Build environment only — the image is meant to BE part of a CI agent, not to
+# run a build on its own. grpc is built by an external step (TeamCity, or the
+# test-astra drivers) that mounts the repo and passes its own command. A bare
+# `docker run` just drops into a shell; it never auto-builds grpc.
+CMD ["bash"]
