@@ -33,9 +33,3 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && conan --version
 
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"
-
-# Bake the ProGet backup-sources line so a fresh/absent cache volume already has
-# it; ensure_proget.sh re-asserts it for reused volumes (HELP [16]).
-RUN mkdir -p /root/.conan2 \
-    && printf 'core.sources:download_urls=["%s", "origin"]\n' "$PROGET_SOURCES_URL" \
-        >> /root/.conan2/global.conf
