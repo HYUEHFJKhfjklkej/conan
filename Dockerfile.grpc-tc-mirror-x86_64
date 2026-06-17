@@ -1,4 +1,4 @@
-# grpc-tc-mirror build env (x86_64): gcc84 CI base + Conan; repo mounted at run time.
+# Окружение сборки grpc-tc-mirror (x86_64): база gcc84 CI + Conan; репо монтируется в рантайме.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 FROM ${BASE_IMAGE}
@@ -6,8 +6,8 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /work/conan-recipes
 
-# Profile lin-gcc84-x86_64 wants gcc at /opt/x64-native-gcc/bin/{gcc,g++}; the
-# base has it at /usr/local/gcc-8.4 (version-named bins). Expose path + aliases.
+# Профиль lin-gcc84-x86_64 ждёт gcc в /opt/x64-native-gcc/bin/{gcc,g++}, а в базе он лежит в
+# /usr/local/gcc-8.4 (с версией в имени) — даём путь и алиасы без версии.
 RUN set -e; \
     ln -s /usr/local/gcc-8.4 /opt/x64-native-gcc; \
     cd /opt/x64-native-gcc/bin; \

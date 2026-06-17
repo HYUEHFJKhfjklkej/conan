@@ -1,4 +1,4 @@
-# grpc-tc-mirror build env (arm64): gcc75-build-arm64 base + Conan; repo mounted at run time.
+# Окружение сборки grpc-tc-mirror (arm64): база gcc75-build-arm64 + Conan; репо монтируется в рантайме.
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc75-build-arm64:0.1.0
 
