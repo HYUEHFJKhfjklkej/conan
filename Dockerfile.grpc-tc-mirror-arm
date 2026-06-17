@@ -2,9 +2,8 @@
 ARG X64_BASE_IMAGE=proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0
 ARG BASE_IMAGE=proget.inc.elara.local/main/library/gcc75-build-arm:0.1.0
 
-# Stage 1 - carry gcc 8.4 from the x86_64 base as the build-context compiler
-# (this base's system gcc is 6.3 < 7, which abseil rejects). cp -aL dereferences
-# symlinks so the COPY into stage 2 can't dangle.
+# Stage 1: gcc 8.4 из x86_64-базы для build-контекста (системный gcc базы 6.3 < 7, abseil
+# не берёт). cp -aL разыменовывает симлинки, чтобы COPY в stage 2 не повис.
 FROM ${X64_BASE_IMAGE} AS x64_native_tc
 RUN set -e; \
     [ -d /usr/local/gcc-8.4 ] || { echo "FATAL: gcc-8.4 missing in $X64_BASE_IMAGE"; exit 1; }; \
