@@ -13,7 +13,9 @@
 #   DRY_RUN=1     только показать, что и сколько будет удалено, ничего не трогать
 #   VOLUMES=0     НЕ чистить неиспользуемые docker-volume'ы (по умолч. 1 — чистить)
 #   KEEP_NUPKG=0  удалить и .nupkg из output-* целиком (по умолч. 1 — сохранять)
-#   IMAGES=1      дополнительно docker image prune -af — снести НЕиспользуемые
+#   DANGLING=1    снести только dangling <none> образы (docker image prune -f) —
+#                 безопасно, теговые base/mirror остаются. По умолч. 0.
+#   IMAGES=1      дополнительно docker image prune -af — снести ВСЕ неиспользуемые
 #                 образы, включая mirror/base (пересоберутся). По умолч. 0.
 set -uo pipefail
 
@@ -41,7 +43,7 @@ do_() {
 avail_kb() { df -P / | awk 'NR==2 {print $4}'; }
 
 echo "###############################################"
-echo "#  free_space.sh  (DRY_RUN=$DRY_RUN  VOLUMES=$VOLUMES  KEEP_NUPKG=$KEEP_NUPKG  IMAGES=$IMAGES)"
+echo "#  free_space.sh  (DRY_RUN=$DRY_RUN  VOLUMES=$VOLUMES  KEEP_NUPKG=$KEEP_NUPKG  DANGLING=${DANGLING:-0}  IMAGES=$IMAGES)"
 echo "###############################################"
 hdr "Диск ДО"
 df -h /
@@ -94,12 +96,16 @@ hdr "6. pip-кэш + /tmp логи"
 do_ rm -rf /root/.cache/pip "$HOME/.cache/pip"
 do_ rm -f /tmp/build-*.log /tmp/pull-*.log
 
-# 7. Опционально — неиспользуемые образы (mirror/base пересоберутся).
+# 7. Образы. DANGLING=1 — только <none> (безопасно, теговые остаются).
+#    IMAGES=1 — все неиспользуемые (вкл. base/mirror, пересоберутся).
 if [ "$IMAGES" = "1" ]; then
-    hdr "7. неиспользуемые docker-образы (IMAGES=1)"
+    hdr "7. ВСЕ неиспользуемые docker-образы (IMAGES=1, вкл. base/mirror)"
     do_ "${DOCKER[@]}" image prune -af
+elif [ "${DANGLING:-0}" = "1" ]; then
+    hdr "7. dangling <none> образы (DANGLING=1)"
+    do_ "${DOCKER[@]}" image prune -f
 else
-    hdr "7. образы не трогаем (IMAGES=1 чтобы снести неиспользуемые)"
+    hdr "7. образы не трогаем (DANGLING=1 — только <none>; IMAGES=1 — все неиспользуемые)"
 fi
 
 hdr "Диск ПОСЛЕ"

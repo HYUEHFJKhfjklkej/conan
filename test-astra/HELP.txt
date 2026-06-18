@@ -1810,4 +1810,6 @@ step and send it back so the next step can be picked.
          sudo bash -c 'cd /home/user/conan-master && ./test-astra/free_space.sh'            # do it
 
      Levels: VOLUMES=0 keep conan-cache volumes; KEEP_NUPKG=0 also drop output-*
-     .nupkg; IMAGES=1 also prune unused images (mirror/base — they rebuild).
+     .nupkg; DANGLING=1 prune only <none> images (safe, keeps tagged base/mirror);
+     IMAGES=1 prune ALL unused images (mirror/base too — they rebuild).
+     Biggest hog is usually old/<none> images: `sudo docker image prune -f`.
