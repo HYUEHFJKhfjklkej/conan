@@ -1813,3 +1813,39 @@ step and send it back so the next step can be picked.
      .nupkg; DANGLING=1 prune only <none> images (safe, keeps tagged base/mirror);
      IMAGES=1 prune ALL unused images (mirror/base too — they rebuild).
      Biggest hog is usually old/<none> images: `sudo docker image prune -f`.
+
+[24] TeamCity: grpc/1.60.1 line on Linux x86_64 + arm + arm64.
+
+     Validated 2026-06-18 on all three arches (7 legacy .nupkg each) via the
+     arch-aware run_grpc_1601_upstream.sh (HELP [22]). This is the 1.60.1 line
+     (GR910 parity) — distinct from [14], which wires the 1.78.1 line.
+     Maps to the real GRPC tree: GR113 (x64), GR121 (armv7hf), GR122 (arm64).
+
+     One TC config per arch. Build step command (agent must have docker access;
+     on the dev-VM docker needs sudo, on TC agents put the agent user in the
+     docker group):
+
+        ARCH=x86_64 ./test-astra/run_grpc_1601_upstream.sh      # GR113
+        ARCH=arm    ./test-astra/run_grpc_1601_upstream.sh      # GR121
+        ARCH=arm64  ./test-astra/run_grpc_1601_upstream.sh      # GR122
+
+     The driver self-wraps into grpc-tc-mirror-<arch> (builds the image from the
+     Dockerfile if absent), wipes the conan cache on start (STEP 0.5), builds the
+     7-pkg tree Release+Debug and deploys legacy .nupkg.
+
+     TC artifact rule per config:
+        output-grpc-1601-x86_64/*.nupkg => x86_64
+        output-grpc-1601-arm/*.nupkg    => arm
+        output-grpc-1601-arm64/*.nupkg  => arm64
+     Names: <pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg (x64),
+            <pkg>.lin.gcc75.shared.{arm,arm64}-linaro.<ver>.nupkg (ARM).
+     Agent req: Linux + Docker (same pool as the 1.78 stages). VCS root/branch:
+     same as the other grpc stages.
+
+     LEAD DECISIONS (do NOT invent locally — see TEAMCITY-grpc-tree.md):
+       - Placement: new GRPC_CONAN project vs replace GR1xx in-place vs a
+         parallel section.
+       - Publishing the .nupkg to the ProGet NuGet feed: overwrite the existing
+         legacy versions vs LEGACY_NUPKG_VERSION_SUFFIX=.1 for coexistence.
+     NOT YET WIRED: i686 (GR112) — run_grpc_1601_upstream.sh has no i686 ARCH
+     case yet (only x86_64/arm/arm64).
