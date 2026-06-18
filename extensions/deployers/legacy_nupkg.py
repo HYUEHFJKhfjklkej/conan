@@ -11,6 +11,7 @@ Conan deployer: упаковка зависимостей в legacy NuGet-фор
 (по settings.build_type), генерит .targets/.nuspec/CMakeLists.var, кладёт бинари и
 заголовки, упаковывает в .nupkg.
 """
+import glob
 import json
 import os
 import shutil
@@ -463,6 +464,22 @@ def _target_binutils_prefix(arch, user_toolchain):
     return ""
 
 
+def _resolve_cross_ld(ld_name):
+    """Абсолютный путь к (cross-)ld. На deploy-шаге `[buildenv]` профиля не
+    активен, поэтому голое `arm-linux-gnueabihf-ld` не находится на PATH —
+    ищем явно: уже абсолютный → PATH → установка Linaro в /opt. Если не нашли,
+    возвращаем имя как есть (subprocess даст понятный FileNotFoundError)."""
+    if os.path.sep in ld_name and os.path.isfile(ld_name):
+        return ld_name
+    found = shutil.which(ld_name)
+    if found:
+        return found
+    for cand in sorted(glob.glob(f"/opt/linaro-*/*/bin/{ld_name}")):
+        if os.path.isfile(cand):
+            return cand
+    return ld_name
+
+
 def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
     """Сливает отдельные архивы grpc `libupb*.a` в `libgrpc.a`, затем заменяет их
     одной ПУСТОЙ заглушкой `libupb.a` — так пакет несёт САМОДОСТАТОЧНУЮ `libgrpc.a`
@@ -677,8 +694,8 @@ def deploy(graph, output_folder, **kwargs):
         # legacy TeamCity-пакете. Работаем только над staged-копией; upstream
         # Conan-пакет не трогаем. Полное «зачем» — в _fold_upb_into_libgrpc.
         if name == "grpc":
-            _ld = _target_binutils_prefix(
-                s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld"
+            _ld = _resolve_cross_ld(_target_binutils_prefix(
+                s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld")
             # Release-fold обязателен. _fold_upb_into_libgrpc меняет каталог только
             # ПОСЛЕ успешного `ld -r`, так что падение оставляет каталог целым.
             _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output)
