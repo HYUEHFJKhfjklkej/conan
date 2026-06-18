@@ -1798,3 +1798,16 @@ step and send it back so the next step can be picked.
      conan-cache-grpc-1601-<arch>. NOTE: ARM at the 1.60 line is bring-up —
      abseil 20230802.1 may need an aarch64 binutils-2.32 patch like the one the
      1.78 line carries (abseil/patches/20250127.0-...). First arm64 run will tell.
+
+[23] Free disk space on the dev-VM (No space left on device).
+
+     Builds fill / with docker build-cache, conan-cache volumes and output-*
+     dirs. Symptom: conan export/build dies with OSError [Errno 28]. Driver:
+     test-astra/free_space.sh — safe by default (caches + build outputs only;
+     keeps .nupkg). Shows df before/after and GB freed.
+
+         sudo bash -c 'cd /home/user/conan-master && DRY_RUN=1 ./test-astra/free_space.sh'  # preview
+         sudo bash -c 'cd /home/user/conan-master && ./test-astra/free_space.sh'            # do it
+
+     Levels: VOLUMES=0 keep conan-cache volumes; KEEP_NUPKG=0 also drop output-*
+     .nupkg; IMAGES=1 also prune unused images (mirror/base — they rebuild).
