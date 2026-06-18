@@ -26,7 +26,10 @@
 #
 # Env-оверрайды:
 #   ARCH              x86_64|arm|arm64|all (по умолч. x86_64)
-#   MIRROR_IMAGE      тег docker-образа (по умолч. grpc-tc-mirror-<arch>)
+#   REGISTRY          ProGet host+feed для pull станка (по умолч. proget.inc.elara.local/main)
+#   MIRROR_VER        тег станка на ProGet (по умолч. 0.1.0)
+#   NO_PULL=1         не тянуть станок с ProGet, собрать из Dockerfile
+#   MIRROR_IMAGE      локальный тег docker-образа (по умолч. grpc-tc-mirror-<arch>)
 #   GCC84_BASE        x86_64-база для build-контекста (по умолч. ProGet gcc84)
 #   BASE_IMAGE        stage-2 база (по умолч. по арке из ProGet)
 #   CACHE_VOLUME      docker-volume под /root/.conan2 (по умолч. свой на арку)
@@ -89,6 +92,13 @@ X64_BASE_IMAGE="${X64_BASE_IMAGE:-$GCC84_BASE}"              # stage x64_native_
 BASE_IMAGE="${BASE_IMAGE:-$BASE_IMAGE_DEF}"                  # stage 2 база (по арке)
 CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1601-$ARCH}"
 SHARED="${SHARED:-False}"
+
+# Готовый станок на ProGet (его заливает prebake_push.sh). Если образа нет
+# локально, драйвер сначала пытается скачать его отсюда (NO_PULL=1 — пропустить
+# и собрать из Dockerfile). Так TC использует залитый образ, не пересобирая.
+REGISTRY="${REGISTRY:-proget.inc.elara.local/main}"
+MIRROR_VER="${MIRROR_VER:-0.1.0}"
+PROGET_MIRROR="$REGISTRY/library/grpc-tc-mirror-$ARCH:$MIRROR_VER"
 # Опциональный суффикс версии, добавляемый к каждому .nupkg + nuspec + записи
 # _dependencies в CMakeLists.var. Нужен при заливке в ProGet-фид, где те же
 # версии уже лежат из другого источника (Bitbucket legacy-форки). Пример:
@@ -121,15 +131,23 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     echo "[INFO] Host run detected. Wrapping in docker run $MIRROR_IMAGE ..."
 
     if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
-        echo "[INFO] Image $MIRROR_IMAGE missing — building from Dockerfile.grpc-tc-mirror..."
-        echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
-        echo "[INFO] BASE_IMAGE=$BASE_IMAGE"
-        docker build \
-            --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
-            --build-arg BASE_IMAGE="$BASE_IMAGE" \
-            -f "$DOCKERFILE" \
-            -t "$MIRROR_IMAGE" \
-            .
+        # Нет образа локально: сначала тянем готовый станок с ProGet (заливает
+        # prebake_push.sh) — TC так использует залитый образ, не пересобирая.
+        # NO_PULL=1 — пропустить pull и сразу собрать из Dockerfile.
+        if [ "${NO_PULL:-0}" != "1" ] && docker pull "$PROGET_MIRROR" >/dev/null 2>&1; then
+            echo "[INFO] Pulled $PROGET_MIRROR from ProGet"
+            docker tag "$PROGET_MIRROR" "$MIRROR_IMAGE"
+        else
+            echo "[INFO] $MIRROR_IMAGE нет локально и нет на ProGet — собираю из $DOCKERFILE..."
+            echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
+            echo "[INFO] BASE_IMAGE=$BASE_IMAGE"
+            docker build \
+                --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
+                --build-arg BASE_IMAGE="$BASE_IMAGE" \
+                -f "$DOCKERFILE" \
+                -t "$MIRROR_IMAGE" \
+                .
+        fi
     fi
 
     exec docker run --rm \
