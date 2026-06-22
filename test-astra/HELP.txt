@@ -1849,3 +1849,23 @@ step and send it back so the next step can be picked.
          legacy versions vs LEGACY_NUPKG_VERSION_SUFFIX=.1 for coexistence.
      NOT YET WIRED: i686 (GR112) — run_grpc_1601_upstream.sh has no i686 ARCH
      case yet (only x86_64/arm/arm64).
+
+[25] TeamCity runs the build inside the станок itself (no docker in the script).
+
+     Alternative to [24]: instead of letting run_grpc_1601_upstream.sh self-wrap
+     into docker, use TeamCity's "Run step within Docker container" — TC pulls
+     and runs the станок (image in per-builder params, e.g.
+     %REGISTRY%/%buildImageName%:%buildImageVersion%), and the build step runs
+     INSIDE it. Then use the docker-free driver:
+
+        ARCH=x86_64 ./test-astra/build_1601_nodocker.sh    # arm / arm64 too
+
+     build_1601_nodocker.sh = the conan part only (export → build Rel+Debug →
+     deployer → 7 .nupkg), no docker build/pull/run. It exports CONAN_USER_TOOLCHAIN
+     itself (the self-wrap used to pass it via -e). Same env knobs as [22].
+
+     Needed for ARM cross to work when TC mounts the checkout outside /work:
+     profiles/lin-gcc75-arm-linaro and lin-gcc-aarch64-linaro now use
+     {{ profile_dir }}/toolchains/... (location-independent) instead of a
+     hardcoded /work/conan-recipes path. Artifact rule same as [24]
+     (output-grpc-1601-<arch>/*.nupkg).
