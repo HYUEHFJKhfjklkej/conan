@@ -21,7 +21,10 @@ Conan-рецепты для third-party C++ библиотек наших про
 | openssl | 3.4.5 | conan-center-index |
 | grpc | 1.78.1 | conan-center-index |
 
-Всё дерево grpc (+6 deps) собирается полностью offline.
+Всё дерево grpc (+6 deps) собирается полностью offline. Параллельно поддерживается
+линия **grpc 1.60.1** (паритет GR910): protobuf 4.25.2 / abseil 20230802.1 /
+openssl 1.1.1 / zlib 1.3.0 — драйвер `test-astra/run_grpc_1601_upstream.sh`
+(`ARCH=x86_64|arm|arm64|all`).
 
 ## Быстрый старт
 
@@ -67,6 +70,9 @@ grpc.lin.gcc84.shared.x86_64.1.78.1.nupkg        # Windows: grpc.win.v143.shared
 Внутри: `lib/native/...`, `.nuspec`, `CMakeLists.var` (зависимости — под legacy-именами).
 
 ## Добавление нового пакета
+
+> Короткая шпаргалка (6 шагов) — `test-astra/HOWTO-new-recipe-short.md`; подробный
+> гайд для новичка — `test-astra/GUIDE-new-recipe-from-zero.md`.
 
 Сначала ищем на <https://conan.io/center>. Если есть — зеркалим (большинство случаев):
 
@@ -133,6 +139,6 @@ Dockerfile.*-test           локальный/online smoke (Docker Hub, не д
 ## Отладка
 
 Диагностика и разбор типовых багов — пронумерованные блоки в **`test-astra/HELP.txt`**
-(`[0]`…`[20]`). Частые грабли: `undefined reference to absl::lts_*` (inline-namespace
+(`[0]`…`[25]`). Частые грабли: `undefined reference to absl::lts_*` (inline-namespace
 mismatch), `-lzlib` / `-lprotolib` (legacy-имена компонентов), `timestamp.proto:
 File not found` (proto/-слой) — все разобраны в HELP.txt.
