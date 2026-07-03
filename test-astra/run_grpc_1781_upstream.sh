@@ -6,8 +6,9 @@
 # (исходники с upstream github через conandata.yml). Результат: 7 .nupkg в
 # текущей схеме имён deployer'а (<pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg).
 #
-# Версии (ровно то, что grpc/conanfile.py резолвит для grpc>1.69.0 — первая
-# ветка `grpc_version > "1.60.0"` в conanfile.py:109):
+# Версии (ветка `grpc_version > "1.69.0"` в grpc/conanfile.py::requirements
+# задаёт version ranges; резолвятся ровно в этот набор, потому что Шаг 1
+# экспортирует только эти версии):
 #   grpc        1.78.1
 #   protobuf    5.29.6
 #   abseil      20250127.0   (deployer слотит как absl/0.2.0)
@@ -16,18 +17,27 @@
 #   openssl     3.4.5        (recipe dir: openssl/, name=openssl)
 #   zlib        1.3.1
 #
-# Сам оборачивается в `docker run grpc-tc-mirror`, как run_grpc_1601_upstream.sh.
-# Никогда не запускается напрямую на dev-VM.
+# Сам оборачивается в `docker run grpc-tc-mirror-<arch>`, как
+# run_grpc_1601_upstream.sh. Никогда не запускается напрямую на dev-VM.
 #
 # Использование:
-#   ./test-astra/run_grpc_1781_upstream.sh
+#   ./test-astra/run_grpc_1781_upstream.sh                  # x86_64 (по умолч.)
+#   ARCH=arm   ./test-astra/run_grpc_1781_upstream.sh       # кросс armv7hf
+#   ARCH=arm64 ./test-astra/run_grpc_1781_upstream.sh       # кросс arm64
+#   ARCH=all   ./test-astra/run_grpc_1781_upstream.sh       # три арки подряд
 #
 # Env-оверрайды:
-#   MIRROR_IMAGE      тег docker-образа (по умолч. grpc-tc-mirror)
-#   PROGET_BASE       базовый образ для docker build (по умолч. ProGet gcc84)
-#   CACHE_VOLUME      docker-volume под /root/.conan2 (по умолч. свежий)
-#   OUTPUT_DIR        выходная папка отн. репо (по умолч. output-grpc-1781-upstream)
-#   PROFILE           conan-профиль (по умолч. profiles/lin-gcc84-x86_64)
+#   ARCH              x86_64|arm|arm64|all (по умолч. x86_64)
+#   REGISTRY          ProGet host+feed для pull станка (по умолч. proget.inc.elara.local/main)
+#   MIRROR_VER        тег станка на ProGet (по умолч. 0.1.0)
+#   NO_PULL=1         не тянуть станок с ProGet, собрать из Dockerfile
+#   MIRROR_IMAGE      локальный тег docker-образа (по умолч. grpc-tc-mirror-<arch>)
+#   GCC84_BASE        x86_64-база для build-контекста (по умолч. ProGet gcc84)
+#   BASE_IMAGE        stage-2 база (по умолч. по арке из ProGet)
+#   CACHE_VOLUME      docker-volume под /root/.conan2 (по умолч. свой на арку)
+#   OUTPUT_DIR        выходная папка отн. репо (по умолч. output-grpc-1781-<arch>)
+#   PROFILE           host-профиль (по умолч. по арке)
+#   PROFILE_BUILD     build-профиль (по умолч. profiles/lin-gcc84-x86_64)
 #   SHARED            shared-опция для всех deps (по умолч. False — static)
 
 set -euo pipefail
@@ -36,17 +46,66 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
-PROFILE="${PROFILE:-profiles/lin-gcc84-x86_64}"
-OUTPUT_DIR="${OUTPUT_DIR:-output-grpc-1781-upstream}"
-MIRROR_IMAGE="${MIRROR_IMAGE:-grpc-tc-mirror}"
-PROGET_BASE="${PROGET_BASE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
-X64_BASE_IMAGE="${X64_BASE_IMAGE:-$PROGET_BASE}"
-BASE_IMAGE="${BASE_IMAGE:-$PROGET_BASE}"
-CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1781-upstream}"
+# ARCH=x86_64|arm|arm64|all — на какой арке собирать. По умолч. x86_64 (нативно).
+# arm/arm64 — кросс на linaro 7.5: host-профиль ARM, build-контекст x86_64,
+# тулчейн прокидывается через CONAN_USER_TOOLCHAIN (env-fallback в рецептах
+# abseil/re2/protobuf/grpc, т.к. *:user_toolchain из [conf] не доходит до
+# транзитивных deps). abseil 20250127.0 несёт aarch64-патч под binutils 2.32
+# (xpaclri → hint #7) — линия 1.78.1 на ARM уже валидирована run_test_grpc.sh.
+ARCH="${ARCH:-x86_64}"
+
+# all — прогнать три арки подряд (каждая сама обернётся в свой docker-образ).
+if [ "$ARCH" = "all" ]; then
+    rc=0
+    for a in x86_64 arm arm64; do
+        echo ""; echo "######## grpc/1.78.1 -> $a ########"
+        ARCH="$a" bash "$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")" "$@" || rc=1
+    done
+    exit $rc
+fi
+
+GCC84_BASE="${GCC84_BASE:-proget.inc.elara.local/main/library/gcc84-build-x86_64:0.1.0}"
+case "$ARCH" in
+    x86_64)
+        DOCKERFILE=Dockerfile.grpc-tc-mirror-x86_64
+        MIRROR_IMAGE_DEF=grpc-tc-mirror-x86_64
+        BASE_IMAGE_DEF="$GCC84_BASE"
+        PROFILE_DEF=profiles/lin-gcc84-x86_64
+        TC_PATH="" ;;
+    arm)
+        DOCKERFILE=Dockerfile.grpc-tc-mirror-arm
+        MIRROR_IMAGE_DEF=grpc-tc-mirror-arm
+        BASE_IMAGE_DEF="proget.inc.elara.local/main/library/gcc75-build-arm:0.1.0"
+        PROFILE_DEF=profiles/lin-gcc75-arm-linaro
+        TC_PATH=/work/conan-recipes/profiles/toolchains/linaro-arm.cmake ;;
+    arm64)
+        DOCKERFILE=Dockerfile.grpc-tc-mirror-arm64
+        MIRROR_IMAGE_DEF=grpc-tc-mirror-arm64
+        BASE_IMAGE_DEF="proget.inc.elara.local/main/library/gcc75-build-arm64:0.1.0"
+        PROFILE_DEF=profiles/lin-gcc-aarch64-linaro
+        TC_PATH=/work/conan-recipes/profiles/toolchains/linaro-aarch64.cmake ;;
+    *) echo "[FAIL] ARCH must be x86_64|arm|arm64|all, got '$ARCH'" >&2; exit 2 ;;
+esac
+
+PROFILE="${PROFILE:-$PROFILE_DEF}"                           # host-профиль (по арке)
+PROFILE_BUILD="${PROFILE_BUILD:-profiles/lin-gcc84-x86_64}"  # build-контекст всегда x86_64
+OUTPUT_DIR="${OUTPUT_DIR:-output-grpc-1781-$ARCH}"
+MIRROR_IMAGE="${MIRROR_IMAGE:-$MIRROR_IMAGE_DEF}"
+X64_BASE_IMAGE="${X64_BASE_IMAGE:-$GCC84_BASE}"              # stage x64_native_tc (arm/arm64)
+BASE_IMAGE="${BASE_IMAGE:-$BASE_IMAGE_DEF}"                  # stage 2 база (по арке)
+CACHE_VOLUME="${CACHE_VOLUME:-conan-cache-grpc-1781-$ARCH}"
 SHARED="${SHARED:-False}"
+
+# Готовый станок на ProGet (его заливает prebake_push.sh). Если образа нет
+# локально, драйвер сначала пытается скачать его отсюда (NO_PULL=1 — пропустить
+# и собрать из Dockerfile). Так TC использует залитый образ, не пересобирая.
+REGISTRY="${REGISTRY:-proget.inc.elara.local/main}"
+MIRROR_VER="${MIRROR_VER:-0.1.0}"
+PROGET_MIRROR="$REGISTRY/library/grpc-tc-mirror-$ARCH:$MIRROR_VER"
 # Опциональный суффикс версии, добавляемый к каждому .nupkg + nuspec + записи
 # _dependencies в CMakeLists.var. Нужен при заливке в ProGet-фид, где те же
 # версии уже лежат из другого источника. Пример: LEGACY_NUPKG_VERSION_SUFFIX=.1
+# даёт grpc.lin.gcc84.shared.x86_64.1.78.1.1.nupkg
 # (slot-tag `shared` = DynamicRT — содержимое всё равно static .a).
 LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 
@@ -75,23 +134,34 @@ if [ -z "${IN_MIRROR:-}" ] && [ ! -x /opt/x64-native-gcc/bin/gcc ]; then
     echo "[INFO] Host run detected. Wrapping in docker run $MIRROR_IMAGE ..."
 
     if ! docker image inspect "$MIRROR_IMAGE" >/dev/null 2>&1; then
-        echo "[INFO] Image $MIRROR_IMAGE missing — building from Dockerfile.grpc-tc-mirror..."
-        echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
-        echo "[INFO] BASE_IMAGE=$BASE_IMAGE"
-        docker build \
-            --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
-            --build-arg BASE_IMAGE="$BASE_IMAGE" \
-            -f Dockerfile.grpc-tc-mirror-x86_64 \
-            -t "$MIRROR_IMAGE" \
-            .
+        # Нет образа локально: сначала тянем готовый станок с ProGet (заливает
+        # prebake_push.sh) — TC так использует залитый образ, не пересобирая.
+        # NO_PULL=1 — пропустить pull и сразу собрать из Dockerfile.
+        if [ "${NO_PULL:-0}" != "1" ] && docker pull "$PROGET_MIRROR" >/dev/null 2>&1; then
+            echo "[INFO] Pulled $PROGET_MIRROR from ProGet"
+            docker tag "$PROGET_MIRROR" "$MIRROR_IMAGE"
+        else
+            echo "[INFO] $MIRROR_IMAGE нет локально и нет на ProGet — собираю из $DOCKERFILE..."
+            echo "[INFO] X64_BASE_IMAGE=$X64_BASE_IMAGE"
+            echo "[INFO] BASE_IMAGE=$BASE_IMAGE"
+            docker build \
+                --build-arg X64_BASE_IMAGE="$X64_BASE_IMAGE" \
+                --build-arg BASE_IMAGE="$BASE_IMAGE" \
+                -f "$DOCKERFILE" \
+                -t "$MIRROR_IMAGE" \
+                .
+        fi
     fi
 
     exec docker run --rm \
         -v "$ROOT_DIR:/work/conan-recipes" \
         -v "$CACHE_VOLUME:/root/.conan2" \
         -e IN_MIRROR=1 \
+        -e ARCH="$ARCH" \
         -e OUTPUT_DIR="$OUTPUT_DIR" \
         -e PROFILE="$PROFILE" \
+        -e PROFILE_BUILD="$PROFILE_BUILD" \
+        -e CONAN_USER_TOOLCHAIN="$TC_PATH" \
         -e SHARED="$SHARED" \
         -e LEGACY_NUPKG_VERSION_SUFFIX="$LEGACY_NUPKG_VERSION_SUFFIX" \
         -e CONAN_REMOTE -e CONAN_REMOTE_URL -e CONAN_REMOTE_INSECURE \
@@ -125,7 +195,10 @@ REMOTE_ARGS=(--no-remote)
 [ -n "$CONAN_REMOTE" ] && REMOTE_ARGS=(-r "$CONAN_REMOTE")
 
 echo "[INFO] conan:           $(conan --version 2>&1 | head -1)"
-echo "[INFO] profile:         $PROFILE"
+echo "[INFO] arch:            ${ARCH:-x86_64}"
+echo "[INFO] profile (host):  $PROFILE"
+echo "[INFO] profile (build): ${PROFILE_BUILD:-$PROFILE}"
+echo "[INFO] toolchain:       ${CONAN_USER_TOOLCHAIN:-<none — native>}"
 echo "[INFO] output:          $OUTPUT_DIR"
 echo "[INFO] shared:          $SHARED"
 echo "[INFO] cache:           $(conan config home 2>/dev/null)"
@@ -167,9 +240,9 @@ if [ -z "${SKIP_CACHE_CLEAN:-}" ]; then
     echo ""
 fi
 
-# Шаг 1: экспорт всех 7 рецептов в версиях, которые резолвит grpc/1.78.1. Они
-# совпадают с grpc/conanfile.py:109 (ветка `grpc_version > "1.69.0"`) —
-# новейшая линия, поддерживаемая рецептами.
+# Шаг 1: экспорт всех 7 рецептов в версиях, которые резолвит grpc/1.78.1.
+# Ranges из grpc/conanfile.py (ветка `grpc_version > "1.69.0"`) резолвятся
+# ровно в этот набор — новейшая линия, поддерживаемая рецептами.
 echo "=================================================="
 echo "[STEP 1] conan export — 7 recipes, grpc/1.78.1 stack"
 echo "=================================================="
@@ -205,7 +278,7 @@ for BT in Release Debug; do
     # паттерн abseil/* пинит abseil static, даже если задать SHARED=True
     # (редко; дефолт SHARED=False и так static).
     conan install --requires="$TARGET_REF" \
-        -pr:h="$PROFILE" -pr:b="$PROFILE" \
+        -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
         --build=missing "${REMOTE_ARGS[@]}" \
         -s build_type="$BT" \
         -o "*/*:shared=$SHARED" \
@@ -227,7 +300,7 @@ rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,absl,re2,c-ares,cares,openssl,zlib}.*.
 # `abseil/*:shared=False`) Conan сочтёт бинарник отсутствующим и упадёт.
 # Один пакет -> 1 .nupkg; всё дерево -> 7.
 conan install --requires="$TARGET_REF" \
-    -pr:h="$PROFILE" -pr:b="$PROFILE" \
+    -pr:h="$PROFILE" -pr:b="$PROFILE_BUILD" \
     "${REMOTE_ARGS[@]}" \
     -o "*/*:shared=$SHARED" \
     -o "abseil/*:shared=False" \

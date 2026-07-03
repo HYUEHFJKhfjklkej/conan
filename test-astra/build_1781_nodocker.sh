@@ -1,22 +1,23 @@
 #!/bin/bash
-# build_1601_nodocker.sh — собрать дерево grpc/1.60.1 БЕЗ docker-self-wrap.
+# build_1781_nodocker.sh — собрать дерево grpc/1.78.1 БЕЗ docker-self-wrap.
 #
 # Для TeamCity, где контейнер-станок поднимает САМ TC ("Run step within Docker
 # container", образ в параметрах билдера). Скрипт запускается УЖЕ ВНУТРИ станка
 # и только гоняет conan: export → build Release+Debug → deployer → 7 .nupkg.
 # Никакого docker build/pull/run внутри — этим управляет TeamCity.
+# Близнец build_1601_nodocker.sh на новейшую линию (стек grpc 1.78.1).
 #
 # Запуск (TC build-step, внутри docker-контейнера от TC):
-#   ARCH=x86_64 ./test-astra/build_1601_nodocker.sh      # x86_64 (по умолч.)
-#   ARCH=arm    ./test-astra/build_1601_nodocker.sh      # кросс armv7hf
-#   ARCH=arm64  ./test-astra/build_1601_nodocker.sh      # кросс arm64
-#   ./test-astra/build_1601_nodocker.sh abseil           # один пакет вместо дерева
+#   ARCH=x86_64 ./test-astra/build_1781_nodocker.sh      # x86_64 (по умолч.)
+#   ARCH=arm    ./test-astra/build_1781_nodocker.sh      # кросс armv7hf
+#   ARCH=arm64  ./test-astra/build_1781_nodocker.sh      # кросс arm64
+#   ./test-astra/build_1781_nodocker.sh abseil           # один пакет вместо дерева
 #
 # Env:
 #   ARCH          x86_64|arm|arm64 (по умолч. x86_64) — выбирает профиль/тулчейн
 #   PROFILE       host-профиль (по умолч. по арке)
 #   PROFILE_BUILD build-профиль (по умолч. profiles/lin-gcc84-x86_64)
-#   OUTPUT_DIR    выход отн. репо (по умолч. output-grpc-1601-<arch>)
+#   OUTPUT_DIR    выход отн. репо (по умолч. output-grpc-1781-<arch>)
 #   SHARED        False — static .a содержимое (по умолч.)
 #   LEGACY_NUPKG_VERSION_SUFFIX  суффикс версии .nupkg (по умолч. пусто)
 #   PROGET_SOURCES_URL           backup-sources (по умолч. ProGet conan-sources)
@@ -37,7 +38,7 @@ case "$ARCH" in
 esac
 PROFILE="${PROFILE:-$PROFILE_DEF}"
 PROFILE_BUILD="${PROFILE_BUILD:-profiles/lin-gcc84-x86_64}"
-OUTPUT_DIR="${OUTPUT_DIR:-output-grpc-1601-$ARCH}"
+OUTPUT_DIR="${OUTPUT_DIR:-output-grpc-1781-$ARCH}"
 SHARED="${SHARED:-False}"
 export LEGACY_NUPKG_VERSION_SUFFIX="${LEGACY_NUPKG_VERSION_SUFFIX:-}"
 export PROGET_SOURCES_URL="${PROGET_SOURCES_URL-http://proget.inc.elara.local/endpoints/conan-sources/content/}"
@@ -54,11 +55,11 @@ command -v conan >/dev/null 2>&1 || { echo "[FAIL] conan не найден (не
 
 # Опциональный 1-й арг: собрать+задеплоить ОДИН пакет вместо всего дерева.
 declare -A TARGET_REFS=(
-    [grpc]=grpc/1.60.1      [abseil]=abseil/20230802.1  [protobuf]=protobuf/4.25.2
-    [re2]=re2/20230301      [c-ares]=c-ares/1.25.0      [zlib]=zlib/1.3.0
-    [openssl]=openssl/1.1.11
+    [grpc]=grpc/1.78.1      [abseil]=abseil/20250127.0  [protobuf]=protobuf/5.29.6
+    [re2]=re2/20251105      [c-ares]=c-ares/1.34.6      [zlib]=zlib/1.3.1
+    [openssl]=openssl/3.4.5
 )
-TARGET_REF="${TARGET_REFS[${1:-grpc}]:-grpc/1.60.1}"
+TARGET_REF="${TARGET_REFS[${1:-grpc}]:-grpc/1.78.1}"
 
 mkdir -p "$OUTPUT_DIR"
 echo "[INFO] arch=$ARCH  profile=$PROFILE  build=$PROFILE_BUILD"
@@ -75,12 +76,12 @@ REMOTE_ARGS=(--no-remote)
 # Чистый кэш = честная сборка с нуля (SKIP_CACHE_CLEAN=1 чтобы пропустить).
 [ -z "${SKIP_CACHE_CLEAN:-}" ] && conan remove '*' -c
 
-# Экспорт 7 рецептов в версиях линии 1.60.1.
+# Экспорт 7 рецептов в версиях линии 1.78.1.
 declare -A EXPORTS=(
-    [zlib]=1.3.0     [abseil]=20230802.1  [c-ares]=1.25.0  [re2]=20230301
-    [protobuf]=4.25.2 [openssl-1x]=1.1.11 [grpc]=1.60.1
+    [zlib]=1.3.1      [abseil]=20250127.0  [c-ares]=1.34.6  [re2]=20251105
+    [protobuf]=5.29.6 [openssl]=3.4.5      [grpc]=1.78.1
 )
-for pkg in zlib abseil c-ares re2 protobuf openssl-1x grpc; do
+for pkg in zlib abseil c-ares re2 protobuf openssl grpc; do
     conan export "$pkg/" --version="${EXPORTS[$pkg]}" --no-remote
 done
 
@@ -109,7 +110,7 @@ conan install --requires="$TARGET_REF" \
 
 echo ""
 ls -lh "$ROOT_DIR/$OUTPUT_DIR"/*.nupkg 2>/dev/null | sed 's|^|  |' || echo "  (пусто)"
-echo "[DONE] grpc/1.60.1 ($ARCH) -> $OUTPUT_DIR/"
+echo "[DONE] grpc/1.78.1 ($ARCH) -> $OUTPUT_DIR/"
 
 # Опционально: upload conan-пакетов в remote (CONAN_REMOTE + UPLOAD_AFTER=1).
 if [ -n "$CONAN_REMOTE" ] && [ "${UPLOAD_AFTER:-0}" = "1" ]; then

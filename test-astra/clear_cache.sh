@@ -20,7 +20,8 @@
 # Env:
 #   VOLUME   имя docker volume для удаления (включает docker-режим). Известные:
 #            conan-cache-x86_64 / -arm / -arm64 / -arm-diag /
-#            conan-cache-legacy-x86_64 / -grpc-1601-upstream / -grpc-1781-upstream
+#            conan-cache-legacy-x86_64 / -grpc-1601-<arch> / -grpc-1781-<arch>
+#            (старые до arch-aware драйверов: -grpc-1601-upstream / -grpc-1781-upstream)
 #   NO_SUDO  1 = убрать префикс `sudo` у docker (rootless / уже root)
 
 set -uo pipefail

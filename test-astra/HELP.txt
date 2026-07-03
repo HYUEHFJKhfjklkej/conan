@@ -1686,7 +1686,8 @@ step and send it back so the next step can be picked.
 
         VOLUME=conan-cache-x86_64 ./test-astra/clear_cache.sh
         # known volumes: conan-cache-{x86_64,arm,arm64,arm-diag},
-        #   conan-cache-legacy-x86_64, -grpc-1601-upstream, -grpc-1781-upstream
+        #   conan-cache-legacy-x86_64, -grpc-1601-<arch>, -grpc-1781-<arch>
+        #   (pre-arch-aware leftovers: -grpc-1601-upstream, -grpc-1781-upstream)
         # NO_SUDO=1 if docker needs no sudo
 
      GOTCHA — clearing the cache alone will NOT pull from ProGet. source()
@@ -1869,3 +1870,52 @@ step and send it back so the next step can be picked.
      {{ profile_dir }}/toolchains/... (location-independent) instead of a
      hardcoded /work/conan-recipes path. Artifact rule same as [24]
      (output-grpc-1601-<arch>/*.nupkg).
+
+
+[27] Build the grpc/1.78.1 line (newest) on all arches + TeamCity wiring.
+
+     The 1.78.1-line twin of [22]/[24]/[25]. run_grpc_1781_upstream.sh is now
+     arch-aware (ARCH=x86_64|arm|arm64|all) and pulls the prebaked
+     grpc-tc-mirror-<arch> station from ProGet before falling back to a local
+     docker build (NO_PULL=1 to skip the pull). Pinned stack (the set the
+     `grpc_version > "1.69.0"` ranges in grpc/conanfile.py resolve to):
+     protobuf 5.29.6, abseil 20250127.0, re2 20251105, c-ares 1.34.6,
+     openssl 3.4.5 (openssl/), zlib 1.3.1. ARM cross at this line is already
+     validated (run_test_grpc.sh green on all 3 arches, 2026-06-17/18);
+     abseil 20250127.0 carries the aarch64 binutils-2.32 patch.
+
+     Manual / self-wrapping driver (dev-VM; docker needs sudo there):
+
+        sudo bash -c 'cd /home/user/conan-master && ARCH=all ./test-astra/run_grpc_1781_upstream.sh'
+        # one arch:     ARCH=arm64 ./test-astra/run_grpc_1781_upstream.sh
+        # one package:  ./test-astra/run_grpc_1781_upstream.sh abseil
+
+     Output: output-grpc-1781-<arch>/*.nupkg (7 per arch), cache volume
+     conan-cache-grpc-1781-<arch>. Same env knobs as [22]
+     (SKIP_CACHE_CLEAN/OUTPUT_DIR/LEGACY_NUPKG_VERSION_SUFFIX/CONAN_REMOTE/...).
+
+     TeamCity — two equivalent wirings, mirroring the 1.60.1 line:
+       a) self-wrap ([24] style) — build step per arch:
+              ARCH=x86_64 ./test-astra/run_grpc_1781_upstream.sh
+              ARCH=arm    ./test-astra/run_grpc_1781_upstream.sh
+              ARCH=arm64  ./test-astra/run_grpc_1781_upstream.sh
+       b) TC runs the step inside the станок ([25] style, "Run step within
+          Docker container", image %REGISTRY%/library/grpc-tc-mirror-<arch>):
+              ARCH=x86_64 ./test-astra/build_1781_nodocker.sh   # arm / arm64 too
+     TC artifact rule per config:
+        output-grpc-1781-x86_64/*.nupkg => x86_64
+        output-grpc-1781-arm/*.nupkg    => arm
+        output-grpc-1781-arm64/*.nupkg  => arm64
+     Names: <pkg>.lin.gcc84.shared.x86_64.<ver>.nupkg (x64),
+            <pkg>.lin.gcc75.shared.{arm,arm64}-linaro.<ver>.nupkg (ARM).
+     Publish the .nupkg to the ProGet `conan` NuGet feed with
+     tc_publish_conan.sh (API_KEY=<key> NUPKG_DIR=output-grpc-1781-<arch>).
+
+     Distinct from [14]: that block wires the same 1.78.1 stack through the
+     test-harness drivers (test_x86_64.sh / test_arm_cross.sh, with the
+     Conan-2.29.0 version guard); this one uses the upstream-line drivers
+     shaped like TC build steps. Windows twin of this line: run_test_grpc.bat
+     (hardcodes 1.78.1) via test_win.bat — see [15].
+
+     Same lead decisions as [24] (placement in the TC tree, publish policy
+     overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1) — TEAMCITY-grpc-tree.md.

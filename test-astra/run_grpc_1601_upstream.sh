@@ -290,7 +290,7 @@ echo ""
 echo "=================================================="
 echo "[STEP 3] deploy $TARGET_REF -> legacy .nupkg into $OUTPUT_DIR/"
 echo "=================================================="
-rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,re2,c-ares,openssl,zlib}.*.nupkg
+rm -f "$OUTPUT_DIR"/{grpc,protobuf,abseil,absl,re2,c-ares,cares,openssl,zlib}.*.nupkg
 
 # Deploy должен указывать на ТОТ ЖЕ ref, что Шаг 2 ($TARGET_REF), и повторять
 # ТЕ ЖЕ опции. Здесь нет --build, поэтому при ином package_id (особенно без

@@ -59,12 +59,15 @@ group lower numbers are StaticRT/x86, higher are DynamicRT/x64.
 | abseil   | 20230802.1                    | 20250127.0                 |
 | re2      | 20230301                      | 20251105                   |
 | c-ares   | 1.25.0                        | 1.34.6                     |
-| openssl  | 1.1.1  (recipe `openssl-1x/`) | 3.4.5  (recipe `openssl/`) |
+| openssl  | 1.1.11 (recipe `openssl-1x/`) | 3.4.5  (recipe `openssl/`) |
 | zlib     | 1.3.0                         | 1.3.1                      |
 
 The 1.60.1 line is driven by **`test-astra/run_grpc_1601_upstream.sh`** (already pins
-exactly this matrix, incl. the `openssl-1x/` recipe, and self-wraps in
-`docker run grpc-tc-mirror`). The 1.78.1 line is `run_test_grpc.sh`.
+exactly this matrix, incl. the `openssl-1x/` recipe, arch-aware `ARCH=x86_64|arm|arm64|all`,
+self-wraps into `docker run grpc-tc-mirror-<arch>`; docker-free TC variant
+`build_1601_nodocker.sh`, see `HELP [24]/[25]`). The 1.78.1 line has the same driver
+pair: **`run_grpc_1781_upstream.sh`** + `build_1781_nodocker.sh` (`HELP [27]`);
+`run_test_grpc.sh` remains the test-harness path (`HELP [14]`).
 
 ---
 
@@ -74,10 +77,10 @@ exactly this matrix, incl. the `openssl-1x/` recipe, and self-wraps in
 
 | GR | Slot | Build step (Command Line) | Status |
 |----|------|---------------------------|--------|
-| **GR113** Linux x64 DynRT | shared | `./test-astra/run_grpc_1601_upstream.sh` | **READY** — tested 1.60.1 driver, native x86_64. Artefacts → `output-grpc-1601-upstream/*.nupkg` (7). |
+| **GR113** Linux x64 DynRT | shared | `ARCH=x86_64 ./test-astra/run_grpc_1601_upstream.sh` | **READY** — validated 2026-06-18. Artefacts → `output-grpc-1601-x86_64/*.nupkg` (7). |
 | **GR112** Linux x86 DynRT | shared | `PROFILE=profiles/lin-gcc84-i686 OUTPUT_DIR=output-grpc-1601-i686 ./test-astra/run_grpc_1601_upstream.sh` | **READY\*** — same driver, i686 profile. *i686 (gcc -m32 + 32-bit multilib in the mirror) never validated — first run is bring-up. |
-| **GR121** Linux ARM DynRT | shared | TODO — `run_grpc_1601_upstream.sh` is native-only (`-pr:b=$PROFILE`, x64 mirror). Needs the cross plumbing `test_arm_cross.sh` has (arm mirror + `PROFILE_BUILD=lin-gcc84-x86_64` + `CONAN_USER_TOOLCHAIN=linaro-arm.cmake`) wired to the 1.60.1 matrix. | TODO |
-| **GR122** Linux ARM64 DynRT | shared | TODO — same as GR121, arm64 (`linaro-aarch64.cmake`). | TODO |
+| **GR121** Linux ARM DynRT | shared | `ARCH=arm ./test-astra/run_grpc_1601_upstream.sh` | **READY** — validated 2026-06-18 (driver is arch-aware since `d97c564`: arm mirror + `PROFILE_BUILD=lin-gcc84-x86_64` + linaro toolchain wired in). |
+| **GR122** Linux ARM64 DynRT | shared | `ARCH=arm64 ./test-astra/run_grpc_1601_upstream.sh` | **READY** — validated 2026-06-18, same as GR121 (`linaro-aarch64.cmake`). |
 | **GR103** Win x64 DynRT | shared | `test_win.bat` on the 1.60.1 line (`win-v143-x64`/`v142`). Needs a 1.60.1 selector in `run_test_grpc.bat` (it hardcodes 1.78.1). | TODO — Windows never validated. |
 | **GR102** Win x86 DynRT | shared | as GR103, `win-v142-x86`. | TODO |
 | **GR101** Win x64 StaticRT | **static** | as GR103 + `-s compiler.runtime=static` + `LEGACY_NUPKG_LINKAGE=static`. Needs a static-runtime profile (current win profiles pin `runtime=dynamic`). | TODO |
@@ -127,9 +130,10 @@ legacy `GRPC` tree. The two existing ARM configs are the `Linux ARM` leg already
 
 ## Driver gaps to close for full tree coverage
 
-1. **1.60.1 ARM cross** — generalise `run_grpc_1601_upstream.sh` (or add a wrapper) to
-   accept `PROFILE_BUILD` + `CONAN_USER_TOOLCHAIN` + `MIRROR_IMAGE=grpc-tc-mirror-arm{,64}`,
-   exactly like `test_arm_cross.sh` does for the 1.78.1 line.
+1. ~~**1.60.1 ARM cross**~~ — DONE (`d97c564`): `run_grpc_1601_upstream.sh` is arch-aware
+   (`ARCH=x86_64|arm|arm64|all`), validated on all three arches 2026-06-18. The 1.78.1
+   line got the same treatment (`run_grpc_1781_upstream.sh` + `build_1781_nodocker.sh`,
+   `HELP [27]`).
 2. **1.60.1 on Windows** — add a line selector to `run_test_grpc.bat` (it hardcodes the
    1.78.1 versions), same idea as a `GRPC_LINE` switch.
 3. **Windows StaticRT** — a `win-v1xx-x{86,64}-static` profile (`compiler.runtime=static`)
