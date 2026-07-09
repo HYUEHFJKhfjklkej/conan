@@ -7,6 +7,10 @@ compiler.cppstd=17
 compiler.runtime=dynamic
 build_type=Release
 
+[conf]
+# см. win-v142-x64: VS2022-генератор + тулсет v142 (иначе ищет установленную VS2019)
+tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
+
 [platform_tool_requires]
 cmake/3.25.1
 perl/5.32.1

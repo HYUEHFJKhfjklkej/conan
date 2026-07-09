@@ -7,6 +7,13 @@ compiler.cppstd=17
 compiler.runtime=dynamic
 build_type=Release
 
+[conf]
+# msvc 192 по умолчанию просит генератор "Visual Studio 16 2019" и падает, если
+# на агенте нет самой VS2019 ("could not find any instance of Visual Studio").
+# Собираем из VS2022, но тулсетом v142 (CMAKE_GENERATOR_TOOLSET=v142 conan ставит
+# сам из compiler.version=192). Требует компонент "MSVC v142 build tools" в VS2022.
+tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
+
 [platform_tool_requires]
 # Use system-provided tools instead of building them via Conan.
 # Required because we operate in --no-remote mode (no Conan-built tools available).
