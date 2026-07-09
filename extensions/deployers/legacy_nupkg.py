@@ -101,7 +101,15 @@ def _short_compiler(compiler, version):
     через env LEGACY_OS_SHORT=astra.
     """
     if compiler == "msvc":
-        return f"v{version}"
+        # Conan msvc compiler.version — версия КОМПИЛЯТОРА (192/193/194...),
+        # а легаси-слот в имени .nupkg — VS TOOLSET (v142/v143), см. эталон
+        # googletest.win.v142.shared.x64 выше. Без маппинга уезжает 'v194',
+        # которого ни один легаси-резолвер не найдёт.
+        _MSVC_TOOLSET = {
+            "190": "v140", "191": "v141", "192": "v142",
+            "193": "v143", "194": "v143",
+        }
+        return _MSVC_TOOLSET.get(str(version), f"v{version}")
     ver = str(version).replace(".", "").replace("_", "")
     if compiler == "gcc":
         return f"gcc{ver}" if ver else "gcc"
