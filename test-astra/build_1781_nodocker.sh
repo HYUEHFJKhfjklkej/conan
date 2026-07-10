@@ -14,7 +14,7 @@
 #   ./test-astra/build_1781_nodocker.sh abseil           # один пакет вместо дерева
 #
 # Env:
-#   ARCH          x86_64|arm|arm64 (по умолч. x86_64) — выбирает профиль/тулчейн
+#   ARCH          x86_64|x86|arm|arm64 (по умолч. x86_64) — выбирает профиль/тулчейн
 #   PROFILE       host-профиль (по умолч. по арке)
 #   PROFILE_BUILD build-профиль (по умолч. profiles/lin-gcc84-x86_64)
 #   OUTPUT_DIR    выход отн. репо (по умолч. output-grpc-1781-<arch>)
@@ -32,9 +32,10 @@ cd "$ROOT_DIR"
 ARCH="${ARCH:-x86_64}"
 case "$ARCH" in
     x86_64) PROFILE_DEF=profiles/lin-gcc84-x86_64;       TC_PATH="" ;;
+    x86)    PROFILE_DEF=profiles/lin-gcc84-i686;         TC_PATH="" ;;  # 32-bit: -m32 в станке x86_64
     arm)    PROFILE_DEF=profiles/lin-gcc75-arm-linaro;   TC_PATH="$ROOT_DIR/profiles/toolchains/linaro-arm.cmake" ;;
     arm64)  PROFILE_DEF=profiles/lin-gcc-aarch64-linaro; TC_PATH="$ROOT_DIR/profiles/toolchains/linaro-aarch64.cmake" ;;
-    *) echo "[FAIL] ARCH must be x86_64|arm|arm64, got '$ARCH'" >&2; exit 2 ;;
+    *) echo "[FAIL] ARCH must be x86_64|x86|arm|arm64, got '$ARCH'" >&2; exit 2 ;;
 esac
 PROFILE="${PROFILE:-$PROFILE_DEF}"
 PROFILE_BUILD="${PROFILE_BUILD:-profiles/lin-gcc84-x86_64}"
