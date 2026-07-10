@@ -1,0 +1,35 @@
+[settings]
+os=Windows
+arch=x86_64
+compiler=msvc
+compiler.version=192
+compiler.cppstd=17
+compiler.runtime=static
+build_type=Release
+
+[conf]
+# msvc 192 по умолчанию просит генератор "Visual Studio 16 2019" и падает, если
+# на агенте нет самой VS2019 ("could not find any instance of Visual Studio").
+# Собираем из VS2022, но тулсетом v142 (CMAKE_GENERATOR_TOOLSET=v142 conan ставит
+# сам из compiler.version=192). Требует компонент "MSVC v142 build tools" в VS2022.
+tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
+# vcvars-путь (openssl и прочие не-CMake рецепты): msvc 192 по умолчанию ищет
+# установку VS16 ("VS non-existing installation: Visual Studio 16"). Берём
+# vcvars из VS17/2022, версию тулчейна (-vcvars_ver=14.2) conan ставит сам.
+tools.microsoft.msbuild:vs_version=17
+
+[platform_tool_requires]
+# Use system-provided tools instead of building them via Conan.
+# Required because we operate in --no-remote mode (no Conan-built tools available).
+cmake/3.25.1
+perl/5.32.1
+nasm/2.16.01
+strawberryperl/5.32.1.1
+
+{% set tools_dir = profile_dir + "/../tools/windows" %}
+
+[buildenv]
+PATH=+(path){{ tools_dir }}/strawberryperl/perl/bin
+PATH=+(path){{ tools_dir }}/nasm
+PATH+=(path)C:\Strawberry\perl\bin
+PATH+=(path)C:\Program Files\NASM
