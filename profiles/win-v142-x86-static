@@ -24,6 +24,11 @@ strawberryperl/5.32.1.1
 {% set tools_dir = profile_dir + "/../tools/windows" %}
 
 [buildenv]
+# vcvarsall x86 (кросс-тулзы x64->x86) меняет CWD при активации окружения ->
+# nmake падал "U1064: MAKEFILE not found" (openssl: makefile создан, но nmake
+# запущен не там). VSCMD_START_DIR возвращает vcvars в исходную директорию;
+# %CD% разворачивается в момент вызова conanbuild.bat, т.е. в правильный cwd.
+VSCMD_START_DIR=%CD%
 PATH=+(path){{ tools_dir }}/strawberryperl/perl/bin
 PATH=+(path){{ tools_dir }}/nasm
 PATH+=(path)C:\Strawberry\perl\bin
