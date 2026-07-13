@@ -576,6 +576,11 @@ class OpenSSLConan(ConanFile):
                         replace_in_file(self, mkinstallvars_pl, "$values{$k} = $v;", """$v->[0] =~ s|\\\\|/|g; $values{$k} = $v;""")
                     else:
                         replace_in_file(self, mkinstallvars_pl, "$ENV{$k} = $v;", """$v =~ s|\\\\|/|g; $ENV{$k} = $v;""")
+            # DEBUG IN-658 (win-x86 U1064): перед nmake печатаем фактический cwd и
+            # список файлов - Configure пишет 'Created makefile', а nmake его не видит.
+            # Убрать после диагностики.
+            if self._use_nmake:
+                self.run("cd && dir /b", env="conanbuild")
             self._run_make()
 
     def _make_install(self):
