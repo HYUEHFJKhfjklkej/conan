@@ -488,7 +488,7 @@ def _resolve_cross_ld(ld_name):
     return ld_name
 
 
-def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
+def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None, ld_extra=()):
     """Сливает отдельные архивы grpc `libupb*.a` в `libgrpc.a`, затем заменяет их
     одной ПУСТОЙ заглушкой `libupb.a` — так пакет несёт САМОДОСТАТОЧНУЮ `libgrpc.a`
     ПЛЮС no-op компонент `upb`, байт-структурно как legacy TeamCity grpc-пакет
@@ -527,7 +527,7 @@ def _fold_upb_into_libgrpc(lib_dir, ld_cmd, output=None):
         return
     combined = os.path.join(lib_dir, "_grpc_upb_combined.o")
     subprocess.run(
-        [ld_cmd, "-r", "--whole-archive", libgrpc] + upb_libs
+        [ld_cmd, "-r", *ld_extra, "--whole-archive", libgrpc] + upb_libs
         + ["--no-whole-archive", "-z", "muldefs", "-o", combined],
         check=True)
     os.remove(libgrpc)
@@ -704,16 +704,19 @@ def deploy(graph, output_folder, **kwargs):
         if name == "grpc":
             _ld = _resolve_cross_ld(_target_binutils_prefix(
                 s.arch, os.environ.get("CONAN_USER_TOOLCHAIN", "")) + "ld")
+            # 32-бит x86 собирается -m32 в x86_64-станке тем же /usr/bin/ld:
+            # без явной эмуляции `ld -r` отказывает 32-битным объектам.
+            _ld_extra = ("-m", "elf_i386") if str(s.arch) == "x86" else ()
             # Release-fold обязателен. _fold_upb_into_libgrpc меняет каталог только
             # ПОСЛЕ успешного `ld -r`, так что падение оставляет каталог целым.
-            _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output)
+            _fold_upb_into_libgrpc(_staging_rel_libdir, _ld, conanfile.output, ld_extra=_ld_extra)
             # Debug libgrpc.a огромна (~1.4 GB static+debug); `ld -r` по ней может
             # исчерпать RAM на CI-агенте. Делаем не-фатальным: при падении грузим
             # debug-вариант без fold (в Release-сборках потребители линкуют
             # release). Debug-потребители тогда упрутся в upb-ссылки — приемлемо,
             # пока fold не разбит или не стримится.
             try:
-                _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output)
+                _fold_upb_into_libgrpc(_staging_dbg_libdir, _ld, conanfile.output, ld_extra=_ld_extra)
             except Exception as _fold_err:
                 conanfile.output.warning(
                     f"legacy_nupkg: debug libgrpc.a upb-fold skipped ({_fold_err}); "
