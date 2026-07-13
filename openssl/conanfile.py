@@ -576,12 +576,6 @@ class OpenSSLConan(ConanFile):
                         replace_in_file(self, mkinstallvars_pl, "$values{$k} = $v;", """$v->[0] =~ s|\\\\|/|g; $values{$k} = $v;""")
                     else:
                         replace_in_file(self, mkinstallvars_pl, "$ENV{$k} = $v;", """$v =~ s|\\\\|/|g; $ENV{$k} = $v;""")
-            # DEBUG IN-658 (win-x86 U1064): перед nmake печатаем cwd и makefile-файлы
-            # С РАЗМЕРАМИ (ловит и "файла нет", и "файл есть, но пустой").
-            # Если makefile отсутствует - dir вернёт errorlevel 1 и упадёт ЗДЕСЬ,
-            # это и будет ответ. Убрать после диагностики.
-            if self._use_nmake:
-                self.run("cd && dir makefile* Makefile*", env="conanbuild")
             self._run_make()
 
     def _make_install(self):
