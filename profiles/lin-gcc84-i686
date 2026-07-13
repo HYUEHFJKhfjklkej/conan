@@ -7,6 +7,14 @@ compiler.libcxx=libstdc++11
 compiler.cppstd=17
 build_type=Release
 
+[conf]
+# 32-bit codegen fix: явный кросс-маркер включает CMAKE_CROSSCOMPILING, и grpc
+# берёт protoc/grpc_cpp_plugin из build-контекста (x86_64, tool_requires grpc),
+# вместо попытки ЗАПУСТИТЬ свежесобранные 32-битные плагины в x86_64-станке
+# (падало на gens/... reflection.grpc.pb.cc при 99%).
+tools.cmake.cmaketoolchain:system_name=Linux
+tools.cmake.cmaketoolchain:system_processor=x86
+
 [platform_tool_requires]
 cmake/3.25.1
 perl/5.36.0
