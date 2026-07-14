@@ -82,6 +82,8 @@ if not "%SKIP_CACHE_CLEAN%"=="1" (
 echo ============================================
 echo  Step 1/3: Export libzip recipe
 echo ============================================
+conan export zlib --version=1.3.1 --no-remote
+if errorlevel 1 exit /b 1
 echo [INFO] conan export libzip (%LIBZIP_VERSION%)
 conan export "%ROOT_DIR%\libzip" --version=%LIBZIP_VERSION% --no-remote
 if errorlevel 1 ( echo [FAIL] libzip export & set EXITCODE=1 & goto :END )
