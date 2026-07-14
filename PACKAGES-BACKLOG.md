@@ -28,51 +28,53 @@
 
 ## Волна 1 — простые, рецепт в conan-center есть, зависимостей нет/минимум
 
-Порядок внутри волны произвольный, каждый ~0.5–1 день (рецепт+тарбол+смоук).
+Версии проверены 2026-07-14 (CCI latest / upstream latest). Правило: берём
+CCI-версию (рецепт проверен сообществом); если апстрим ушёл дальше — фиксируем
+в примечании, догоняем добавлением версии в conandata после смоука.
 
-| Легаси | Conan-рецепт | Прим. |
-|---|---|---|
-| CJSON | cjson | |
-| EXPAT | expat | |
-| TINYXML2 | tinyxml2 | |
-| SQLITE | sqlite3 | |
-| JANSSON | jansson | |
-| JSONCPP | jsoncpp | |
-| JSON | nlohmann_json? | сверить: легаси JSON = nlohmann или внутренний врапер |
-| LUA | lua | |
-| LIBZIP | libzip | dep: zlib ✓ |
-| PTHREADS4W | pthreads4w | Windows-only слоты |
+| Легаси | Conan-рецепт | Версия к миграции | Прим. |
+|---|---|---|---|
+| CJSON | cjson | **1.7.19** | ГОТОВО 2026-07-14 (легаси был 1.7.15) |
+| EXPAT | expat | 2.8.2 | = upstream |
+| TINYXML2 | tinyxml2 | 11.0.0 | = upstream |
+| SQLITE | sqlite3 | 3.53.3 | |
+| JANSSON | jansson | 2.14 | upstream уже 2.15.1 — CCI отстаёт, стартуем с 2.14 |
+| JSONCPP | jsoncpp | 1.9.6 | upstream 1.9.8 — CCI отстаёт |
+| JSON | nlohmann_json | 3.12.0 | сверить: легаси JSON = nlohmann или внутренний врапер |
+| LUA | lua | 5.5.0 | легаси был 5.4.2 (мажор-бамп 5.4→5.5! потребители — сверить API) |
+| LIBZIP | libzip | 1.11.4 | dep: zlib ✓ |
+| PTHREADS4W | pthreads4w | 3.0.0 | Windows-only слоты; легаси 3.1.0?! — сверить форк |
 
 ## Волна 2 — зависят от волны 0/1, рецепты в CCI есть
 
-| Легаси | Conan-рецепт | Deps |
-|---|---|---|
-| CURL | libcurl | openssl, zlib |
-| LIBXML2 | libxml2 | zlib |
-| MBEDTLS | mbedtls | — |
-| SSH2 | libssh2 | openssl, zlib |
-| ZMQ | zeromq | — (map zeromq→zmq) |
-| MOSQUITTO | mosquitto | openssl |
-| MODBUS | libmodbus | — |
-| MONGOOSE | mongoose | openssl? |
-| NANOPB | nanopb | protobuf(protoc) |
-| NETSNMP | net-snmp | openssl |
-| LIBPQ | libpq | openssl |
-| XERCES_C | xerces-c | |
-| DBUS | dbus | Linux-only слоты? сверить легаси-матрицу |
-| QWT | qwt | **Qt** — сначала решить, откуда Qt (вне бэклога) |
+| Легаси | Conan-рецепт | Версия к миграции | Deps / прим. |
+|---|---|---|---|
+| CURL | libcurl | 8.21.0 (= upstream) | openssl, zlib; LEGACY_NAME_MAP libcurl->curl |
+| LIBXML2 | libxml2 | 2.13.8 | zlib |
+| MBEDTLS | mbedtls | 3.6.6 | upstream 4.2.0 — мажор, потребители наверняка на 3.x |
+| SSH2 | libssh2 | 1.11.1 (= upstream) | openssl, zlib |
+| ZMQ | zeromq | 4.3.5 (= upstream) | map zeromq->zmq |
+| MOSQUITTO | mosquitto | upstream 2.1.2; легаси 2.0.19 | openssl; CCI-версию уточнить |
+| MODBUS | libmodbus | 3.1.12 | upstream 3.2.0 — CCI отстаёт |
+| MONGOOSE | mongoose | upstream 7.22 | CCI-версию уточнить |
+| NANOPB | nanopb | upstream 0.4.9.1 | protoc |
+| NETSNMP | net-snmp | 5.9.4 | openssl; upstream 5.10 в pre |
+| LIBPQ | libpq | 16.14 | openssl |
+| XERCES_C | xerces-c | 3.3.0 (= upstream) | легаси был 3.2.3 |
+| DBUS | dbus | 1.15.8 | Linux-only слоты? сверить легаси-матрицу |
+| QWT | qwt | 6.3.0 | **Qt** — сначала решить, откуда Qt |
 
 ## Волна 3 — рецепта в CCI нет / нишевые / вопросы к лиду
 
-| Легаси | Что это | Путь |
-|---|---|---|
-| SNAP7 | Siemens S7 comm (OSS, sourceforge) | рецепт с нуля |
-| SOEM | EtherCAT master (OSS) | рецепт с нуля / CCI-PR существует? |
-| LIBMATIEC | IEC 61131-3 matiec (OSS, нишевый) | рецепт с нуля |
-| IEC61850LIB | libiec61850 (MZ Automation) | лицензия GPL/коммерч. — с лидом |
-| QXORM, QWINDOWKIT | Qt-экосистема | вместе с решением по Qt |
-| OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | проприетарные/фонд — НЕ conan-center, отдельное решение |
-| CODESYS2 | проприетарный | вне Conan-миграции? — лид |
+| Легаси | Что это | Версия | Путь |
+|---|---|---|---|
+| SNAP7 | Siemens S7 comm (OSS) | 1.4.2 (sf) | рецепт с нуля |
+| SOEM | EtherCAT master | upstream v2.0.0 | CCI soem есть? уточнить; рецепт мал |
+| LIBMATIEC | IEC 61131-3 matiec | форки, релизов нет | рецепт с нуля, версию зафиксировать коммитом |
+| IEC61850LIB | libiec61850 | 1.6.1 (CCI = upstream) | лицензия GPL/коммерч. — с лидом |
+| QXORM, QWINDOWKIT | Qt-экосистема | — | вместе с решением по Qt |
+| OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | — | проприетарные — отдельное решение |
+| CODESYS2 | проприетарный | — | вне Conan-миграции? — лид |
 
 ## НЕ third-party (внутренние Elara — не мигрируются этим конвейером)
 
@@ -97,3 +99,10 @@ LED_CONTROLLER, OMRON_FINS, SIEMENS_S7, API_GATEWAY, EVENT_BUS_ADAPTER, ...
    (GT/FM/GR заняты; CJSON→CJ, EXPAT→EX, ...).
 5. Публикация в общий фид `conan`; политика столкновений версий (409/суффикс) —
    решение лида (см. absl-коллизию линий grpc в memory).
+
+6. **Сверка форка с upstream (обязательный шаг).** Каждый легаси third-party живёт
+   отдельным Bitbucket-репо SURA2 (форк + nuget-обвязка) и может нести локальные
+   патчи (прецедент: protobuf-форк расщеплял libprotoc -> libprotolib). Перед
+   миграцией пакета: открыть его Bitbucket-репо, проверить коммиты поверх
+   апстрим-исходников; патчи либо устарели (уже в новой версии), либо переносятся
+   в <pkg>/patches/ через conandata.
