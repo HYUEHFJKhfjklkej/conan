@@ -26,10 +26,6 @@ LEGACY_NAME_MAP = {
     # downstream (exceptions/googletest, завязанные на `absl:0.2.0`) брал upstream-
     # бинари — в них есть недостающие `cord`-компоненты.
     "abseil": "absl",
-    # Легаси-слот JSON — это nlohmann/json (легаси-версия 3.7.0, подтв. 2026-07-14).
-    "nlohmann_json": "json",
-    # Легаси-слот sqlite (версия 3.15.2); conan-center рецепт зовётся sqlite3.
-    "sqlite3": "sqlite",
     # Conan-рецепт зовётся `c-ares` (имя conan-center), но legacy Elara-слот —
     # `cares`, без дефиса. Важно: downstream ResolveDependencies.cmake генерит
     # `add_definitions(-D${_name}_..._DEFINE)` БЕЗ sanitize имени пакета (на `_`
