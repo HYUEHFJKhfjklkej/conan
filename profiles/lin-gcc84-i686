@@ -8,6 +8,8 @@ compiler.cppstd=17
 build_type=Release
 
 [conf]
+# системный pkg-config (libxml2 и др. autotools-рецепты)
+tools.gnu:pkg_config=pkg-config
 # 32-bit codegen fix: явный кросс-маркер включает CMAKE_CROSSCOMPILING, и grpc
 # берёт protoc/grpc_cpp_plugin из build-контекста (x86_64, tool_requires grpc),
 # вместо попытки ЗАПУСТИТЬ свежесобранные 32-битные плагины в x86_64-станке
@@ -17,4 +19,7 @@ tools.cmake.cmaketoolchain:system_processor=x86
 
 [platform_tool_requires]
 cmake/3.25.1
+libtool/2.4.7
+autoconf/2.71
+automake/1.16.5
 perl/5.36.0
