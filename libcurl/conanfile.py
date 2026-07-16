@@ -134,7 +134,10 @@ class LibcurlConan(ConanFile):
 
     @property
     def _is_using_cmake_build(self):
-        return is_msvc(self) or self._is_win_x_android
+        # Offline-патч: cmake-бэкенд на ВСЕХ платформах (не только msvc/android).
+        # Autotools-ветка тянет libtool/pkgconf/gnu-config — на closed-network CI
+        # это лишний autotools-тулчейн в docker-станке; cmake уже есть везде.
+        return is_msvc(self) or self._is_win_x_android or self.settings.os in ("Linux", "Macos", "FreeBSD")
 
     def export_sources(self):
         copy(self, "lib_Makefile_add.am", self.recipe_folder, self.export_sources_folder)
