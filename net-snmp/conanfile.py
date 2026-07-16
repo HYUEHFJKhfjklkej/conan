@@ -218,7 +218,9 @@ class NetSnmpConan(ConanFile):
             configure_path = os.path.join(self.source_folder, "configure")
             os.chmod(configure_path, os.stat(configure_path).st_mode | stat.S_IEXEC)
             autotools = Autotools(self)
-            autotools.autoreconf()
+            # Offline-патч: autoreconf убран (нет autoconf/automake/libtool в
+            # docker-станке; релиз-тарбол несёт готовый configure, патчи трогают
+            # только Makefile.in/исходники, не configure.ac).
             autotools.configure()
             autotools.make(target="snmplib", args=["NOAUTODEPS=1"])
 

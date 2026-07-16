@@ -95,6 +95,18 @@ class LibmodbusConan(ConanFile):
         else:
             get(self, **self.conan_data["sources"][self.version], strip_root=True)
         apply_conandata_patches(self)
+        # Патчи 0001/0002 меняют configure.ac, но без autoreconf они инертны -
+        # применяем эквивалент прямо к сгенерённому ./configure: не затираем
+        # пользовательские CFLAGS/CXXFLAGS (conan передаёт -m32 и пр.).
+        import os as _os
+        _cfg = _os.path.join(self.source_folder, "configure")
+        if _os.path.isfile(_cfg):
+            for _a, _b in (('CFLAGS="-O2"',       'CFLAGS="-O2 $CFLAGS"'),
+                           ('CXXFLAGS="-O2"',     'CXXFLAGS="-O2 $CXXFLAGS"'),
+                           ('CFLAGS="-g -O0"',    'CFLAGS="-g -O0 $CFLAGS"'),
+                           ('CXXFLAGS="-g -O0"',  'CXXFLAGS="-g -O0 $CXXFLAGS"')):
+                try: replace_in_file(self, _cfg, _a, _b, strict=False)
+                except Exception: pass
 
     def generate(self):
         tc = AutotoolsToolchain(self)
@@ -113,7 +125,9 @@ class LibmodbusConan(ConanFile):
     def build(self):
         self._patch_sources()
         autotools = Autotools(self)
-        autotools.autoreconf()
+        # Offline-патч: autoreconf убран (нет autoconf/automake/libtool в станке).
+        # Релиз-тарбол несёт готовый configure; патч respect-cflags применён прямо
+        # к нему в source() (иначе CFLAGS="-O2" затирает conan-флаги, вкл. -m32).
         autotools.configure()
         autotools.make()
 
