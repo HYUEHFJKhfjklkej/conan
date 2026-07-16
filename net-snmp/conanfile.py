@@ -114,6 +114,28 @@ class NetSnmpConan(ConanFile):
             unzip(self, _local, strip_root=True)
         else:
             get(self, **self.conan_data["sources"][self.version], strip_root=True)
+        self._age_autotools_inputs()
+
+    def _age_autotools_inputs(self):
+        # Offline-патч: docker-станок без autoconf/automake/libtool. Патчи/tar
+        # могли сделать *.ac/*.am новее готовых configure/Makefile.in/aclocal.m4
+        # -> make включает maintainer-mode и зовёт aclocal (нет в образе).
+        # "Старим" autotools-входы, чтобы готовые файлы были актуальны.
+        import os as _os, time as _t
+        _now = _t.time(); _sf = self.source_folder
+        for _root, _d, _files in _os.walk(_sf):
+            for _f in _files:
+                _pp = _os.path.join(_root, _f)
+                if _f.endswith((".ac", ".am")) or _f in ("acinclude.m4", "configure.in"):
+                    try: _os.utime(_pp, (_now - 300, _now - 300))
+                    except OSError: pass
+        for _root, _d, _files in _os.walk(_sf):
+            for _f in _files:
+                _pp = _os.path.join(_root, _f)
+                if _f in ("aclocal.m4", "configure", "config.h.in", "ltmain.sh",
+                          "config.guess", "config.sub", "config.status") or _f.endswith("Makefile.in"):
+                    try: _os.utime(_pp, (_now, _now))
+                    except OSError: pass
 
     @property
     def _is_debug(self):

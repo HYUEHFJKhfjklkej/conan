@@ -108,6 +108,27 @@ class LibmodbusConan(ConanFile):
                 try: replace_in_file(self, _cfg, _a, _b, strict=False)
                 except Exception: pass
 
+        # Offline-патч: docker-станок без autoconf/automake/libtool. Патчи/tar
+        # могли сделать *.ac/*.am новее сгенерённых configure/Makefile.in/
+        # aclocal.m4 -> make включает maintainer-mode и зовёт aclocal (нет в
+        # образе). "Старим" autotools-входы, чтобы готовые файлы были актуальны.
+        import os as _os, time as _t
+        _now = _t.time()
+        _sf = self.source_folder
+        for _root, _dirs, _files in _os.walk(_sf):
+            for _f in _files:
+                _p = _os.path.join(_root, _f)
+                if _f.endswith((".ac", ".am")) or _f in ("acinclude.m4", "configure.in"):
+                    try: _os.utime(_p, (_now - 300, _now - 300))
+                    except OSError: pass
+        for _root, _dirs, _files in _os.walk(_sf):
+            for _f in _files:
+                _p = _os.path.join(_root, _f)
+                if _f in ("aclocal.m4", "configure", "config.h.in", "ltmain.sh",
+                          "config.guess", "config.sub", "config.status") or _f.endswith("Makefile.in"):
+                    try: _os.utime(_p, (_now, _now))
+                    except OSError: pass
+
     def generate(self):
         tc = AutotoolsToolchain(self)
         tc.configure_args.append("--disable-tests")
