@@ -82,6 +82,8 @@ if not "%SKIP_CACHE_CLEAN%"=="1" (
 echo ============================================
 echo  Step 1/3: Export mosquitto recipe
 echo ============================================
+conan export "%ROOT_DIR%\zlib" --version=1.3.1 --no-remote
+if errorlevel 1 exit /b 1
 conan export "%ROOT_DIR%\openssl" --version=3.4.5 --no-remote
 if errorlevel 1 exit /b 1
 echo [INFO] conan export mosquitto (%MOSQUITTO_VERSION%)

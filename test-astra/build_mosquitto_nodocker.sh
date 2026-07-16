@@ -75,6 +75,7 @@ REMOTE_ARGS=(--no-remote)
 [ -z "${SKIP_CACHE_CLEAN:-}" ] && conan remove '*' -c
 
 # Экспорт рецепта mosquitto.
+conan export zlib/ --version=1.3.1 --no-remote   # dep (openssl->zlib)
 conan export openssl/ --version=3.4.5 --no-remote   # dep
 conan export mosquitto/ --version="$MOSQUITTO_VERSION" --no-remote
 
