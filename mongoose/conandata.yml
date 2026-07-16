@@ -1,0 +1,4 @@
+sources:
+  "7.22":
+    url: "https://github.com/cesanta/mongoose/archive/refs/tags/7.22.tar.gz"
+    sha256: "87727cd2c240ff559b16e9710d44b61ba3513dbee50428bd8ee1596d7c58460a"
