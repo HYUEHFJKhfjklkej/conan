@@ -171,6 +171,11 @@ class NetSnmpConan(ConanFile):
                 "--disable-scripts",
                 "--disable-mibs",
                 "--disable-embedded-perl",
+                # Offline-патч: в docker-станке нет /usr/bin/file, а configure
+                # жёстко требует его "for libtool" (чек ради Cygwin; на Linux
+                # deplibs=pass_all и file не вызывается). Настоящий override,
+                # который сам configure и предлагает: ac_cv_prog_FILE="$FILE".
+                "FILE=file",
             ]
             if self.settings.os in ["Linux"]:
                 tc.extra_ldflags.append("-ldl")
