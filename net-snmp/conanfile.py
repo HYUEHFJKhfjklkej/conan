@@ -76,8 +76,10 @@ class NetSnmpConan(ConanFile):
             self.tool_requires("autoconf/2.71")
             self.tool_requires("automake/1.16.5")
             self.tool_requires("libtool/2.4.7")
-        if not self.conf.get("tools.gnu:pkg_config", default=False, check_type=str):
-            self.tool_requires("pkgconf/[>=2.2.0 <3]")
+            # только autotools-путь: msvc собирается NMake'ом без pkg-config,
+            # а pkgconf офлайн нерезолвим (нет в win platform_tool_requires)
+            if not self.conf.get("tools.gnu:pkg_config", default=False, check_type=str):
+                self.tool_requires("pkgconf/[>=2.2.0 <3]")
 
     # Offline-патч: локальный архив исходников уезжает в export_sources,
     # source() предпочитает его сетевому get() (closed-network CI).
