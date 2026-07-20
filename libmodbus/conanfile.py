@@ -1,9 +1,10 @@
 from conan import ConanFile
 from conan.tools.apple import fix_apple_shared_install_name
-from conan.tools.files import apply_conandata_patches, copy, export_conandata_patches, get, rename, replace_in_file, rm, rmdir
+from conan.tools.cmake import CMake, CMakeToolchain
+from conan.tools.files import apply_conandata_patches, copy, export_conandata_patches, get, replace_in_file, rm, rmdir
 from conan.tools.gnu import Autotools, AutotoolsToolchain
 from conan.tools.layout import basic_layout
-from conan.tools.microsoft import check_min_vs, is_msvc
+from conan.tools.microsoft import is_msvc
 import os
 
 required_conan_version = ">=1.57.0"
@@ -49,10 +50,12 @@ class LibmodbusConan(ConanFile):
         basic_layout(self, src_folder="src")
 
     def build_requirements(self):
-        self.tool_requires("libtool/2.4.7")
-
+        # msvc собирается CMake-путём (см. CMakeLists.txt рядом): autotools на
+        # Windows тянут msys2/automake/libtool, которых нет на офлайн-агенте.
         if is_msvc(self):
-            self.tool_requires("automake/1.16.5")
+            return
+
+        self.tool_requires("libtool/2.4.7")
 
         if self._settings_build.os == "Windows":
             self.win_bash = True
@@ -61,7 +64,8 @@ class LibmodbusConan(ConanFile):
 
     # Offline-патч: локальный архив исходников уезжает в export_sources,
     # source() предпочитает его сетевому get() (closed-network CI).
-    exports_sources = "src/*"
+    # CMakeLists.txt/config.h.cmake — CMake-бэкенд для msvc-пути.
+    exports_sources = "src/*", "CMakeLists.txt", "config.h.cmake"
 
     def _offline_source_archive(self):
         """Return path to bundled source archive in export_sources, or None."""
@@ -130,12 +134,12 @@ class LibmodbusConan(ConanFile):
                     except OSError: pass
 
     def generate(self):
+        if is_msvc(self):
+            tc = CMakeToolchain(self)
+            tc.generate()
+            return
         tc = AutotoolsToolchain(self)
         tc.configure_args.append("--disable-tests")
-        if is_msvc(self) and check_min_vs(self, "180", raise_invalid=False):
-            tc.extra_cflags.append("-FS")
-            if self.options.shared:
-                tc.extra_defines.append("DLLBUILD")
         tc.generate()
 
     def _patch_sources(self):
@@ -145,6 +149,13 @@ class LibmodbusConan(ConanFile):
 
     def build(self):
         self._patch_sources()
+        if is_msvc(self):
+            for f in ("CMakeLists.txt", "config.h.cmake"):
+                copy(self, f, self.export_sources_folder, self.source_folder)
+            cmake = CMake(self)
+            cmake.configure()
+            cmake.build()
+            return
         autotools = Autotools(self)
         # Offline-патч: autoreconf убран (нет autoconf/automake/libtool в станке).
         # Релиз-тарбол несёт готовый configure; патч respect-cflags применён прямо
@@ -154,16 +165,16 @@ class LibmodbusConan(ConanFile):
 
     def package(self):
         copy(self, pattern="COPYING*", src=self.source_folder, dst=os.path.join(self.package_folder, "licenses"))
+        if is_msvc(self):
+            cmake = CMake(self)
+            cmake.install()
+            return
         autotools = Autotools(self)
         autotools.install()
         rm(self, "*.la", os.path.join(self.package_folder, "lib"))
         rmdir(self, os.path.join(self.package_folder, "lib", "pkgconfig"))
         rmdir(self, os.path.join(self.package_folder, "share"))
         fix_apple_shared_install_name(self)
-        if is_msvc(self) and self.options.shared:
-            rename(self,
-                    os.path.join(self.package_folder, "lib", "modbus.dll.lib"),
-                    os.path.join(self.package_folder, "lib", "modbus.lib"))
 
     def package_info(self):
         self.cpp_info.set_property("pkg_config_name", "libmodbus")
