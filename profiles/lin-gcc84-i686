@@ -16,6 +16,21 @@ tools.gnu:pkg_config=pkg-config
 # (падало на gens/... reflection.grpc.pb.cc при 99%).
 tools.cmake.cmaketoolchain:system_name=Linux
 tools.cmake.cmaketoolchain:system_processor=x86
+# meson (dbus): x86_64->x86 для Conan кросс, а meson в кросс-режиме требует
+# компилятор в [binaries] cross-файла и env/PATH НЕ читает — без явного пина
+# падает "'c' compiler binary not defined in cross or native file" (TC DB412).
+# Тот же нативный gcc 8.4, что в lin-gcc84-x86_64; -m32 кладёт architecture_flag.
+tools.build:compiler_executables={"c": "/opt/x64-native-gcc/bin/gcc", "cpp": "/opt/x64-native-gcc/bin/g++"}
+
+[buildenv]
+CC=/opt/x64-native-gcc/bin/gcc
+CXX=/opt/x64-native-gcc/bin/g++
+AR=ar
+AS=as
+LD=ld
+NM=nm
+RANLIB=ranlib
+STRIP=strip
 
 [platform_tool_requires]
 cmake/3.25.1

@@ -2072,6 +2072,14 @@ step and send it back so the next step can be picked.
         for the deployer: '-linaro' arch suffix in the .nupkg name + target
         binutils choice. Verified against Conan 2.29 sources 2026-07-21.
 
+        x86 is ALSO a cross for Meson (x86_64 -> x86), and in cross mode meson
+        takes compilers ONLY from the cross file — env/PATH are ignored. The
+        host profile must therefore pin them: lin-gcc84-i686 carries [buildenv]
+        CC/CXX + tools.build:compiler_executables (the same native gcc-8.4 the
+        x86_64 profile pins). First TC run of DB412 failed exactly on this:
+        Verdict "'c' compiler binary not defined in cross or native file"
+        -> host profile lacks the compiler pin (stale checkout, git pull).
+
      d. Deployer specifics for dbus (extensions/deployers/legacy_nupkg.py):
         - LEGACY_INCLUDE_FLATTEN merges include/dbus-1.0/ AND the
           arch-dependent lib/dbus-1.0/include/dbus-arch-deps.h into flat
