@@ -2184,7 +2184,16 @@ step and send it back so the next step can be picked.
         ("In your c++ program you also need to add snap7.cpp to the
         project" — Wrappers/c-cpp/README); our fold-in stays compatible even
         if a consumer compiles its own snap7.cpp: static-archive lazy
-        extraction prefers the consumer's object, no duplicate-symbol error. Windows: our CMake backend should build under
+        extraction prefers the consumer's object, no duplicate-symbol error.
+
+     e. Windows: test-windows\run_snap7_win.bat (mongoose twin, PROFILE_NAME
+        env, setup.bat provisions Conan offline). Graph resolves clean on all
+        5 win profiles (checked from Mac, [X]-style conan graph info); the
+        CMake backend should build under MSVC (win_threads.h path, ws2_32 +
+        winmm linked, dllexport-in-static benign) but is NOT agent-validated,
+        and the deployer still emits the wrong win compiler tag (v194/v192 vs
+        legacy v143/v142 — [28] caveat, deployer map fix pending with lead).
+        publishWindows stays false until both are closed. Windows: our CMake backend should build under
         MSVC (dllexport in a static lib is benign), but it is NOT validated —
         publishWindows stays false (ConanPkg default), no run_snap7_win.bat.
 
