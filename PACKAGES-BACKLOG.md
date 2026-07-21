@@ -62,7 +62,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 | LIBPQ | libpq | 16.14 | openssl |
 | XERCES_C | xerces-c | 3.3.0 (= upstream) | легаси был 3.2.3 |
 | DBUS | dbus | 1.15.8 | → волна 3 (meson-тулчейн для оффлайна) |
-| QWT | qwt | 6.3.0 | → волна 3 (**Qt**) |
+| QWT | qwt | 6.2.0 (легаси-пин el_conf; НЕ 6.3.0) | ГОТОВ 2026-07-21 (Mac-смоук + deployer, HELP [32]); Qt НЕ пакетируется — 5.15.2 в образе станка (QT5_ROOT_DIR); только x86_64; ground-truth легаси — pending |
 
 ## Волна 3 — частично ГОТОВО (2026-07-16): libiec61850/mongoose/nanopb/soem
 

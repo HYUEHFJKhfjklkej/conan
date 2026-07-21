@@ -2267,3 +2267,59 @@ step and send it back so the next step can be picked.
      + end-to-end translate of a smoke.st -> POUS.c/conf0.c/res0.c),
      deployer dry-run verified (components iec2c+iec2iec, bins in both
      variant dirs, include tree complete). Lead decisions same as [24]/[28].
+
+
+[32] qwt/6.2.0 — Qt Widgets for Technical Applications (x86_64 ONLY).
+
+     THE Qt QUESTION, RESOLVED (photo ground truth, 2026-05-04 Dockerfile
+     shots): legacy provides Qt NOT as a .nupkg but as a layer of the CI
+     base image gcc84-build-x86_64 — apt deb `qt5-devel-elara` from the
+     ProGet debian feed -> /opt/Qt/5.15.2, ENV QT5_ROOT_DIR=/opt/Qt/5.15.2,
+     QT_QPA_PLATFORM=offscreen; the legacy framework's Qt5Configure.cmake
+     resolves Qt via QT5_ROOT_DIR (ResolveDependencies has NO qt logic).
+     Our станок grpc-tc-mirror-x86_64 is built FROM that image and carries
+     Qt as-is. So: NO qt conan package, qwt builds with the image's qmake —
+     the recipe finds $QT5_ROOT_DIR/gcc_64/bin/qmake (fallback: PATH qmake;
+     the Mac smoke runs on brew qt6 — qwt 6.2 is Qt5/Qt6 compatible).
+
+     a. VERSION IS 6.2.0, NOT 6.3.0: el_conf CMakeLists.var pins qwt:6.2.0
+        (photos/2026-05-14/INDEX.md:287; the 05-22 VersionChecker table
+        shows 7.7.0 due to a one-row column shift — cross-checked). The
+        backlog's 6.3.0 was upstream-latest, wrong per wave rule 1 (consumer
+        pin wins). conandata also carries 6.3.0 for a future bump.
+
+     b. Build (x86_64 only — arm/arm64 images carry no Qt, consumer el_conf
+        is a desktop configurator):
+        ./test-astra/build_qwt_nodocker.sh          # ARCH!=x86_64 -> [FAIL]
+        Env knobs as usual (QWT_VERSION/PKG_VERSION def 6.2.0).
+
+     c. Recipe mechanics (qmake, no CMake upstream; CCI's cmake-graft +
+        conan qt package approach deliberately NOT used — offline станок):
+        - source() patches qwtconfig.pri: QwtDll OFF (static .a content),
+          QwtDesigner/Examples/Playground/Tests OFF; Plot/Polar/Widgets/
+          Svg/OpenGL stay (lib content as legacy most likely had).
+        - qwtbuild.pri forces release — patched to read $$(QWT_BUILD_TYPE);
+          build() exports it for BOTH qmake and make (SUBDIRS re-runs qmake
+          from within make — env on qmake alone is not enough).
+        - package(): headers flat from src/*.h (make install NOT used — its
+          macx branch skips headers), libqwt.a from build/lib;
+          libqwt_debug.a -> libqwt.a rename (macx/win debug suffix; linux
+          has none).
+        - package_info: libs=[qwt], NO Qt dep — consumers link Qt from
+          QT5_ROOT_DIR side-channel exactly like the rest of the framework.
+        Emitted: qwt.lin.gcc84.shared.x86_64.6.2.0.nupkg, component qwt.
+
+     d. Windows: OFF (settings.kts windows=false, no run_qwt_win.bat). Qt
+        provisioning on win agents is unknown (legacy win Qt story not
+        photographed); revisit with the win ground truth.
+
+     e. GROUND-TRUTH GAP (same as [29]-[31]): legacy QWT .nupkg internals
+        not captured (TC row 'QWT 5 successful' collapsed). Diff a real
+        legacy qwt .nupkg before production: header layout (flat qwt_*.h
+        assumed), lib content (Svg/OpenGL/Polar classes in or out), and
+        whether legacy built it shared (content contract after IN-658 is
+        static .a regardless).
+
+     Mac smoke green 2026-07-21 (brew qt6): conan create R+D + deployer
+     dry-run — release -O2 2.8M / debug -g 112M libs both named libqwt.a,
+     component qwt, flat headers. Lead decisions same as [24]/[28].

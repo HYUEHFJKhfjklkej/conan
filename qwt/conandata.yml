@@ -1,0 +1,9 @@
+sources:
+  "6.2.0":
+    # Легаси-пин el_conf: qwt:6.2.0 (photos/2026-05-14 CMakeLists.var:284) —
+    # поэтому 6.2.0, а не upstream-latest 6.3.0.
+    url: "https://sourceforge.net/projects/qwt/files/qwt/6.2.0/qwt-6.2.0.tar.bz2/download"
+    sha256: "9194f6513955d0fd7300f67158175064460197abab1a92fa127a67a4b0b71530"
+  "6.3.0":
+    url: "https://sourceforge.net/projects/qwt/files/qwt/6.3.0/qwt-6.3.0.tar.bz2/download"
+    sha256: "dcb085896c28aaec5518cbc08c0ee2b4e60ada7ac929d82639f6189851a6129a"
