@@ -27,3 +27,4 @@ __pycache__/
 # ZIP-архивы остаются в репо (если переносятся через USB на оффлайн-машину).
 tools/windows/strawberryperl/
 tools/windows/nasm/
+build-*/

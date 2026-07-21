@@ -3,6 +3,7 @@ import textwrap
 from conan import ConanFile
 from conan.tools.build import can_run
 from conan.tools.files import save
+from conan.tools.layout import basic_layout
 
 
 class TestConan(ConanFile):
@@ -12,6 +13,11 @@ class TestConan(ConanFile):
 
     def requirements(self):
         self.requires(self.tested_reference_str, run=True)
+
+    def layout(self):
+        # без layout() build_folder = каталог рецепта — смоук мусорил
+        # сгенерированным кодом прямо в дерево test_package/
+        basic_layout(self)
 
     def test(self):
         if not can_run(self):
