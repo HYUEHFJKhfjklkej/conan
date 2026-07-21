@@ -465,6 +465,7 @@ def _legacy_component_names(libs, pkg_name):
 LEGACY_BIN_TOOLS = {
     "grpc": ("grpc_cpp_plugin",),
     "protobuf": ("protoc",),
+    "matiec": ("iec2c", "iec2iec"),   # пакет-инструмент: либ нет вообще
 }
 
 
@@ -812,7 +813,7 @@ def deploy(graph, output_folder, **kwargs):
             shutil.rmtree(skip)
 
         # 6. CMakeLists.var
-        components = list(libs) if libs else [name]
+        components = list(libs)
         # grpc_cpp_plugin / protoc — ИСПОЛНЯЕМЫЕ (нет .a/.so), поэтому _list_libs
         # их пропускает; но legacy CMakeLists.var перечисляет их как components,
         # чтобы Elara-фреймворк (find_program в GenerateGrpcCpp.cmake) нашёл
@@ -823,6 +824,11 @@ def deploy(graph, output_folder, **kwargs):
             if os.path.isfile(os.path.join(_staging_rel_libdir, _tool)) \
                     and _tool not in components:
                 components.append(_tool)
+        # Фолбэк [name] — только когда нет ВООБЩЕ ничего (headers-only пакет):
+        # для tool-пакетов (matiec) фантомный компонент = FATAL_ERROR у
+        # ResolveDependencies (find_library не найдёт файла с таким именем).
+        if not components:
+            components = [name]
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
         # Только прямые deps ЭТОГО пакета (не весь транзитивный замыкатель):

@@ -2200,3 +2200,70 @@ step and send it back so the next step can be picked.
      Mac smoke green 2026-07-21: conan create Release+Debug + test_package
      (C API + TS7Client), deployer dry-run verified (component snap7, flat
      include/snap7.h, libsnap7.a R+D). Lead decisions same as [24]/[28].
+
+
+[31] matiec/0.1.20260512 — IEC 61131-3 to C compiler (iec2c), tool package.
+
+     Recipe from scratch (matiec is packaged NOWHERE — no CCI, no Debian, no
+     AUR; Beremiz/OpenPLC vendor it from source). Upstream is autotools with
+     NO shipped configure + mandatory flex/bison codegen; the станок has
+     neither, so the offline tarball PREBAKES the generated parsers
+     (stage1_2/iec_{bison,flex}.cc|hh — flex 2.6.4/bison 3.8.2) + autoconf's
+     config/config.h, and our CMakeLists compiles the exact upstream object
+     set (generate_c.cc/generate_iec.cc are unity-TUs — do NOT add their
+     generate_*_*.cc siblings as separate sources). stage1_2 needs
+     -DDEFAULT_LIBDIR + -DYY_BUF_SIZE + -fpermissive (gcc) from upstream
+     Makefile.am or the flex output does not compile.
+
+     a. Version pin. Upstream github.com/beremiz/matiec has ZERO tags and
+        AC_INIT says 0.1 forever — version = 0.1.<commit date>:
+        0.1.20260512 = commit 7949c0bda1787de9c7cacaa4876ede49f85262dd
+        (master 2026-05-12). To bump: new commit -> new codeload sha256 into
+        conandata (provenance), rebuild the repack:
+        git archive --prefix=matiec-0.1.<DATE>/ <sha> | tar -x
+        + copy stage1_2/iec_bison.{cc,hh},iec_flex.cc + config/config.h from
+        a local autoreconf/configure/make run; drop debian/tests/readme/AnnexF;
+        tar -czf. source() refuses codeload fallback deliberately (raw tree
+        does not build without flex/bison).
+
+     b. Build (TC runs the step inside the станок, [25] style):
+        ARCH=x86_64|x86|arm|arm64 ./test-astra/build_matiec_nodocker.sh
+        Env knobs identical to [28]/[30] (MATIEC_VERSION/PKG_VERSION def
+        0.1.20260512). NB: the cross-built iec2c runs on the TARGET arch —
+        it is a target-side tool, not a build-context tool.
+
+     c. Package layout (tool package — NO libraries at all):
+        - bin tools iec2c + iec2iec -> lib/native/<variant>/ (+ -d twin),
+          via deployer LEGACY_BIN_TOOLS["matiec"]; components = [iec2c,
+          iec2iec]. The deployer's old zero-libs fallback emitted a phantom
+          component [<name>] which would FATAL_ERROR downstream
+          ResolveDependencies find_library — fixed: fallback applies only
+          when there are no libs AND no tools.
+        - include/ = upstream lib/ tree verbatim: *.txt tables (ieclib.txt,
+          standard_functions.txt, ...) read by iec2c -I at RUN time, plus
+          C/ headers (iec_std_lib.h, accessor.h, ...) included by the
+          GENERATED C code at compile time. C/* is ALSO duplicated into
+          include/ root so one -I<pkg>/include serves both uses (Beremiz
+          upstream needs two: lib + lib/C).
+        Consumer pattern: iec2c -I <pkg>/include prog.st && cc -I<pkg>/include
+        POUS.c ... Emitted names: matiec.lin.gcc84.shared.x86_64.0.1.20260512
+        (+ i686 / gcc75 arm-linaro / arm64-linaro).
+
+     d. Windows: OFF (settings.kts windows=false, no run_matiec_win.bat).
+        Upstream is MinGW-only (Beremiz cross-compiles from Linux); main.cc
+        uses <getopt.h> — MSVC needs shims nobody ships. Same stance as
+        dbus [29].f. Licenses: compiler GPL-3.0, lib/ runtime LGPL-3.0
+        (both in licenses/).
+
+     e. GROUND-TRUTH GAP (open, same as [29].f/[30].d): legacy LIBMATIEC =
+        one collapsed TC row (10 successful, SURA2/COMPONENTS/CMAKE), no
+        version pin photographed anywhere, likely consumers are the internal
+        PLC_* family (PLCBUILDSYS/PLCRUNTIME — not migrated). Before
+        production: diff a real legacy libmatiec .nupkg (did it ship iec2c?
+        a lib? which headers where? which matiec revision — upstream had
+        32/64-bit struct fixes in late 2025 that change generated code).
+
+     Mac smoke green 2026-07-21: conan create R+D + test_package (iec2c -v
+     + end-to-end translate of a smoke.st -> POUS.c/conf0.c/res0.c),
+     deployer dry-run verified (components iec2c+iec2iec, bins in both
+     variant dirs, include tree complete). Lead decisions same as [24]/[28].

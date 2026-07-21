@@ -73,7 +73,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 | DBUS | dbus 1.15.8 | meson | ГОТОВ 2026-07-21, TC зелёный (после пина компилятора в i686-профиле, 5fc4976); HELP [29]; ground-truth сверка легаси-пакета — pending |
 | SNAP7 | Siemens S7 comm (OSS) | 1.4.2 (sf) | ГОТОВ 2026-07-21, TC зелёный (HELP [30]); sf-архив .7z переупакован в src/; ground-truth легаси — pending |
 | SOEM | EtherCAT master | upstream v2.0.0 | CCI soem есть? уточнить; рецепт мал |
-| LIBMATIEC | IEC 61131-3 matiec | форки, релизов нет | рецепт с нуля, версию зафиксировать коммитом |
+| LIBMATIEC | IEC 61131-3 matiec | 0.1.20260512 (= beremiz/matiec@7949c0b) | ГОТОВ 2026-07-21 (Mac-смоук + deployer, HELP [31]); tool-пакет iec2c/iec2iec, flex/bison предзапечены; win OFF (MinGW-only upstream); ground-truth легаси — pending |
 | IEC61850LIB | libiec61850 | 1.6.1 (CCI = upstream) | лицензия GPL/коммерч. — с лидом |
 | QXORM, QWINDOWKIT | Qt-экосистема | — | вместе с решением по Qt |
 | OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | — | проприетарные — отдельное решение |

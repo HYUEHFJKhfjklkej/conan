@@ -1,0 +1,10 @@
+sources:
+  "0.1.20260512":
+    # Провенанс: codeload-тарбол пина 7949c0bda1787de9c7cacaa4876ede49f85262dd
+    # (master 2026-05-12; тегов/релизов у matiec нет, AC_INIT = 0.1 навсегда).
+    # В src/ лежит переупаковка matiec-0.1.20260512.tar.gz: git archive пина
+    # + предзапечённые stage1_2/iec_{bison,flex}.cc|hh (flex 2.6.4/bison 3.8.2)
+    # + config/config.h, без debian/tests/readme/AnnexF. source() использует
+    # только её. Пересоздание: HELP.txt [31].
+    url: "https://github.com/beremiz/matiec/archive/7949c0bda1787de9c7cacaa4876ede49f85262dd.tar.gz"
+    sha256: "e99d845747f3a53b0d052e511a8d43da3f253b5ea89fb5f355567520d183c68b"
