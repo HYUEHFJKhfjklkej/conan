@@ -299,6 +299,19 @@ LIB_FILENAME_ALIASES = {
     # создаёт симлинк `libprotolib.so` -> `libprotoc.so`, чтобы legacy-имя
     # резолвилось без правки кода потребителей. Проверено на IN-658 el_conf 2026-05-26.
     "protobuf": {"protoc": "protolib"},
+    # Legacy-имя компонента DBUS не зафиксировано (фото TC-дерева не раскрывают
+    # пакет) — эмитим оба имени: upstream `dbus-1` и имя пакета `dbus`.
+    "dbus": {"dbus-1": "dbus"},
+}
+
+# Пакеты с вложенными include-корнями (FHS/pkg-config layout). Downstream
+# ResolveDependencies.cmake добавляет в include-path только `<pkg>/include`,
+# поэтому содержимое перечисленных каталогов сливается в корень include/
+# staging'а, а их дубли внутри include/ удаляются. dbus: заголовки в
+# include/dbus-1.0/, арх-зависимый dbus-arch-deps.h — в lib/dbus-1.0/include/
+# (без слияния он вообще терялся, а #include <dbus/dbus.h> не резолвился).
+LEGACY_INCLUDE_FLATTEN = {
+    "dbus": ["include/dbus-1.0", "lib/dbus-1.0/include"],
 }
 
 # Пакеты, чьи либы имеют префикс в имени, который downstream Elara CMake-фреймворк
@@ -647,6 +660,17 @@ def deploy(graph, output_folder, **kwargs):
         dst_include = os.path.join(staging, "include")
         if os.path.exists(src_include):
             shutil.copytree(src_include, dst_include)
+
+        # 1a. Вложенные include-корни → в корень include/ (LEGACY_INCLUDE_FLATTEN).
+        for _nested in LEGACY_INCLUDE_FLATTEN.get(name, []):
+            src_nested = os.path.join(release_pkg, _nested)
+            if os.path.isdir(src_nested):
+                shutil.copytree(src_nested, dst_include, dirs_exist_ok=True)
+            # Дубль вложенного корня, скопированный шагом 1, убираем.
+            if _nested.startswith("include/"):
+                dup = os.path.join(staging, _nested)
+                if os.path.isdir(dup):
+                    shutil.rmtree(dup)
 
         # 1b. proto/ — legacy-layout кладёт `.proto`-файлы (protobuf well-known'ы:
         # timestamp.proto, duration.proto, ...; protos grpc-плагина) в отдельное

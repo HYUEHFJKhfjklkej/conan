@@ -23,8 +23,10 @@ RUN tar -xzf packages-linux/cpython-3.11.10+20240909-x86_64-linux-gnu.tar.gz -C 
     && ln -sf /opt/python/bin/python3 /usr/local/bin/python \
     && ln -sf /opt/python/bin/pip3    /usr/local/bin/pip \
     && /opt/python/bin/python3 -m pip install --no-index --find-links=packages-linux \
-        pip setuptools wheel conan \
+        pip setuptools wheel conan meson ninja \
     && ln -sf /opt/python/bin/conan /usr/local/bin/conan \
+    && ln -sf /opt/python/bin/meson /usr/local/bin/meson \
+    && ln -sf /opt/python/bin/ninja /usr/local/bin/ninja \
     && conan --version
 
 ENV PROGET_SOURCES_URL="http://proget.inc.elara.local/endpoints/conan-sources/content/"

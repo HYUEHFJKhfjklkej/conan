@@ -70,7 +70,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 |---|---|---|---|
 | MONGOOSE | mongoose 7.x | нет в CCI | рецепт с нуля (1 .c/.h, несложно) |
 | NANOPB | nanopb 0.4.9.1 | нет в CCI (config.yml 404) | рецепт с нуля |
-| DBUS | dbus 1.15.8 | meson | оффлайн meson-тулчейн |
+| DBUS | dbus 1.15.8 | meson | ГОТОВ 2026-07-21 (Mac-смоук + deployer, HELP [29]); ground-truth сверка легаси-пакета — pending |
 | SNAP7 | Siemens S7 comm (OSS) | 1.4.2 (sf) | рецепт с нуля |
 | SOEM | EtherCAT master | upstream v2.0.0 | CCI soem есть? уточнить; рецепт мал |
 | LIBMATIEC | IEC 61131-3 matiec | форки, релизов нет | рецепт с нуля, версию зафиксировать коммитом |

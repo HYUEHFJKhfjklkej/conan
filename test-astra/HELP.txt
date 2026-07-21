@@ -2036,3 +2036,76 @@ step and send it back so the next step can be picked.
      alongside GRPC / replace a legacy googletest config) and publish policy
      (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1 for coexistence) go through the
      team lead — this block is the runbook, not the placement.
+
+
+[29] dbus/1.15.8 — the only Meson package in the pipeline (Linux x86_64/x86/arm/arm64).
+
+     Single package outside the grpc tree, one dep (expat). Recipe dbus/ is
+     canonical CCI + the two offline edits; build system is Meson, so this block
+     records everything meson-specific — the rest is the gtest twin ([28]).
+
+     a. Build (TC runs the step inside the станок, [25] style):
+
+        ARCH=x86_64 ./test-astra/build_dbus_nodocker.sh    # Linux x64
+        ARCH=x86    ./test-astra/build_dbus_nodocker.sh    # 32-bit (-m32)
+        ARCH=arm    ./test-astra/build_dbus_nodocker.sh    # armv7hf cross
+        ARCH=arm64  ./test-astra/build_dbus_nodocker.sh    # aarch64 cross
+
+        Env knobs: DBUS_VERSION/PKG_VERSION (def 1.15.8), SHARED (def False),
+        OUTPUT_DIR (def output-dbus-<arch>), LEGACY_NUPKG_VERSION_SUFFIX,
+        SKIP_CACHE_CLEAN=1, CONAN_REMOTE + UPLOAD_AFTER=1 — same as [28].
+
+     b. meson/ninja provisioning (offline). Profiles declare meson/1.4.0 in
+        [platform_tool_requires], so the binary must exist in the станок:
+        - Rebuilt grpc-tc-mirror-* images bake meson+ninja wheels in (pip
+          install from packages-linux/ — Dockerfile change 2026-07-21).
+        - Old images: the driver self-provisions offline from packages-linux/
+          (meson-1.4.0 pure-py + ninja-1.13.0 manylinux wheels) and symlinks
+          into /usr/local/bin. No image rebuild required to run.
+        Verdict 'meson недоступен' -> wheels missing from checkout (git pull).
+
+     c. Cross-compile mechanics (why no recipe env-fallback like grpc's):
+        MesonToolchain fills the cross-file [binaries] from the host profile's
+        [buildenv] (CC/CXX/AR/STRIP = arm-linux-gnueabihf-*), and -m32 for x86
+        comes from architecture_flag. The CMake dep (expat) picks the same
+        CC/CXX from env. CONAN_USER_TOOLCHAIN is exported by the driver ONLY
+        for the deployer: '-linaro' arch suffix in the .nupkg name + target
+        binutils choice. Verified against Conan 2.29 sources 2026-07-21.
+
+     d. Deployer specifics for dbus (extensions/deployers/legacy_nupkg.py):
+        - LEGACY_INCLUDE_FLATTEN merges include/dbus-1.0/ AND the
+          arch-dependent lib/dbus-1.0/include/dbus-arch-deps.h into flat
+          include/dbus/ — downstream ResolveDependencies puts only
+          <pkg>/include on the path, so without this #include <dbus/dbus.h>
+          breaks (arch header was silently dropped entirely).
+        - LIB_FILENAME_ALIASES emits BOTH component names: dbus (libdbus.a
+          symlink) + dbus-1 (real libdbus-1.a) — the legacy component name is
+          NOT ground-truth-verified (no photo shows the DBUS package inside),
+          so both -ldbus and -ldbus-1 resolve.
+        - The same run emits expat.<variant>.2.8.2.nupkg alongside (deployer
+          walks all host deps) — push both or the dbus nuspec dep dangles.
+
+     e. Emitted names:
+        dbus.lin.gcc84.shared.x86_64.1.15.8.nupkg        (+ expat.<same>.2.8.2)
+        dbus.lin.gcc84.shared.i686.1.15.8.nupkg
+        dbus.lin.gcc75.shared.arm-linaro.1.15.8.nupkg
+        dbus.lin.gcc75.shared.arm64-linaro.1.15.8.nupkg
+
+        TC artifact rule per config: output-dbus-<arch>/*.nupkg => <arch>.
+        Publish: API_KEY=<key> NUPKG_DIR=output-dbus-<arch>
+        ./test-astra/tc_publish_conan.sh (the ProGet `conan` feed, [26]).
+
+     f. GROUND-TRUTH GAP (open): the legacy DBUS .nupkg internals were never
+        captured — no photo expands SURA2/COMPONENTS/CMAKE/DBUS (7 successful),
+        no CMakeLists.var of any consumer pins a dbus version, el_conf's
+        VersionChecker table has no dbus row; the only visible consumer is
+        IPC_FACTORIES_DBUS. Package is built maximally compatible (flat
+        include + both component names). Before promoting to production feed,
+        check a real legacy dbus .nupkg (Bitbucket `dbus` repo / TC artifacts)
+        against ours: component name, include layout, version. Windows slots
+        stay OFF until that check (unknown if a win .nupkg even existed) —
+        no run_dbus_win.bat yet, same stance as settings.kts windows=false.
+
+     Mac smoke + deployer dry-run green 2026-07-21 (flat include with
+     dbus-arch-deps.h, components dbus+dbus-1 verified in the .nupkg). Lead
+     decisions same as [24]/[28]: TC-tree placement + publish policy.
