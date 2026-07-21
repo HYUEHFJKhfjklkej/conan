@@ -1,8 +1,8 @@
 #!/bin/bash
 # proget_push_nupkg.sh — залить собранные legacy .nupkg в NuGet-фид ProGet.
-# По умолчанию фид SANDBOX (nuget-sandbox), чтобы эксперименты не трогали
-# production-фид downstream-продуктов — публикация туда (overwrite vs
-# LEGACY_NUPKG_VERSION_SUFFIX=.1) решается лидом.
+# По умолчанию фид `conan` (NuGet-тип, заведён под собранные .nupkg) — это
+# отдельный от production-фида downstream-продуктов канал, публикация в
+# production (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1) решается лидом.
 #
 # Push-эндпоинт (Inedo docs):
 #     PUT https://<host>/nuget/<feed>/package   (тело = .nupkg)
@@ -10,13 +10,13 @@
 #
 # Использование (dev-VM):
 #   PROGET_API_KEY=<key> ./test-astra/proget_push_nupkg.sh output-grpc-1601-upstream
-#   PROGET_API_KEY=<key> NUGET_FEED=nuget-sandbox ./test-astra/proget_push_nupkg.sh output/
+#   PROGET_API_KEY=<key> NUGET_FEED=conan ./test-astra/proget_push_nupkg.sh output/
 #
 # Env:
 #   PROGET_URL       по умолч. http://proget.inc.elara.local
-#   NUGET_FEED       по умолч. nuget-sandbox (создать: Feeds -> Create New
-#                    Feed -> NuGet). НИКОГДА не указывать на production-фид
-#                    без согласия лида.
+#   NUGET_FEED       по умолч. conan (создан proget_create_nupkg_feed.sh или
+#                    вручную: Feeds -> Create New Feed -> NuGet). НИКОГДА не
+#                    указывать на production-фид без согласия лида.
 #   PROGET_API_KEY   ключ с правами Feed API (шлётся как X-ApiKey и
 #                    X-NuGet-ApiKey — разные версии ProGet читают разные заголовки)
 #   PROGET_USER/PROGET_PASS   альтернатива через basic-auth
@@ -32,7 +32,7 @@ if [ -z "$DIR" ] || [ ! -d "$DIR" ]; then
 fi
 
 PROGET_URL="${PROGET_URL:-http://proget.inc.elara.local}"
-NUGET_FEED="${NUGET_FEED:-nuget-sandbox}"
+NUGET_FEED="${NUGET_FEED:-conan}"
 DRY_RUN="${DRY_RUN:-}"
 PUSH_URL="$PROGET_URL/nuget/$NUGET_FEED/package"
 

@@ -1872,6 +1872,52 @@ step and send it back so the next step can be picked.
      (output-grpc-1601-<arch>/*.nupkg).
 
 
+[26] Separate NuGet feed for the Conan-built .nupkg (isolated from production).
+
+     Helper: test-astra/proget_create_nupkg_feed.sh — creates a dedicated
+     NuGet feed via the ProGet Management API so the deployer's .nupkg land
+     in their own feed, NOT in the production feed the downstream products
+     resolve from. No ProGet version gate: NuGet feeds work on any version,
+     incl. the current 5.2.30 (unlike a Conan-type feed, which needs
+     >=2024.22). Pairs with the existing push ([18].d): proget_push_nupkg.sh
+     PUTs .nupkg into <NUGET_FEED>; this block creates that feed.
+     UNVERIFIED until the first Management-API run on the live ProGet.
+
+     0. Pre-flight (admin):
+        - API key with Feed Management API rights (or PROGET_USER/PROGET_PASS).
+          The ProGet admin can equally click Feeds -> Create New Feed ->
+          NuGet; the script is the idempotent/repeatable path.
+
+     1. Run it (dev-VM — ProGet is reachable only there):
+        DRY_RUN=1 ./test-astra/proget_create_nupkg_feed.sh   # print every
+                  # request, no network — sanity-check the URL/JSON first
+        PROGET_API_KEY=<key> ./test-astra/proget_create_nupkg_feed.sh
+        # knobs: NUGET_FEED (def conan), PROGET_INSECURE=1 (self-signed
+        #   TLS), VERIFY=0 (create only), PUSH_DIR=<dir> (create + push + list).
+        Idempotent: GET /feeds/get/<name> first, skips create if it exists.
+
+     2. Create + verify in one shot (needs a built output dir):
+        PROGET_API_KEY=<key> PUSH_DIR=output-grpc-1601-upstream \
+            ./test-astra/proget_create_nupkg_feed.sh
+        # creates the feed, delegates the .nupkg push to proget_push_nupkg.sh
+        # (with NUGET_FEED pointed at the new feed, NOT nuget-sandbox), then
+        # lists /nuget/<feed>/Packages() and reports the entry count.
+
+     3. Feed it on every build afterwards — point the push at it:
+        NUGET_FEED=conan PROGET_API_KEY=<key> \
+            ./test-astra/proget_push_nupkg.sh <output-dir>
+
+     4. Verdicts:
+        - feed created + Packages() lists the pushed .nupkg -> green.
+        - create 401/403 -> key lacks Feed Management API rights.
+        - push ok but listing 0 -> NuGet indexing lag (re-list / check UI);
+          if it stays 0, the push key lacks Feed API rights on this feed.
+
+     This feed is the conan-output staging ground; promotion to the
+     production NuGet feed (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1)
+     stays the lead's call — see TEAMCITY-grpc-tree.md and [18].d.
+
+
 [27] Build the grpc/1.78.1 line (newest) on all arches + TeamCity wiring.
 
      The 1.78.1-line twin of [22]/[24]/[25]. run_grpc_1781_upstream.sh is now
@@ -1919,3 +1965,74 @@ step and send it back so the next step can be picked.
 
      Same lead decisions as [24] (placement in the TC tree, publish policy
      overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1) — TEAMCITY-grpc-tree.md.
+
+
+[28] TeamCity: gtest/1.17.0 as a standalone package (Linux x86_64/arm/arm64 + Windows).
+
+     gtest is a single package OUTSIDE the grpc tree — no transitive deps, so no
+     ARM env-fallback and no 7-.nupkg fan-out. The deployer renames it
+     gtest -> googletest (LEGACY_NAME_MAP), one .nupkg per config. Drivers already
+     default to GTEST_VERSION=1.17.0; recipe: gtest/ (versions 1.15.2/1.16.0/1.17.0
+     with offline tarballs in gtest/src/). fmt is the same shape — this block is the
+     gtest twin of that pattern.
+
+     Linux (3 configs) — TC runs the step INSIDE the станок ([25] style,
+     "Run step within Docker container", image %REGISTRY%/library/grpc-tc-mirror-<arch>):
+
+        ARCH=x86_64 ./test-astra/build_gtest_nodocker.sh    # Linux x64
+        ARCH=arm    ./test-astra/build_gtest_nodocker.sh    # armv7hf cross
+        ARCH=arm64  ./test-astra/build_gtest_nodocker.sh    # aarch64 cross
+
+     build_gtest_nodocker.sh = conan part only (export -> build Rel+Debug ->
+     deployer -> googletest.*.nupkg), no docker build/pull/run. arm/arm64 take the
+     linaro cross-toolchain from the host profile's [conf] user_toolchain
+     ({{ profile_dir }}/toolchains/...), so it works when TC mounts the checkout
+     outside /work. Env knobs: GTEST_VERSION (default 1.17.0), SHARED (default False —
+     static .a content), LEGACY_NUPKG_VERSION_SUFFIX, OUTPUT_DIR (default
+     output-gtest-<arch>), PROGET_SOURCES_URL, SKIP_CACHE_CLEAN=1, CONAN_REMOTE +
+     UPLOAD_AFTER=1.
+
+     Windows (1+ configs) — native MSVC on the agent, NO docker (like the grpc
+     Windows leg, see [15] / test-windows/TEAMCITY-grpc-windows.md). One Command Line
+     step per profile:
+
+        set PROFILE_NAME=win-v143-x64 & test-windows\run_gtest_win.bat   # Win x64 (v143)
+        set PROFILE_NAME=win-v142-x86 & test-windows\run_gtest_win.bat   # Win x86 (v142)
+
+     Requires a provisioned agent: MSVC toolset for the profile + Conan 2.29.0
+     (test-windows\setup.bat installs Conan offline from packages\). Writes to
+     output-gtest-win\ ; keep x64/x86 configs on separate checkout dirs or clean
+     output-gtest-win\ between them.
+
+     TC artifact rule per config:
+        output-gtest-x86_64/*.nupkg => x86_64      (Linux x64)
+        output-gtest-arm/*.nupkg    => arm         (Linux armv7hf)
+        output-gtest-arm64/*.nupkg  => arm64       (Linux aarch64)
+        output-gtest-win/*.nupkg    => win         (Windows MSVC)
+
+     Emitted names (googletest, not gtest) — Linux legs are byte-compat with legacy:
+        googletest.lin.gcc84.shared.x86_64.1.17.0.nupkg          (Linux x64)
+        googletest.lin.gcc75.shared.arm-linaro.1.17.0.nupkg      (Linux armv7hf)
+        googletest.lin.gcc75.shared.arm64-linaro.1.17.0.nupkg    (Linux aarch64)
+
+     WINDOWS tag caveat — NOT YET VALIDATED (same status as [15]): the deployer
+     builds the compiler tag as f"v{compiler.version}" (no map), and the current
+     profiles set compiler.version 194/192, so today the run emits:
+        googletest.win.v194.shared.x64.1.17.0.nupkg   (profile win-v143-x64, ver=194)
+        googletest.win.v192.shared.x86.1.17.0.nupkg   (profile win-v142-x86, ver=192)
+     Legacy CI names are v143/v142 (VS toolset naming). The profiles are CORRECT as-is
+     (they must carry the real Conan msvc version 192/194 — that drives the actual
+     compile/ABI; 143/142 aren't valid compiler.version values). The fix belongs ONLY
+     in the deployer, which is the single source of truth for legacy names: add an
+     msvc version->toolset map in _short_compiler (192->v142, 193->v143, 194->v143)
+     instead of the current f"v{version}". Do NOT touch the profiles. Linux is
+     unaffected. Same Windows-not-validated stance as [15]; land the deployer map
+     with the lead.
+
+     Publish the .nupkg to the ProGet `conan` NuGet feed with tc_publish_conan.sh
+     (API_KEY=<key> NUPKG_DIR=output-gtest-<arch>), same as the grpc configs.
+
+     Lead decisions (same as [24]): WHERE this lands in the TC tree (own project /
+     alongside GRPC / replace a legacy googletest config) and publish policy
+     (overwrite vs LEGACY_NUPKG_VERSION_SUFFIX=.1 for coexistence) go through the
+     team lead — this block is the runbook, not the placement.
