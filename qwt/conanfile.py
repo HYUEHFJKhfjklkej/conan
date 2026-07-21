@@ -1,15 +1,16 @@
 import os
-import shutil
 from conan import ConanFile
 from conan.errors import ConanException
-from conan.tools.files import copy, get, replace_in_file, unzip
-from conan.tools.layout import basic_layout
+from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
+from conan.tools.files import apply_conandata_patches, copy, export_conandata_patches, get, rmdir, unzip
 
 # Qt НЕ является conan-депом: легаси резолвит его сайд-ченнелом QT5_ROOT_DIR
 # (Qt 5.15.2 вшит в CI-образ gcc84-build-x86_64 deb'ом qt5-devel-elara;
-# Qt5Configure.cmake фреймворка читает ту же переменную). Рецепт повторяет
-# схему: qmake берётся из $QT5_ROOT_DIR/gcc_64/bin, фолбэк — qmake с PATH
-# (Mac-смоук на brew qt6 — qwt 6.2 совместим с Qt5/Qt6).
+# Qt5Configure.cmake фреймворка читает ту же переменную). Сборка — CMake-графт
+# из CCI (патчи 0001-0003): qmake использовать НЕЛЬЗЯ — образный Qt собран
+# commercial-редакцией, и qmake требует лицензионный файл (licheck), которого
+# в контейнере нет; CMake find_package лицензию не проверяет — ровно так же
+# собирается весь легаси Qt-код. Mac-смоук: brew qt (Qt6, патч 0003).
 
 
 class QwtConan(ConanFile):
@@ -20,11 +21,44 @@ class QwtConan(ConanFile):
     topics = ("qt", "plot", "widgets", "charts")
     settings = "os", "arch", "compiler", "build_type"
     package_type = "static-library"
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False],
+        "plot": [True, False],
+        "widgets": [True, False],
+        "svg": [True, False],
+        "opengl": [True, False],
+        "designer": [True, False],
+        "polar": [True, False],
+    }
+    # svg=True (у CCI False): контент либы держим по stock-конфигу upstream —
+    # наиболее вероятный состав легаси-пакета (ground-truth gap, HELP [32])
+    default_options = {
+        "shared": False,
+        "fPIC": True,
+        "plot": True,
+        "widgets": True,
+        "svg": True,
+        "opengl": True,
+        "designer": False,
+        "polar": True,
+    }
 
     exports_sources = "src/*"
 
+    def export_sources(self):
+        export_conandata_patches(self)
+
+    def config_options(self):
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+
+    def configure(self):
+        if self.options.shared:
+            self.options.rm_safe("fPIC")
+
     def layout(self):
-        basic_layout(self, src_folder="src")
+        cmake_layout(self, src_folder="src")
 
     def _offline_source_archive(self):
         src_dir = os.path.join(self.export_sources_folder, "src")
@@ -41,68 +75,67 @@ class QwtConan(ConanFile):
             unzip(self, _local, strip_root=True)
         else:
             get(self, **self.conan_data["sources"][self.version], strip_root=True)
-        # static .a (контент-контракт IN-658) + без designer/examples/playground/
-        # tests — они не входят в libqwt; Plot/Polar/Widgets/Svg/OpenGL остаются.
-        pri = os.path.join(self.source_folder, "qwtconfig.pri")
-        replace_in_file(self, pri, "QWT_CONFIG           += QwtDll",
-                        "# QWT_CONFIG           += QwtDll")
-        for knob in ("QwtDesigner", "QwtExamples", "QwtPlayground", "QwtTests"):
-            replace_in_file(self, pri, f"QWT_CONFIG     += {knob}",
-                            f"# QWT_CONFIG     += {knob}")
-        # qwtbuild.pri форсит release (debug_and_release на win) и инклудится
-        # каждым subdir-.pro заново — CLI-переопределение qmake не доезжает.
-        # Сорс общий для Release/Debug, поэтому build-type приходит через env.
-        build_pri = os.path.join(self.source_folder, "qwtbuild.pri")
-        replace_in_file(self, build_pri, "CONFIG           += debug_and_release",
-                        "CONFIG           += $$(QWT_BUILD_TYPE)")
-        replace_in_file(self, build_pri, "CONFIG           += release",
-                        "CONFIG           += $$(QWT_BUILD_TYPE)")
 
     @property
-    def _qmake(self):
+    def _qt_prefix(self):
         qt_root = os.environ.get("QT5_ROOT_DIR", "").strip()
-        if qt_root:
-            for sub in ("gcc_64", ""):
-                cand = os.path.join(qt_root, sub, "bin", "qmake")
-                if os.path.isfile(cand):
-                    return cand
-        found = shutil.which("qmake") or shutil.which("qmake6")
-        if not found:
-            raise ConanException("qwt: qmake не найден (нет QT5_ROOT_DIR и qmake не на PATH). "
-                                 "x86_64-станок несёт Qt 5.15.2 в /opt/Qt — см. HELP [32]")
-        return found
+        if not qt_root:
+            raise ConanException("qwt: env QT5_ROOT_DIR не задан. На станке его выставляет "
+                                 "образ (/opt/Qt/5.15.2); для Mac-смоука — brew-префикс qt. "
+                                 "См. HELP [32]")
+        gcc64 = os.path.join(qt_root, "gcc_64")
+        return gcc64 if os.path.isdir(gcc64) else qt_root
+
+    @property
+    def _qt_major(self):
+        return 6 if os.path.isdir(os.path.join(self._qt_prefix, "lib", "cmake", "Qt6")) else 5
+
+    def generate(self):
+        tc = CMakeToolchain(self)
+        tc.cache_variables["CMAKE_PREFIX_PATH"] = self._qt_prefix.replace("\\", "/")
+        tc.variables["QWT_QT_VERSION_MAJOR"] = self._qt_major
+        tc.variables["QWT_DLL"] = bool(self.options.shared)
+        tc.variables["QWT_STATIC"] = not bool(self.options.shared)
+        tc.variables["QWT_PLOT"] = bool(self.options.plot)
+        tc.variables["QWT_WIDGETS"] = bool(self.options.widgets)
+        tc.variables["QWT_SVG"] = bool(self.options.svg)
+        tc.variables["QWT_OPENGL"] = bool(self.options.opengl)
+        tc.variables["QWT_DESIGNER"] = bool(self.options.designer)
+        tc.variables["QWT_POLAR"] = bool(self.options.polar)
+        tc.variables["QWT_BUILD_PLAYGROUND"] = False
+        tc.variables["QWT_BUILD_EXAMPLES"] = False
+        tc.variables["QWT_BUILD_TESTS"] = False
+        tc.variables["QWT_FRAMEWORK"] = False
+        tc.variables["CMAKE_INSTALL_DATADIR"] = "res"
+        tc.generate()
 
     def build(self):
-        njobs = self.conf.get("tools.build:jobs", default=os.cpu_count() or 4, check_type=int)
-        bt = "debug" if self.settings.build_type == "Debug" else "release"
-        # env нужен ОБЕИМ командам: SUBDIRS-Makefile генерит sub-Makefile'ы
-        # повторными вызовами qmake уже изнутри make
-        self.run(f'QWT_BUILD_TYPE={bt} "{self._qmake}" '
-                 f'"{os.path.join(self.source_folder, "qwt.pro")}"',
-                 cwd=self.build_folder)
-        self.run(f"QWT_BUILD_TYPE={bt} make -j{njobs}", cwd=self.build_folder)
+        apply_conandata_patches(self)
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
 
     def package(self):
-        # make install не используем (macx-ветка qwt не ставит заголовки):
-        # у qwt ВСЕ публичные заголовки лежат плоско в src/, либа — в build/lib.
         copy(self, "COPYING", src=self.source_folder,
              dst=os.path.join(self.package_folder, "licenses"), keep_path=False)
-        copy(self, "*.h", src=os.path.join(self.source_folder, "src"),
-             dst=os.path.join(self.package_folder, "include"), keep_path=False)
-        copy(self, "*.a", src=os.path.join(self.build_folder, "lib"),
-             dst=os.path.join(self.package_folder, "lib"), keep_path=False)
-        copy(self, "*.lib", src=os.path.join(self.build_folder, "lib"),
-             dst=os.path.join(self.package_folder, "lib"), keep_path=False)
-        # macx/win debug qwt суффиксует таргет (libqwt_debug.a) — нормализуем,
-        # имя либы едино на всех платформах (на linux суффикса и так нет)
-        libdir = os.path.join(self.package_folder, "lib")
-        for suffixed, plain in (("libqwt_debug.a", "libqwt.a"), ("qwtd.lib", "qwt.lib")):
-            sp = os.path.join(libdir, suffixed)
-            pp = os.path.join(libdir, plain)
-            if os.path.isfile(sp) and not os.path.isfile(pp):
-                os.rename(sp, pp)
+        cmake = CMake(self)
+        cmake.install()
+        rmdir(self, os.path.join(self.package_folder, "lib", "cmake"))
+        rmdir(self, os.path.join(self.package_folder, "lib", "pkgconfig"))
 
     def package_info(self):
         self.cpp_info.libs = ["qwt"]
         # Qt-либы потребитель линкует сам из QT5_ROOT_DIR (side-channel,
         # как во всём легаси-фреймворке) — conan-депа на Qt нет намеренно.
+        if self.settings.os == "Windows" and self.options.shared:
+            self.cpp_info.defines.append("QWT_DLL")
+        if not self.options.plot:
+            self.cpp_info.defines.append("NO_QWT_PLOT")
+        if not self.options.polar:
+            self.cpp_info.defines.append("NO_QWT_POLAR")
+        if not self.options.widgets:
+            self.cpp_info.defines.append("NO_QWT_WIDGETS")
+        if not self.options.opengl:
+            self.cpp_info.defines.append("QWT_NO_OPENGL")
+        if not self.options.svg:
+            self.cpp_info.defines.append("QWT_NO_SVG")

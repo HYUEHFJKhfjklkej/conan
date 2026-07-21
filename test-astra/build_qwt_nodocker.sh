@@ -49,14 +49,18 @@ if ! command -v conan >/dev/null 2>&1; then
 fi
 command -v conan >/dev/null 2>&1 || { echo "[FAIL] conan не найден (нет станка/venv)" >&2; exit 1; }
 
-# Pre-flight: qmake из QT5_ROOT_DIR (рецепт ищет так же).
-QMAKE="${QT5_ROOT_DIR:-}/gcc_64/bin/qmake"
-if [ ! -x "$QMAKE" ] && ! command -v qmake >/dev/null 2>&1; then
-    echo "[FAIL] qmake не найден: нет \$QT5_ROOT_DIR/gcc_64/bin/qmake и qmake не на PATH." >&2
-    echo "       Станок должен нести Qt 5.15.2 (базовый образ gcc84-build-x86_64) — HELP [32]" >&2
+# Pre-flight: Qt для CMake (рецепт кладёт $QT5_ROOT_DIR[/gcc_64] в
+# CMAKE_PREFIX_PATH). qmake НЕ используется: образный Qt — commercial-
+# редакция, его qmake требует лицензионный файл (licheck) — падение
+# "Qt license file was not found" (QW413, 2026-07-21); CMake find_package
+# лицензию не проверяет — так собирается и весь легаси Qt-код.
+QTPREFIX="${QT5_ROOT_DIR:-}/gcc_64"
+[ -d "$QTPREFIX" ] || QTPREFIX="${QT5_ROOT_DIR:-}"
+if [ ! -d "$QTPREFIX/lib/cmake" ]; then
+    echo "[FAIL] Qt не найден: нет \$QT5_ROOT_DIR[/gcc_64]/lib/cmake (станок должен нести /opt/Qt/5.15.2) — HELP [32]" >&2
     exit 1
 fi
-echo "[INFO] qmake: $([ -x "$QMAKE" ] && echo "$QMAKE" || command -v qmake)"
+echo "[INFO] Qt prefix: $QTPREFIX"
 
 REF="qwt/$QWT_VERSION"
 mkdir -p "$OUTPUT_DIR"

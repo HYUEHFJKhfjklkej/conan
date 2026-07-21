@@ -1,9 +1,22 @@
 sources:
-  "6.2.0":
-    # Легаси-пин el_conf: qwt:6.2.0 (photos/2026-05-14 CMakeLists.var:284) —
-    # поэтому 6.2.0, а не upstream-latest 6.3.0.
-    url: "https://sourceforge.net/projects/qwt/files/qwt/6.2.0/qwt-6.2.0.tar.bz2/download"
-    sha256: "9194f6513955d0fd7300f67158175064460197abab1a92fa127a67a4b0b71530"
   "6.3.0":
-    url: "https://sourceforge.net/projects/qwt/files/qwt/6.3.0/qwt-6.3.0.tar.bz2/download"
-    sha256: "dcb085896c28aaec5518cbc08c0ee2b4e60ada7ac929d82639f6189851a6129a"
+    url: "https://sourceforge.net/projects/qwt/files/qwt/6.3.0/qwt-6.3.0.zip"
+    sha256: "268d8d41974d263014fea13168324452f41e02880db573794f559995a4e11331"
+  # Легаси-пин el_conf: qwt:6.2.0 (photos/2026-05-14 CMakeLists.var:284) —
+  # поэтому 6.2.0, а не upstream-latest 6.3.0.
+  "6.2.0":
+    url: "https://sourceforge.net/projects/qwt/files/qwt/6.2.0/qwt-6.2.0.zip"
+    sha256: "3e9632a9be6a883db5c496e42ce74cbbf8da02cc3328faa89e2c43e434a2eb76"
+patches:
+  "6.3.0":
+    - patch_file: "patches/0001-cmake-support.patch"
+      patch_source: "https://github.com/MehdiChinoune/qwt/blob/cmake/CMakeLists.txt"
+    - patch_file: "patches/0002-cmake-support-patch.patch"
+    - patch_file: "patches/0003-Fix-Build-error-with-Qt6-which-requires-CPP-17.patch"
+      patch_source: "https://github.com/ashley-b/qwt/commit/75aa20749186a263fd6942a764731826d5bac137"
+  "6.2.0":
+    - patch_file: "patches/0001-cmake-support.patch"
+      patch_source: "https://github.com/MehdiChinoune/qwt/blob/cmake/CMakeLists.txt"
+    - patch_file: "patches/0002-cmake-support-patch.patch"
+    - patch_file: "patches/0003-Fix-Build-error-with-Qt6-which-requires-CPP-17.patch"
+      patch_source: "https://github.com/ashley-b/qwt/commit/75aa20749186a263fd6942a764731826d5bac137"

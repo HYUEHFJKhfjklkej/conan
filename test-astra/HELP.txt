@@ -2293,21 +2293,30 @@ step and send it back so the next step can be picked.
         ./test-astra/build_qwt_nodocker.sh          # ARCH!=x86_64 -> [FAIL]
         Env knobs as usual (QWT_VERSION/PKG_VERSION def 6.2.0).
 
-     c. Recipe mechanics (qmake, no CMake upstream; CCI's cmake-graft +
-        conan qt package approach deliberately NOT used — offline станок):
-        - source() patches qwtconfig.pri: QwtDll OFF (static .a content),
-          QwtDesigner/Examples/Playground/Tests OFF; Plot/Polar/Widgets/
-          Svg/OpenGL stay (lib content as legacy most likely had).
-        - qwtbuild.pri forces release — patched to read $$(QWT_BUILD_TYPE);
-          build() exports it for BOTH qmake and make (SUBDIRS re-runs qmake
-          from within make — env on qmake alone is not enough).
-        - package(): headers flat from src/*.h (make install NOT used — its
-          macx branch skips headers), libqwt.a from build/lib;
-          libqwt_debug.a -> libqwt.a rename (macx/win debug suffix; linux
-          has none).
-        - package_info: libs=[qwt], NO Qt dep — consumers link Qt from
-          QT5_ROOT_DIR side-channel exactly like the rest of the framework.
+     c. Recipe mechanics — CMake graft, NOT qmake. FIRST TC RUN VERDICT
+        (QW413, 2026-07-21): "Error: Qt license file was not found! /
+        License check failed!" — the image's Qt is a COMMERCIAL-edition
+        build, and its qmake enforces the license check (licheck from
+        qconfig.pri) which no container can satisfy. Only qmake checks
+        licenses; CMake find_package(Qt5) does not — which is exactly how
+        ALL legacy Qt code (el_conf etc.) builds in that image. So the
+        recipe uses the conan-center cmake-graft (patches/0001-0003, byte-
+        identical to CCI, registered in conandata) with the image's Qt:
+        - generate() puts $QT5_ROOT_DIR[/gcc_64] into CMAKE_PREFIX_PATH and
+          detects Qt major from lib/cmake/Qt{5,6} (Mac smoke = brew qt6,
+          patch 0003 covers Qt6/C++17).
+        - Options mirror CCI (shared/plot/widgets/svg/opengl/designer/
+          polar); defaults: static, svg=True (upstream stock content —
+          CCI's svg=False is their qt-package choice, not ours).
+        - NO conan qt dep and NO cmake>=3.27 tool_require (both are CCI's
+          qt-package artifacts; a real Qt install resolves moc via its own
+          CMake targets, станок cmake 3.25.1 is fine).
+        - package_info: libs=[qwt], consumers link Qt from QT5_ROOT_DIR
+          side-channel exactly like the rest of the framework.
         Emitted: qwt.lin.gcc84.shared.x86_64.6.2.0.nupkg, component qwt.
+        Verdict "Qt license file was not found" -> something reintroduced
+        qmake into the build; verdict "Could not find ...Qt5Config.cmake"
+        -> QT5_ROOT_DIR not set/wrong in the container.
 
      d. Windows: OFF (settings.kts windows=false, no run_qwt_win.bat). Qt
         provisioning on win agents is unknown (legacy win Qt story not
@@ -2320,6 +2329,6 @@ step and send it back so the next step can be picked.
         whether legacy built it shared (content contract after IN-658 is
         static .a regardless).
 
-     Mac smoke green 2026-07-21 (brew qt6): conan create R+D + deployer
+     Mac smoke green 2026-07-21 (brew qt6, CMake-graft): conan create R+D + deployer
      dry-run — release -O2 2.8M / debug -g 112M libs both named libqwt.a,
      component qwt, flat headers. Lead decisions same as [24]/[28].
