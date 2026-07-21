@@ -2117,3 +2117,77 @@ step and send it back so the next step can be picked.
      Mac smoke + deployer dry-run green 2026-07-21 (flat include with
      dbus-arch-deps.h, components dbus+dbus-1 verified in the .nupkg). Lead
      decisions same as [24]/[28]: TC-tree placement + publish policy.
+
+
+[30] snap7/1.4.2 — Siemens S7 comm lib, recipe from scratch (no CCI upstream).
+
+     Single package, no deps, authored CMakeLists (mongoose pattern): upstream
+     builds via per-platform makefiles build/unix/*.mk (NO aarch64 variant),
+     so our CMakeLists compiles the same 12-object core (Objects0 of
+     build/unix/common.mk) for every arch, PLUS the C/C++ consumer wrapper
+     release/Wrappers/c-cpp/snap7.cpp folded into the lib — one -lsnap7 gives
+     both the C API (Cli_*/Srv_*/Par_*) and the C++ classes (TS7Client etc.).
+     Public header: snap7.h (the wrapper's), installed flat into include/.
+
+     a. Build (TC runs the step inside the станок, [25] style):
+
+        ARCH=x86_64 ./test-astra/build_snap7_nodocker.sh    # Linux x64
+        ARCH=x86    ./test-astra/build_snap7_nodocker.sh    # 32-bit (-m32)
+        ARCH=arm    ./test-astra/build_snap7_nodocker.sh    # armv7hf cross
+        ARCH=arm64  ./test-astra/build_snap7_nodocker.sh    # aarch64 cross
+
+        Env knobs identical to [28]/[29]: SNAP7_VERSION/PKG_VERSION (def
+        1.4.2), SHARED (def False), OUTPUT_DIR (def output-snap7-<arch>),
+        LEGACY_NUPKG_VERSION_SUFFIX, SKIP_CACHE_CLEAN=1, CONAN_REMOTE +
+        UPLOAD_AFTER=1.
+
+     b. OFFLINE SOURCE IS A REPACK. Upstream ships ONLY snap7-full-1.4.2.7z
+        (sha256 1f4270cde8684957770a10a1d311c226e670d9589c69841a9012e818f7b9f80e,
+        20 MB, conan unzip() cannot read 7z and the станок has no 7z) —
+        src/snap7-1.4.2.tar.gz is its pruned repack (127 KB) and source()
+        refuses to run without it (no network fallback). To re-create:
+
+        curl -L -o snap7-full-1.4.2.7z \
+            "https://sourceforge.net/projects/snap7/files/1.4.2/snap7-full-1.4.2.7z/download"
+        7z x snap7-full-1.4.2.7z
+        mkdir -p repack/snap7-full-1.4.2 && cd repack/snap7-full-1.4.2
+        cp -R ../../snap7-full-1.4.2/src . && find src -name __history -exec rm -rf {} +
+        mkdir -p build release/Wrappers/c-cpp
+        cp -R ../../snap7-full-1.4.2/build/unix build/
+        cp ../../snap7-full-1.4.2/build/README.txt build/
+        cp ../../snap7-full-1.4.2/release/Wrappers/c-cpp/snap7.{h,cpp} release/Wrappers/c-cpp/
+        cp ../../snap7-full-1.4.2/{README.txt,gpl.txt,lgpl-3.0.txt} .
+        cd .. && tar -czf snap7-1.4.2.tar.gz snap7-full-1.4.2
+
+        (kept: 12-file core src/, unix makefiles for provenance, c-cpp
+        wrapper, licenses; dropped: 130 MB of examples/rich-demos/LabVIEW/
+        utility + prebuilt release/ binaries.)
+
+     c. Emitted names (snap7 in no deployer map — everything passes through):
+        snap7.lin.gcc84.shared.x86_64.1.4.2.nupkg
+        snap7.lin.gcc84.shared.i686.1.4.2.nupkg
+        snap7.lin.gcc75.shared.arm-linaro.1.4.2.nupkg
+        snap7.lin.gcc75.shared.arm64-linaro.1.4.2.nupkg
+        Component = snap7 (-lsnap7), flat include/snap7.h, no _dependencies.
+        TC artifact rule per config: output-snap7-<arch>/*.nupkg => <arch>.
+        Publish: API_KEY=<key> NUPKG_DIR=output-snap7-<arch>
+        ./test-astra/tc_publish_conan.sh ([26] feed).
+
+     d. GROUND-TRUTH GAP (open, same stance as [29].f): the legacy SNAP7
+        .nupkg internals were never captured — TC shows only a collapsed
+        SNAP7 row (12/10 successful) in SURA2/COMPONENTS, no version pin in
+        any photographed CMakeLists.var, and the likely consumer is the
+        INTERNAL SIEMENS_S7 wrapper (not migrated by this pipeline). Before
+        promoting to the production feed, diff a real legacy snap7 .nupkg
+        (component name, header layout, whether the wrapper was compiled in
+        or shipped as source). Upstream convention is wrapper-as-source
+        ("In your c++ program you also need to add snap7.cpp to the
+        project" — Wrappers/c-cpp/README); our fold-in stays compatible even
+        if a consumer compiles its own snap7.cpp: static-archive lazy
+        extraction prefers the consumer's object, no duplicate-symbol error. Windows: our CMake backend should build under
+        MSVC (dllexport in a static lib is benign), but it is NOT validated —
+        publishWindows stays false (ConanPkg default), no run_snap7_win.bat.
+
+     Mac smoke green 2026-07-21: conan create Release+Debug + test_package
+     (C API + TS7Client), deployer dry-run verified (component snap7, flat
+     include/snap7.h, libsnap7.a R+D). Lead decisions same as [24]/[28].

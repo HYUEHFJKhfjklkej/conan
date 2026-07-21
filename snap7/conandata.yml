@@ -1,0 +1,8 @@
+sources:
+  "1.4.2":
+    # Upstream-релиз только в .7z; url/sha256 — провенанс оригинала.
+    # В src/ лежит его переупаковка snap7-1.4.2.tar.gz (src/ + build/unix
+    # + release/Wrappers/c-cpp + лицензии, без 130M демок) — source()
+    # использует только её. Пересоздание: HELP.txt [30].
+    url: "https://sourceforge.net/projects/snap7/files/1.4.2/snap7-full-1.4.2.7z/download"
+    sha256: "1f4270cde8684957770a10a1d311c226e670d9589c69841a9012e818f7b9f80e"
