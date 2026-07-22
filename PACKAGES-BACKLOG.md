@@ -88,7 +88,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 |---|---|---|
 | GFLAGS | Google gflags (third-party, есть в CCI) | ГОТОВ 2026-07-22 (2.3.0, Mac-смоук + deployer, HELP [35]) |
 | GLOG | Google glog (third-party, есть в CCI) | ГОТОВ 2026-07-22 (0.7.1, deps gflags; with_unwind=False, HELP [35]) |
-| IEC104 / IEC60870 | вероятно lib60870 (MZ Automation, сосед libiec61850) — имена в IEC-блоке НИ РАЗУ не сфотканы чисто (варианты IEC60850/IEC60870/IEC61850UB) | сфоткать блок заново + лицензия GPL/коммерч — с лидом |
+| IEC104 / IEC60870 / IEC61850 | IEC-блок РАЗРЕШЁН кадром 2026-07-22 (photos/2026-07-22): 4 строки IEC104/IEC60870/IEC61850/IEC61850LIB. Гипотеза: IEC60870 = lib60870 (MZ Automation, third-party, GPL/коммерч), IEC104 и IEC61850 — внутренние враперы (паттерн SNMP/NETSNMP) | раскрыть IEC104+IEC60870 в TC (номера билдов = версии) или Bitbucket i-диапазон; lib60870-лицензия — с лидом |
 | OPC_UA | строка дерева; вероятно семья OPCUASDK/UASERVERCPP/UA_ANSIC (уже в бэклоге, проприетарные) | подтвердить принадлежность |
 
 Остальные ~30 несовпадений диффа — внутренние Elara (CONFIG_XSD, GSD_PARSER,
