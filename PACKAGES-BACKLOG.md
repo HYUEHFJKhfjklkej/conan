@@ -86,8 +86,8 @@ CCI-версию (рецепт проверен сообществом); есл�
 
 | Легаси | Что это | Путь |
 |---|---|---|
-| GFLAGS | Google gflags (third-party, есть в CCI) | делается сразу, dep glog->gflags |
-| GLOG | Google glog (third-party, есть в CCI) | делается сразу |
+| GFLAGS | Google gflags (third-party, есть в CCI) | ГОТОВ 2026-07-22 (2.3.0, Mac-смоук + deployer, HELP [35]) |
+| GLOG | Google glog (third-party, есть в CCI) | ГОТОВ 2026-07-22 (0.7.1, deps gflags; with_unwind=False, HELP [35]) |
 | IEC104 / IEC60870 | вероятно lib60870 (MZ Automation, сосед libiec61850) — имена в IEC-блоке НИ РАЗУ не сфотканы чисто (варианты IEC60850/IEC60870/IEC61850UB) | сфоткать блок заново + лицензия GPL/коммерч — с лидом |
 | OPC_UA | строка дерева; вероятно семья OPCUASDK/UASERVERCPP/UA_ANSIC (уже в бэклоге, проприетарные) | подтвердить принадлежность |
 

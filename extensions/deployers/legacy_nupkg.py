@@ -737,6 +737,25 @@ def deploy(graph, output_folder, **kwargs):
         n_rel = _copy_libs(_libdir(release_pkg), _staging_rel_libdir, pkg_name=name)
         n_dbg = _copy_libs(_libdir(debug_pkg), _staging_dbg_libdir, pkg_name=name)
 
+        # Debug-постфиксы апстримов (CMAKE_DEBUG_POSTFIX 'd'/'_debug' — gflags,
+        # glog, qt-мир): в -d каталоге приводим к release-имени — legacy-резолвер
+        # ищет компонент по одному имени в обоих вариантных каталогах. Только
+        # staging (conan-пакет не трогаем: его package_info знает про постфикс).
+        if os.path.isdir(_staging_rel_libdir) and os.path.isdir(_staging_dbg_libdir):
+            _dbg_files = set(os.listdir(_staging_dbg_libdir))
+            for _rel_f in os.listdir(_staging_rel_libdir):
+                _stem, _dot, _ext = _rel_f.rpartition(".")
+                if _ext not in ("a", "lib") or _rel_f in _dbg_files:
+                    continue
+                for _suf in ("_debug", "d"):
+                    _cand = f"{_stem}{_suf}.{_ext}"
+                    if _cand in _dbg_files:
+                        os.rename(os.path.join(_staging_dbg_libdir, _cand),
+                                  os.path.join(_staging_dbg_libdir, _rel_f))
+                        _dbg_files.discard(_cand)
+                        _dbg_files.add(_rel_f)
+                        break
+
         # grpc: вшиваем отдельные статические архивы upb в libgrpc.a, чтобы
         # legacy flat-линкующий фреймворк видел самодостаточную libgrpc.a, как в
         # legacy TeamCity-пакете. Работаем только над staged-копией; upstream

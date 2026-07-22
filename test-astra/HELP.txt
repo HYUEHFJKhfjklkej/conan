@@ -2398,3 +2398,42 @@ step and send it back so the next step can be picked.
         легаси-пина НЕТ ("QXORM 5 successful" свёрнут), el_conf не потребляет.
      Mac-смоук (brew qt6) + deployer verified 2026-07-22. Оба пакета: TC
      артефакт-правила/publish как [32]; лид-решения как [24]/[28].
+
+
+[35] gflags/2.3.0 + glog/0.7.1 — волна 4 (пропуски бэклога, найдены сверкой
+     полного дерева SURA2 2026-07-22).
+
+     Оба — canonical CCI mirror + 2 офлайн-правки, классическая пара
+     (glog требует gflags). Легаси-версии неизвестны (строки дерева
+     свёрнуты) — CCI latest по правилу волн.
+
+     a. Build:
+        ARCH=x86_64|x86|arm|arm64 ./test-astra/build_gflags_nodocker.sh
+        ARCH=x86_64|x86|arm|arm64 ./test-astra/build_glog_nodocker.sh
+        # glog-драйвер экспортирует gflags-деп и эмитит ОБА .nupkg;
+        # если собираются оба конфига TC — публиковать gflags из glog-ранов
+        # или гонять только glog-конфиг (gflags выпадает бесплатно).
+        Windows: run_gflags_win.bat / run_glog_win.bat ([28]-стиль).
+
+     b. ОПЦИИ ЗАШИТЫ В ДРАЙВЕРЫ (менять синхронно во всех трёх conan-вызовах):
+        - gflags: nothreads=False — иначе либа зовётся libgflags_nothreads.a,
+          а легаси ждёт -lgflags.
+        - glog: with_unwind=False — дефолт True тянет conan-деп libunwind,
+          которого нет ни у нас, ни в легаси-дереве (glog падает в fallback
+          стектрейсы, логирование не страдает).
+
+     c. Deployer: НОВОЕ generic-правило нормализации debug-постфиксов
+        (CMAKE_DEBUG_POSTFIX 'd'/'_debug'): в -d каталоге staging'а либа
+        приводится к release-имени (libgflags_debug.a -> libgflags.a,
+        libglogd.a -> libglog.a) — legacy-резолвер ищет компонент по одному
+        имени в обоих вариантных каталогах. Conan-пакет НЕ трогается (его
+        package_info знает про постфикс; рецепто-локальный rename ломал
+        CMakeDeps-потребителей — проверено, откатили).
+
+     d. Emitted: gflags.lin.gcc84.shared.<arch>.2.3.0.nupkg (component
+        gflags), glog.<...>.0.7.1.nupkg (component glog, deps gflags:2.3.0).
+        Ground-truth gap стандартный ([29]-[34]): легаси GFLAGS/GLOG .nupkg
+        не вскрыты — сверить до production.
+
+     Mac-смоуки R+D обоих + deployer verified 2026-07-22; графы чисты на
+     lin-gcc84-x86_64 и win-профилях. Лид-решения как [24]/[28].
