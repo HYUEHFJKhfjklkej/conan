@@ -104,8 +104,9 @@ FILE_FINDER, DUMMY_PROTOCOL, CHANNEL_TESTS, PLATFORM_CONFIG, GENBLCFG-IM1200,
   подтверждении пина потребителей маппится в deployer LEGACY_VERSION_MAP
   (прецедент absl 0.2.0). NB: в дереве и LIBMATIEC (CMAKE), и ELMATIEC
   (EXTERNAL). Остальные не раскрыты: DOTNETCORE(V3)/IMAGES/NODEJS/DOCUMENTATIONS.
-- **SURA1 — отдельный top-level проект** (ARCSTATION/SURASCADA/PPUMETR4...);
-  его COMPONENTS не раскрыт. Входит ли SURA1 в скоуп миграции — вопрос лиду.
+- ~~SURA1~~ ЗАКРЫТ кадром 2026-07-22: SURA1/COMPONENTS/CMAKE — целиком
+  внутреннее (EL_KERNEL/CPU_BUS/PPU400/WinCE-цели), third-party НЕТ —
+  SURA1 пакетов в миграцию не добавляет.
 - IEC-блок (3 строки между IEC104 и INELBUSHANDLER) — нет ни одного чёткого кадра.
 - Bitbucket Repositories сфоткан только a..e; f..z не captured.
 - Разбивка конфигов (Windows/Linux/ARM) снята только для CURL/GOOGLETEST/GRPC/EL_CONF.
