@@ -98,8 +98,14 @@ FILE_FINDER, DUMMY_PROTOCOL, CHANNEL_TESTS, PLATFORM_CONFIG, GENBLCFG-IM1200,
 продукты и DOTNET/NODEJS-ветки) — не мигрируются.
 
 **Дыры покрытия фото (что дострелять при случае):**
-- Субдерево **COMPONENTS/EXTERNAL никогда не раскрывалось** — по названию может
-  нести third-party; также DOTNETCORE(V3)/IMAGES/NODEJS/DOCUMENTATIONS.
+- ~~COMPONENTS/EXTERNAL~~ РАЗРЕШЁН кадром 2026-07-22: единственный проект —
+  **ELMATIEC** (EM900 PACKAGE / EM910 RELEASE, билды **#0.5.0**). Значит
+  легаси-версия matiec = 0.5.0 (своя нумерация); наш matiec/0.1.20260512 при
+  подтверждении пина потребителей маппится в deployer LEGACY_VERSION_MAP
+  (прецедент absl 0.2.0). NB: в дереве и LIBMATIEC (CMAKE), и ELMATIEC
+  (EXTERNAL). Остальные не раскрыты: DOTNETCORE(V3)/IMAGES/NODEJS/DOCUMENTATIONS.
+- **SURA1 — отдельный top-level проект** (ARCSTATION/SURASCADA/PPUMETR4...);
+  его COMPONENTS не раскрыт. Входит ли SURA1 в скоуп миграции — вопрос лиду.
 - IEC-блок (3 строки между IEC104 и INELBUSHANDLER) — нет ни одного чёткого кадра.
 - Bitbucket Repositories сфоткан только a..e; f..z не captured.
 - Разбивка конфигов (Windows/Linux/ARM) снята только для CURL/GOOGLETEST/GRPC/EL_CONF.
