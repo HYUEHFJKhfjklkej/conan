@@ -79,6 +79,31 @@ CCI-версию (рецепт проверен сообществом); есл�
 | OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | — | проприетарные — отдельное решение |
 | CODESYS2 | проприетарный | — | вне Conan-миграции? — лид |
 
+## Волна 4 — найдено сверкой ПОЛНОГО дерева SURA2 (2026-07-22)
+
+Бэклог был неполным: сверка всех фото-окон COMPONENTS/CMAKE (A-Z покрыт
+перекрытиями, ABSL — первая строка, ZMQ — последняя) нашла пропущенные строки:
+
+| Легаси | Что это | Путь |
+|---|---|---|
+| GFLAGS | Google gflags (third-party, есть в CCI) | делается сразу, dep glog->gflags |
+| GLOG | Google glog (third-party, есть в CCI) | делается сразу |
+| IEC104 / IEC60870 | вероятно lib60870 (MZ Automation, сосед libiec61850) — имена в IEC-блоке НИ РАЗУ не сфотканы чисто (варианты IEC60850/IEC60870/IEC61850UB) | сфоткать блок заново + лицензия GPL/коммерч — с лидом |
+| OPC_UA | строка дерева; вероятно семья OPCUASDK/UASERVERCPP/UA_ANSIC (уже в бэклоге, проприетарные) | подтвердить принадлежность |
+
+Остальные ~30 несовпадений диффа — внутренние Elara (CONFIG_XSD, GSD_PARSER,
+LIB_LOADER, PROCESS_LAUNCHER, QT_GUI_SDK/QT_NETWORK_SDK/QT_SAMPLE/QTGTEST_MAIN,
+IPC_FACTORIES_*, BUSLINK_ETHERCAT, SYSTEM_MONITOR, ELIGATED, ENUM_HELPERS,
+FILE_FINDER, DUMMY_PROTOCOL, CHANNEL_TESTS, PLATFORM_CONFIG, GENBLCFG-IM1200,
+продукты и DOTNET/NODEJS-ветки) — не мигрируются.
+
+**Дыры покрытия фото (что дострелять при случае):**
+- Субдерево **COMPONENTS/EXTERNAL никогда не раскрывалось** — по названию может
+  нести third-party; также DOTNETCORE(V3)/IMAGES/NODEJS/DOCUMENTATIONS.
+- IEC-блок (3 строки между IEC104 и INELBUSHANDLER) — нет ни одного чёткого кадра.
+- Bitbucket Repositories сфоткан только a..e; f..z не captured.
+- Разбивка конфигов (Windows/Linux/ARM) снята только для CURL/GOOGLETEST/GRPC/EL_CONF.
+
 ## НЕ third-party (внутренние Elara — не мигрируются этим конвейером)
 
 CS_*, PLC_*, SERVICE_*, PROFIBUS_*, COMMSERVER, DAEMON, LOGGER, EXCEPTIONS,
