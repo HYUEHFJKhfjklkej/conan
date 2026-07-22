@@ -2318,9 +2318,23 @@ step and send it back so the next step can be picked.
         qmake into the build; verdict "Could not find ...Qt5Config.cmake"
         -> QT5_ROOT_DIR not set/wrong in the container.
 
-     d. Windows: OFF (settings.kts windows=false, no run_qwt_win.bat). Qt
-        provisioning on win agents is unknown (legacy win Qt story not
-        photographed); revisit with the win ground truth.
+     d. Windows: ON via the agent's Qt (test-windows\run_qwt_win.bat,
+        mongoose twin + Qt pre-flight). Requirements on the MSVC agent:
+        a Qt 5.15.x install + env QT5_ROOT_DIR pointing at its ROOT (e.g.
+        C:\Qt\5.15.2) — the recipe probes the toolchain subdir itself
+        (any dir with lib\cmake: msvc2019_64 etc.; same code path finds
+        gcc_64 on linux and the brew prefix on mac). Same CMake-graft, no
+        qmake -> the commercial licheck trap does not apply. Static qwt.lib
+        compiles against Qt headers only (a static lib links nothing), so
+        release-only Qt installs also build the Debug slot. UNKNOWNS until
+        the first agent run: is Qt installed on the win agents at all, and
+        is there a 32-bit Qt for the x86 slots (if not — disable QW400/402
+        in TC, x64 slots QW401/403 are the ones el_conf needs). Windows
+        .nupkg still carry the v194/v142 deployer tag caveat ([28]) —
+        publishWindows stays false.
+        Verdict "QT5_ROOT_DIR is not set" -> provision Qt + env on agent;
+        verdict "нет lib/cmake ни в корне, ни в тулчейн-подкаталогах" ->
+        QT5_ROOT_DIR points at the wrong dir (needs the install root).
 
      e. GROUND-TRUTH GAP (same as [29]-[31]): legacy QWT .nupkg internals
         not captured (TC row 'QWT 5 successful' collapsed). Diff a real

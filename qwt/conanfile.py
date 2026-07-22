@@ -80,11 +80,24 @@ class QwtConan(ConanFile):
     def _qt_prefix(self):
         qt_root = os.environ.get("QT5_ROOT_DIR", "").strip()
         if not qt_root:
-            raise ConanException("qwt: env QT5_ROOT_DIR не задан. На станке его выставляет "
-                                 "образ (/opt/Qt/5.15.2); для Mac-смоука — brew-префикс qt. "
+            raise ConanException("qwt: env QT5_ROOT_DIR не задан. На линукс-станке его "
+                                 "выставляет образ (/opt/Qt/5.15.2); на win-агенте задать "
+                                 "корень Qt-инсталляции; для Mac-смоука — brew-префикс qt. "
                                  "См. HELP [32]")
-        gcc64 = os.path.join(qt_root, "gcc_64")
-        return gcc64 if os.path.isdir(gcc64) else qt_root
+
+        def _has_cmake(p):
+            return os.path.isdir(os.path.join(p, "lib", "cmake"))
+
+        if _has_cmake(qt_root):
+            return qt_root
+        # Qt-инсталляции кладут тулчейн-подкаталог: gcc_64 (Linux),
+        # msvc2019_64 и т.п. (Windows), clang_64 (mac installer).
+        for d in sorted(os.listdir(qt_root)):
+            cand = os.path.join(qt_root, d)
+            if os.path.isdir(cand) and _has_cmake(cand):
+                return cand
+        raise ConanException(f"qwt: в QT5_ROOT_DIR={qt_root} нет lib/cmake "
+                             "ни в корне, ни в тулчейн-подкаталогах")
 
     @property
     def _qt_major(self):
