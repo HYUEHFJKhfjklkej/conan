@@ -62,7 +62,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 | LIBPQ | libpq | 16.14 | openssl |
 | XERCES_C | xerces-c | 3.3.0 (= upstream) | легаси был 3.2.3 |
 | DBUS | dbus | 1.15.8 | → волна 3 (meson-тулчейн для оффлайна) |
-| QWT | qwt | 6.2.0 (легаси-пин el_conf; НЕ 6.3.0) | ГОТОВ 2026-07-21 (Mac-смоук + deployer, HELP [32]); Qt НЕ пакетируется — 5.15.2 в образе станка (QT5_ROOT_DIR); только x86_64; ground-truth легаси — pending |
+| QWT | qwt | 6.2.0 (легаси-пин el_conf; НЕ 6.3.0) | ГОТОВ, TC зелёный 2026-07-22 (HELP [32]); Qt НЕ пакетируется — образ станка/Qt агента (QT5_ROOT_DIR), сборка CMake-графтом (qmake запрещён: commercial licheck); Linux x86_64 + win; ground-truth легаси — pending |
 
 ## Волна 3 — частично ГОТОВО (2026-07-16): libiec61850/mongoose/nanopb/soem
 
@@ -75,7 +75,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 | SOEM | EtherCAT master | upstream v2.0.0 | CCI soem есть? уточнить; рецепт мал |
 | LIBMATIEC | IEC 61131-3 matiec | 0.1.20260512 (= beremiz/matiec@7949c0b) | ГОТОВ 2026-07-21, TC зелёный (HELP [31]); tool-пакет iec2c/iec2iec, flex/bison предзапечены; win OFF (решение 2026-07-21); ground-truth легаси — pending |
 | IEC61850LIB | libiec61850 | 1.6.1 (CCI = upstream) | лицензия GPL/коммерч. — с лидом |
-| QXORM, QWINDOWKIT | Qt-экосистема | — | вместе с решением по Qt |
+| QXORM, QWINDOWKIT | Qt-экосистема | — | РАЗБЛОКИРОВАНЫ: Qt-вопрос решён на qwt (side-channel QT5_ROOT_DIR, CMake); версии — ground truth |
 | OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | — | проприетарные — отдельное решение |
 | CODESYS2 | проприетарный | — | вне Conan-миграции? — лид |
 
