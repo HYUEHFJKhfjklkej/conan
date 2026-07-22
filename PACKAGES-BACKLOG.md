@@ -88,8 +88,10 @@ CCI-версию (рецепт проверен сообществом); есл�
 |---|---|---|
 | GFLAGS | Google gflags (third-party, есть в CCI) | ГОТОВ 2026-07-22 (2.3.0, Mac-смоук + deployer, HELP [35]) |
 | GLOG | Google glog (third-party, есть в CCI) | ГОТОВ 2026-07-22 (0.7.1, deps gflags; with_unwind=False, HELP [35]) |
-| IEC104 / IEC60870 / IEC61850 | IEC-блок РАЗРЕШЁН кадром 2026-07-22 (photos/2026-07-22): 4 строки IEC104/IEC60870/IEC61850/IEC61850LIB. Гипотеза: IEC60870 = lib60870 (MZ Automation, third-party, GPL/коммерч), IEC104 и IEC61850 — внутренние враперы (паттерн SNMP/NETSNMP) | раскрыть IEC104+IEC60870 в TC (номера билдов = версии) или Bitbucket i-диапазон; lib60870-лицензия — с лидом |
+| IEC60870 | **lib60870-C (MZ Automation) — ПОДТВЕРЖДЕНО** Bitbucket-README 2026-07-22: IEC 60870-5-101/104, форк с patch-механизмом (IN-88) и mbedtls **2.28.9** (наш мигрированный mbedtls = 3.6.6 — API-конфликт, вопрос версии TLS-слоя) | лицензия GPL/коммерч (как libiec61850) — с лидом; рецепт можно готовить заранее (прецедент libiec61850); форк сверить с upstream (правило 6) |
 | OPC_UA | строка дерева; вероятно семья OPCUASDK/UASERVERCPP/UA_ANSIC (уже в бэклоге, проприетарные) | подтвердить принадлежность |
+| IEC104 | ВНУТРЕННЯЯ реализация 60870-5-104 (Bitbucket 2026-07-22: пустой README-шаблон, iec104/+iec104_static/, без upstream-маркеров) | не мигрируется |
+| IEC61850 | внутренний врапер над IEC61850LIB (паттерн SNMP/NETSNMP) | не мигрируется |
 
 Остальные ~30 несовпадений диффа — внутренние Elara (CONFIG_XSD, GSD_PARSER,
 LIB_LOADER, PROCESS_LAUNCHER, QT_GUI_SDK/QT_NETWORK_SDK/QT_SAMPLE/QTGTEST_MAIN,
