@@ -1,0 +1,9 @@
+sources:
+  "1.5.0":
+    # Провенанс: тег 1.5.0 (2026-01-18). Codeload-тарбол НЕ содержит
+    # git-сабмодулей — в src/ лежит переупаковка qwindowkit-1.5.0.tar.gz:
+    # git archive тега + qmsetup@85c6c3c783be8af8d3f2fa492748a82da8ec9bad
+    # + его src/syscmdline@5a67673ff96acbfd894ea653fbaca872fded758a.
+    # source() использует только её. Пересоздание: HELP.txt [33].
+    url: "https://github.com/stdware/qwindowkit/archive/refs/tags/1.5.0.tar.gz"
+    sha256: "9a7029463fb819449cfd9235286ce76f90a7d896995282988aff089b9fea0350"

@@ -75,7 +75,7 @@ CCI-версию (рецепт проверен сообществом); есл�
 | SOEM | EtherCAT master | upstream v2.0.0 | CCI soem есть? уточнить; рецепт мал |
 | LIBMATIEC | IEC 61131-3 matiec | 0.1.20260512 (= beremiz/matiec@7949c0b) | ГОТОВ 2026-07-21, TC зелёный (HELP [31]); tool-пакет iec2c/iec2iec, flex/bison предзапечены; win OFF (решение 2026-07-21); ground-truth легаси — pending |
 | IEC61850LIB | libiec61850 | 1.6.1 (CCI = upstream) | лицензия GPL/коммерч. — с лидом |
-| QXORM, QWINDOWKIT | Qt-экосистема | — | РАЗБЛОКИРОВАНЫ: Qt-вопрос решён на qwt (side-channel QT5_ROOT_DIR, CMake); версии — ground truth |
+| QXORM, QWINDOWKIT | Qt-экосистема | qxorm 1.5.1, qwindowkit 1.5.0 (upstream latest; легаси-пинов нет) | ГОТОВЫ 2026-07-22 (Mac-смоук + deployer, HELP [33]/[34]); Qt по qwt-схеме; qxorm: лицензия GPL3/коммерч — подтвердить у лида; ground-truth легаси — pending |
 | OPCUASDK, UASERVERCPP, UA_ANSIC | OPC UA стеки | — | проприетарные — отдельное решение |
 | CODESYS2 | проприетарный | — | вне Conan-миграции? — лид |
 

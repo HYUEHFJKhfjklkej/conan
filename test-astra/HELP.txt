@@ -2346,3 +2346,55 @@ step and send it back so the next step can be picked.
      Mac smoke green 2026-07-21 (brew qt6, CMake-graft): conan create R+D + deployer
      dry-run — release -O2 2.8M / debug -g 112M libs both named libqwt.a,
      component qwt, flat headers. Lead decisions same as [24]/[28].
+
+
+[33] qwindowkit/1.5.0 — frameless-window фреймворк для Qt (x86_64 + win).
+
+     Схема Qt = [32] (side-channel QT5_ROOT_DIR, CMake, qmake не нужен).
+     Специфика:
+     a. Build-деп qmsetup: git-сабмодуль, которого НЕТ в codeload-тарболе
+        тега — src/qwindowkit-1.5.0.tar.gz это git archive тега 1.5.0 +
+        вендоренные qmsetup@85c6c3c7 + его src/syscmdline@5a67673f.
+        Корневой CMakeLists сам собирает qmsetup из qmsetup/ nested-cmake'ом
+        (никакой сети). source() без сетевого фолбэка. Пересоздание:
+        git clone --recurse-submodules -b <tag>, git archive + rsync
+        сабмодулей (без .git), tar.
+     b. Требует PRIVATE-заголовки Qt (core/gui/widgets-private) — полная
+        Qt-инсталляция образа/агента их несёт. Qt >= 5.12, рекомендован
+        5.15.2; C++17; cmake >= 3.19 (станок 3.25.1 ok).
+     c. Статика QWINDOWKIT_BUILD_STATIC=ON; Widgets ON, Quick OFF. Либы
+        QWKCore + QWKWidgets -> components [QWKCore, QWKWidgets]. Заголовки
+        апстрим кладёт в include/QWindowKit/QWK*/, а инклуды пишутся как
+        <QWKWidgets/...> — deployer LEGACY_INCLUDE_FLATTEN разглаживает
+        (conan-потребителям даны оба includedirs). MSVC debug-постфикс 'd'
+        нормализуется в package(). Win link: только uxtheme (dwmapi/user32
+        резолвятся в рантайме).
+     d. Версия 1.5.0 = upstream latest (2026-01): легаси-пина НЕТ (QWINDOWKIT
+        на фото — свёрнутая строка "5 successful"), el_conf его не потребляет
+        (потребители не вскрыты). Ground-truth gap как [29]-[32].
+     Лицензия Apache-2.0. Mac-смоук (brew qt6) + deployer verified 2026-07-22.
+
+
+[34] qxorm/1.5.1 — C++ ORM для Qt (QtSql) (x86_64 + win).
+
+     Схема Qt = [32] (side-channel QT5_ROOT_DIR, CMake). Специфика:
+     a. ЛИЦЕНЗИЯ ДВОЙНАЯ: GPLv3 ИЛИ коммерческая QXPL (EUR 400/проект,
+        qxorm.com). Легаси QXORM жил в проде — лицензионная позиция Elara
+        существует; при промоушене в production подтвердить у лида.
+     b. Boost НЕ нужен (опционален с 1.4.4, _QX_ENABLE_BOOST=OFF). Qt-модули:
+        Core+Sql обязательные; Gui/Network-сериализация выключена
+        (stock-дефолты). ВАЖНО: _QX_ENABLE_* меняют layout классов в
+        заголовках — потребители обязаны собираться с теми же дефолтами.
+     c. Статика _QX_STATIC_BUILD=ON; потребители статической QxOrm обязаны
+        определять -D_QX_STATIC_BUILD (conan-потребителям деплоер... — задаёт
+        cpp_info.defines; legacy-потребителям на MSVC добавить руками, на
+        gcc линкуется и без него). Безусловный CMAKE_DEBUG_POSTFIX 'd'
+        нормализуется в package().
+     d. Заголовки инклудят "../../inl/..." — каталог inl/ обязан ехать в
+        .nupkg СИБЛИНГОМ include/: deployer LEGACY_EXTRA_DIRS["qxorm"]=
+        ["inl"] (новый механизм, коммит этого блока). Проверка: в .nupkg
+        есть inl/QxDao/*.inl рядом с include/.
+     e. Версия 1.5.1 = upstream latest (2026-04, github = официальный репо):
+        легаси-пина НЕТ ("QXORM 5 successful" свёрнут), el_conf не потребляет.
+     Mac-смоук (brew qt6) + deployer verified 2026-07-22. Оба пакета: TC
+     артефакт-правила/publish как [32]; лид-решения как [24]/[28].

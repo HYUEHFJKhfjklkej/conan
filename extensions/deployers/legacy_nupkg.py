@@ -312,6 +312,15 @@ LIB_FILENAME_ALIASES = {
 # (без слияния он вообще терялся, а #include <dbus/dbus.h> не резолвился).
 LEGACY_INCLUDE_FLATTEN = {
     "dbus": ["include/dbus-1.0", "lib/dbus-1.0/include"],
+    # апстрим-конвенция инклудов — <QWKWidgets/...>, без QWindowKit-корня
+    "qwindowkit": ["include/QWindowKit"],
+}
+
+# Доп. top-level каталоги пакета, которые едут в .nupkg рядом с include/
+# (QxOrm: заголовки инклудят "../../inl/..." — inl/ обязан остаться сиблингом
+# include/, одним include-копированием он терялся бы).
+LEGACY_EXTRA_DIRS = {
+    "qxorm": ["inl"],
 }
 
 # Пакеты, чьи либы имеют префикс в имени, который downstream Elara CMake-фреймворк
@@ -672,6 +681,12 @@ def deploy(graph, output_folder, **kwargs):
                 dup = os.path.join(staging, _nested)
                 if os.path.isdir(dup):
                     shutil.rmtree(dup)
+
+        # 1a-extra. Доп. top-level каталоги (LEGACY_EXTRA_DIRS) — сиблинги include/.
+        for _extra in LEGACY_EXTRA_DIRS.get(name, []):
+            src_extra = os.path.join(release_pkg, _extra)
+            if os.path.isdir(src_extra):
+                shutil.copytree(src_extra, os.path.join(staging, _extra), dirs_exist_ok=True)
 
         # 1b. proto/ — legacy-layout кладёт `.proto`-файлы (protobuf well-known'ы:
         # timestamp.proto, duration.proto, ...; protos grpc-плагина) в отдельное

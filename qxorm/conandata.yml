@@ -1,0 +1,7 @@
+sources:
+  "1.5.1":
+    # github.com/QxOrm/QxOrm — официальный репозиторий (readme: 'Official
+    # repository'); релиз 2026-04-06. Официальный zip qxorm.com байт-идентичен
+    # тегу (modulo CRLF + прибилженная doxygen-документация).
+    url: "https://github.com/QxOrm/QxOrm/archive/refs/tags/1.5.1.tar.gz"
+    sha256: "ba4848b4d586c6e9d8b280ecaf4dcc5ea2a81f1c8557a4c82abc33704c9e13af"
