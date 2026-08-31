@@ -2437,3 +2437,33 @@ step and send it back so the next step can be picked.
 
      Mac-смоуки R+D обоих + deployer verified 2026-07-22; графы чисты на
      lin-gcc84-x86_64 и win-профилях. Лид-решения как [24]/[28].
+
+[36] rapidjson/cci.20250205 — header-only JSON (SAX/DOM), CCI mirror.
+
+     Пакет заголовков, компиляции нет: .a/.so не эмитятся, в CMakeLists.var
+     идёт фолбэк-компонент rapidjson (как у любого headers-only).
+
+     a. Build:
+        ARCH=x86_64|x86|arm|arm64 ./test-astra/build_rapidjson_nodocker.sh
+        Windows: test-windows\run_rapidjson_win.bat ([28]-стиль).
+
+     b. ВЕРСИЯ. У апстрима один релиз, 1.1.0 от 2016 года; развитие идёт
+        в master, CCI версионирует снимки как cci.<дата>. NuGet такую строку
+        не принимает (нужен числовой semver), поэтому deployer объявляет
+        снимок как 1.1.20250205 через LEGACY_DEP_VERSION_MAP: мажор и минор
+        от последнего релиза, patch = дата снимка. Conan-кэш при этом
+        ключуется настоящей cci.20250205 (схема abseil 20240116.2 -> 0.2.0).
+        Нужен официальный релиз вместо снимка — RAPIDJSON_VERSION=1.1.0
+        плюс убрать строку из карты версий.
+
+     c. Emitted: rapidjson.lin.gcc84.shared.<arch>.1.1.20250205.nupkg
+        (component rapidjson, deps пусто).
+
+     d. Ground truth ОТСУТСТВУЕТ. RAPIDJSON нет ни в одном кадре дерева
+        SURA2 и нет в бэклоге сверки 2026-07-22. То есть легаси-имени,
+        легаси-версии и легаси-состава для сверки нет. До production
+        подтвердить у лида: пакет реально нужен потребителю, имя слота
+        rapidjson, версия-пин.
+
+     Mac-смоук R+D + deployer verified 2026-08-31 (conan create зелёный,
+     .nupkg собран, 38 заголовков, 0 либ).

@@ -113,6 +113,12 @@ FILE_FINDER, DUMMY_PROTOCOL, CHANNEL_TESTS, PLATFORM_CONFIG, GENBLCFG-IM1200,
 - Bitbucket Repositories сфоткан только a..e; f..z не captured.
 - Разбивка конфигов (Windows/Linux/ARM) снята только для CURL/GOOGLETEST/GRPC/EL_CONF.
 
+## Вне сверки дерева — добавлено по запросу
+
+| Легаси | Conan-рецепт | Версия к миграции | Прим. |
+|---|---|---|---|
+| ? | rapidjson | **cci.20250205** (объявляется как 1.1.20250205) | ГОТОВ 2026-08-31 (Mac-смоук + deployer, HELP [36]). Header-only. В дереве SURA2 строки RAPIDJSON НЕТ ни на одном кадре — ground truth отсутствует целиком: имя слота, версия-пин и потребитель подтверждаются у лида до production. У апстрима один релиз (1.1.0, 2016), развитие в master; NuGet не принимает `cci.<дата>`, поэтому версия маппится в deployer (схема abseil) |
+
 ## НЕ third-party (внутренние Elara — не мигрируются этим конвейером)
 
 CS_*, PLC_*, SERVICE_*, PROFIBUS_*, COMMSERVER, DAEMON, LOGGER, EXCEPTIONS,
