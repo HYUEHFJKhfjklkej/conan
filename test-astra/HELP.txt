@@ -2467,3 +2467,57 @@ step and send it back so the next step can be picked.
 
      Mac-смоук R+D + deployer verified 2026-08-31 (conan create зелёный,
      .nupkg собран, 38 заголовков, 0 либ).
+
+[37] test_legacy_consume.sh — прогон нашего .nupkg через ЛЕГАСИ-фреймворк
+     Elara. Отвечает на вопрос «пакет собрался, а у потребителя не
+     подключается».
+
+     Пакет может лежать в фиде и при этом не подключаться. Скрипт
+     воспроизводит сборку потребителя локально, за один прогон, без
+     TeamCity и без nuget-фида.
+
+     a. Запуск:
+        FRAMEWORK=~/su2/zlib/cmake ./test-astra/test_legacy_consume.sh
+        FRAMEWORK=... PKG=nlohmann_json ./test-astra/test_legacy_consume.sh
+
+     b. FRAMEWORK ОБЯЗАТЕЛЕН — путь к каталогу cmake/ из любого репозитория
+        SU2 (bitbucket.inc.elara.local/scm/SU2/<pkg>.git, ветка develop);
+        фреймворк во всех репо одинаков. Здесь он НЕ хранится: это
+        внутренний код Elara, а conan-recipes публичный. Нужны хотя бы
+        ResolveDependencies.cmake и FindInstalledPackage.cmake. Чего в
+        FRAMEWORK нет (PlatformHelper, NuGetInstall, InstallComponent) —
+        подставляется заглушкой из test-astra/legacy-consumer/cmake-shim,
+        и скрипт про каждую заглушку пишет в лог.
+
+     c. Механика: .nupkg распаковывается сиблингом потребителя как
+        <pkg>.bin — это ветка «Found binary package» в
+        resolve_dependencies (_source_build_dir = CMAKE_SOURCE_DIR/..).
+        Фид и nuget.exe не нужны. Потребитель — минимальный (не копия
+        боевого корня на 330 строк): CMakeLists.var + resolve_dependencies
+        + один exe, который включает заголовки пакета.
+
+     d. Три способа подключения, проверяются за один прогон:
+        - link     target_link_libraries(app <пакет>)
+        - include  target_include_directories(app PRIVATE ${<пакет>_INCLUDE_DIRS})
+        - project  target_include_directories(app PRIVATE ${project_include_dirs})
+
+     e. ЧТО ЭТО ПОКАЗАЛО на rapidjson (Mac, 2026-09-03):
+          link:    FAIL — fatal error: 'rapidjson/document.h' file not found
+          include: PASS — OK {"slot":"legacy"}
+          project: PASS
+        Для headers-only пакета это норма, а не поломка. Компонентов у него
+        ноль, значит IMPORTED-таргета резолвер не создаёт, и привычный
+        target_link_libraries заголовков не приносит. Резолвер отдаёт их
+        отдельной переменной — в исходнике так и написано:
+        «Set include directory path (global for using with headers only
+        packages)». Потребителю писать include-вариант.
+
+     f. WITH_QT=1 добавляет класс с Q_OBJECT и AUTOMOC: проверяет, что
+        каталоги видны и при сборке mocs_compilation.cpp, а не только
+        main.cpp. Требует QT5_ROOT_DIR с lib/cmake/Qt5/Qt5Config.cmake.
+        НЕ ВАЛИДИРОВАН: на Mac Qt5 нет, гонять на станке Qt (тот же путь,
+        что читает рецепт qwt).
+
+     g. Прочий env: VERSION, NUPKG, MODE=link|include|project|all,
+        PLATFORM (LINUX), ARCH_CPU (X86_64), SHARED (ON), WORK, KEEP=1.
+        Логи каждого способа: <WORK>/build-<mode>.{configure,build,run}.log

@@ -28,3 +28,4 @@ __pycache__/
 tools/windows/strawberryperl/
 tools/windows/nasm/
 build-*/
+.legacy-consume/
