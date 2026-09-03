@@ -26,6 +26,7 @@ set ROOT_DIR=%SCRIPT_DIR%..
 pushd "%ROOT_DIR%"
 set EXITCODE=0
 
+if "%RAPIDJSON_VERSION%"=="" set RAPIDJSON_VERSION=%PKG_VERSION%
 if "%RAPIDJSON_VERSION%"=="" set RAPIDJSON_VERSION=cci.20250205
 
 if exist venv\Scripts\activate.bat call venv\Scripts\activate.bat
