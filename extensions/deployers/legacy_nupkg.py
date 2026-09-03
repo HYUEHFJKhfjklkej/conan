@@ -863,11 +863,13 @@ def deploy(graph, output_folder, **kwargs):
             if os.path.isfile(os.path.join(_staging_rel_libdir, _tool)) \
                     and _tool not in components:
                 components.append(_tool)
-        # Фолбэк [name] — только когда нет ВООБЩЕ ничего (headers-only пакет):
-        # для tool-пакетов (matiec) фантомный компонент = FATAL_ERROR у
-        # ResolveDependencies (find_library не найдёт файла с таким именем).
-        if not components:
-            components = [name]
+        # Ни либ, ни тулов — headers-only пакет. Компонент НЕ выдумываем:
+        # ResolveDependencies.cmake на каждый component зовёт find_library и на
+        # промахе валится FATAL_ERROR "Unable to find release version of ...".
+        # Пустой список легален: includes фреймворк регистрирует отдельно
+        # (`set(<pkg>_INCLUDE_DIRS ...)` с комментарием "global for using with
+        # headers only packages"), и find_package_handle_standard_args требует
+        # только его.
         platforms = ["WINDOWS", "LINUX", "LINUX_ARM_NXP", "LINUX_ARM_LINARO",
                      "LINUX_ARM64_ROCKCHIP", "LINUX_ARM64_LINARO", "LINUX_ATOM", "WINCE800"]
         # Только прямые deps ЭТОГО пакета (не весь транзитивный замыкатель):
